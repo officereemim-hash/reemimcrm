@@ -1,0 +1,53 @@
+{
+  "name": "ExcelImport",
+  "type": "object",
+  "properties": {
+    "file_url": {
+      "type": "string"
+    },
+    "import_type": {
+      "type": "string",
+      "enum": [
+        "service_meeting",
+        "retirement_interest",
+        "divorce_interest",
+        "general_data"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "processing",
+        "completed",
+        "failed"
+      ],
+      "default": "pending"
+    },
+    "total_rows": {
+      "type": "number",
+      "default": 0
+    },
+    "imported_count": {
+      "type": "number",
+      "default": 0
+    },
+    "failed_count": {
+      "type": "number",
+      "default": 0
+    },
+    "assigned_to": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "imported_at": {
+      "type": "string",
+      "format": "date"
+    }
+  },
+  "required": [
+    "import_type"
+  ]
+}

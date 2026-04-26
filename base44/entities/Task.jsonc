@@ -1,0 +1,82 @@
+{
+  "name": "Task",
+  "type": "object",
+  "properties": {
+    "contact_id": {
+      "type": "string"
+    },
+    "service_request_id": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "followup",
+        "pre_meeting_checklist",
+        "post_meeting_checklist",
+        "document_collection",
+        "shoranss_transfer",
+        "annual_followup",
+        "sla_followup",
+        "no_response_escalation"
+      ]
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "operational",
+        "sales"
+      ],
+      "default": "operational"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "open",
+        "in_progress",
+        "done",
+        "cancelled"
+      ],
+      "default": "open"
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "low",
+        "normal",
+        "high",
+        "urgent"
+      ],
+      "default": "normal"
+    },
+    "due_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "sla_due_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "assigned_to": {
+      "type": "string"
+    },
+    "auto_generated": {
+      "type": "boolean",
+      "default": false
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "title",
+    "type"
+  ]
+}

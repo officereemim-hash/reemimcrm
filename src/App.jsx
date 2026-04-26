@@ -5,43 +5,60 @@ import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
-// Add page imports here
+import Layout from '@/components/Layout';
+
+// Pages
+import Dashboard from '@/pages/Dashboard';
+import Contacts from '@/pages/Contacts';
+import ContactDetail from '@/pages/ContactDetail';
+import LeadsPipeline from '@/pages/LeadsPipeline';
+import ServiceRequests from '@/pages/ServiceRequests';
+import Meetings from '@/pages/Meetings';
+import Communications from '@/pages/Communications';
+import Webinars from '@/pages/Webinars';
+import ExcelImports from '@/pages/ExcelImports';
+import Settings from '@/pages/Settings';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
 
-  // Show loading spinner while checking app public settings or auth
   if (isLoadingPublicSettings || isLoadingAuth) {
     return (
-      <div className="fixed inset-0 flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-800 rounded-full animate-spin"></div>
+      <div className="fixed inset-0 flex items-center justify-center bg-background">
+        <div className="w-10 h-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
       </div>
     );
   }
 
-  // Handle authentication errors
   if (authError) {
     if (authError.type === 'user_not_registered') {
       return <UserNotRegisteredError />;
     } else if (authError.type === 'auth_required') {
-      // Redirect to login automatically
       navigateToLogin();
       return null;
     }
   }
 
-  // Render the main app
   return (
     <Routes>
-      {/* Add your page Route elements here */}
-      <Route path="*" element={<PageNotFound />} />
+      <Route element={<Layout />}>
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/contacts" element={<Contacts />} />
+        <Route path="/contacts/:id" element={<ContactDetail />} />
+        <Route path="/pipeline" element={<LeadsPipeline />} />
+        <Route path="/service-requests" element={<ServiceRequests />} />
+        <Route path="/meetings" element={<Meetings />} />
+        <Route path="/communications" element={<Communications />} />
+        <Route path="/webinars" element={<Webinars />} />
+        <Route path="/excel-imports" element={<ExcelImports />} />
+        <Route path="/settings" element={<Settings />} />
+        <Route path="*" element={<PageNotFound />} />
+      </Route>
     </Routes>
   );
 };
 
-
 function App() {
-
   return (
     <AuthProvider>
       <QueryClientProvider client={queryClientInstance}>
@@ -54,4 +71,4 @@ function App() {
   )
 }
 
-export default App
+export default App;

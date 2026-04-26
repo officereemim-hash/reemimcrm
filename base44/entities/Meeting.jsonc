@@ -1,0 +1,97 @@
+{
+  "name": "Meeting",
+  "type": "object",
+  "properties": {
+    "contact_id": {
+      "type": "string"
+    },
+    "service_request_id": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "intro_sale",
+        "advisory",
+        "annual_service",
+        "zoom",
+        "followup"
+      ]
+    },
+    "meeting_source": {
+      "type": "string",
+      "enum": [
+        "bot",
+        "agent",
+        "webinar"
+      ]
+    },
+    "location": {
+      "type": "string",
+      "enum": [
+        "modiin",
+        "petah_tikva_wednesday",
+        "zoom",
+        "phone"
+      ]
+    },
+    "scheduled_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "duration_minutes": {
+      "type": "number",
+      "default": 60
+    },
+    "calcom_event_id": {
+      "type": "string"
+    },
+    "calendar_link": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "scheduled",
+        "completed",
+        "cancelled",
+        "no_show",
+        "rescheduled"
+      ],
+      "default": "scheduled"
+    },
+    "checklist_pre_completed": {
+      "type": "boolean",
+      "default": false
+    },
+    "checklist_post_completed": {
+      "type": "boolean",
+      "default": false
+    },
+    "reminder_d1_sent": {
+      "type": "boolean",
+      "default": false
+    },
+    "reminder_h1_sent": {
+      "type": "boolean",
+      "default": false
+    },
+    "summary": {
+      "type": "string"
+    },
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "signed",
+        "postponed",
+        "cancelled",
+        "not_interested",
+        "rescheduled"
+      ]
+    }
+  },
+  "required": [
+    "contact_id",
+    "scheduled_at"
+  ]
+}

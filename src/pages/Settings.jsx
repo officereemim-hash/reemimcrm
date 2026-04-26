@@ -1,0 +1,108 @@
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Settings as SettingsIcon, Bot, Zap, Clock, Shield } from 'lucide-react';
+
+export default function Settings() {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold">הגדרות</h1>
+        <p className="text-muted-foreground text-sm mt-0.5">הגדרות מערכת — גישת Admin בלבד</p>
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Bot size={18} className="text-primary" />
+              הגדרות AI Agent (בוט)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <InfoItem label="מנוע" value="Base44 AI Agent" />
+            <InfoItem label="שפה" value="עברית בלבד" />
+            <InfoItem label="Loop Guard" value="max_messages_per_flow = 5" />
+            <InfoItem label="Fallbacks" value="מקסימום 2 לפני Escalation לנציגה" />
+            <InfoItem label="שעות פעילות" value="להגדרה ב-Agent Settings" />
+            <div className="mt-3 p-3 bg-gold/10 rounded-lg text-xs text-gold">
+              ⚠️ לשינוי הגדרות הבוט: Settings → AI Agents → הגדר Loop Guard ו-Fallback Rules
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Zap size={18} className="text-gold" />
+              אוטומציות פעילות
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            {[
+              { id: 'A', name: 'מענה לליד חדש', status: 'פעיל' },
+              { id: 'B', name: 'עדכון Cal.com webhook', status: 'פעיל' },
+              { id: 'C', name: 'תזכורות פגישה D-1 + H-1', status: 'פעיל' },
+              { id: 'D', name: 'שאלון שורנס מולא', status: 'פעיל' },
+              { id: 'E', name: 'פולו-אפ T+7/T+14/T+21', status: 'פעיל' },
+              { id: 'F', name: 'חוסר מענה + SLA', status: 'פעיל' },
+              { id: 'G', name: 'ייבוא אקסל', status: 'פעיל' },
+              { id: 'H', name: 'ברכת יום הולדת', status: 'פעיל' },
+              { id: 'I', name: 'תזכורת שנתית', status: 'פעיל' },
+              { id: 'L', name: 'Global Error Handler', status: 'פעיל' },
+            ].map(a => (
+              <div key={a.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
+                <span><strong className="text-primary mr-1">{a.id}.</strong> {a.name}</span>
+                <span className="text-xs text-success font-medium">{a.status}</span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Clock size={18} className="text-coral" />
+              זמני SLA
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            <InfoItem label="ממתין מענה (חדש)" value="2 שעות" />
+            <InfoItem label="פולו-אפ ב׳ ללא מענה" value="24 שעות" />
+            <InfoItem label="no_response חוזר" value="48 שעות" />
+            <InfoItem label="הסלמה לבשמת" value="72 שעות" />
+            <div className="mt-2 p-3 bg-muted rounded-lg text-xs text-muted-foreground">
+              זמנים לקביעה סופית עם בשמת לפני הפעלת המערכת
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Shield size={18} className="text-primary" />
+              הרשאות (RBAC)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            <div className="p-3 bg-primary/5 rounded-lg">
+              <div className="font-semibold text-primary mb-1">Admin — בשמת</div>
+              <div className="text-xs text-muted-foreground">גישה לכל הרשומות, מחיקות, ייצוא, הגדרות אוטומציה, שגיאות מערכת</div>
+            </div>
+            <div className="p-3 bg-muted rounded-lg">
+              <div className="font-semibold mb-1">Staff — יעל, בר</div>
+              <div className="text-xs text-muted-foreground">רק רשומות שהוקצו להן (assigned_to = currentUser)</div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function InfoItem({ label, value }) {
+  return (
+    <div className="flex justify-between items-center py-1 border-b border-border/50 last:border-0">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-medium text-left" dir="ltr">{value}</span>
+    </div>
+  );
+}

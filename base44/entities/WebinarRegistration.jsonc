@@ -1,0 +1,61 @@
+{
+  "name": "WebinarRegistration",
+  "type": "object",
+  "properties": {
+    "contact_id": {
+      "type": "string"
+    },
+    "webinar_type": {
+      "type": "string",
+      "enum": [
+        "investments",
+        "divorce",
+        "retirement"
+      ]
+    },
+    "webinar_date": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "zoom_registration_id": {
+      "type": "string"
+    },
+    "attended": {
+      "type": "boolean",
+      "default": false
+    },
+    "coupon_code": {
+      "type": "string"
+    },
+    "coupon_sent": {
+      "type": "boolean",
+      "default": false
+    },
+    "coupon_sent_at": {
+      "type": "string",
+      "format": "date"
+    },
+    "payment_completed": {
+      "type": "boolean",
+      "default": false
+    },
+    "payment_amount": {
+      "type": "number"
+    },
+    "meeting_scheduled": {
+      "type": "boolean",
+      "default": false
+    },
+    "meeting_id": {
+      "type": "string"
+    },
+    "service_request_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "contact_id",
+    "webinar_type",
+    "webinar_date"
+  ]
+}

@@ -1,0 +1,157 @@
+{
+  "name": "Contact",
+  "type": "object",
+  "properties": {
+    "full_name": {
+      "type": "string",
+      "description": "\u05e9\u05dd \u05de\u05dc\u05d0"
+    },
+    "phone": {
+      "type": "string",
+      "description": "\u05de\u05e1\u05e4\u05e8 WhatsApp \u05db\u05d5\u05dc\u05dc \u05e7\u05d9\u05d3\u05d5\u05de\u05ea \u05d0\u05e8\u05e5"
+    },
+    "email": {
+      "type": "string",
+      "format": "email"
+    },
+    "id_number": {
+      "type": "string",
+      "description": "\u05ea\u05e2\u05d5\u05d3\u05ea \u05d6\u05d4\u05d5\u05ea"
+    },
+    "birth_date": {
+      "type": "string",
+      "format": "date",
+      "description": "\u05d9\u05d5\u05dd \u05d4\u05d5\u05dc\u05d3\u05ea"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "new_lead",
+        "in_progress",
+        "quote_sent",
+        "active_client",
+        "completed",
+        "not_relevant",
+        "archived"
+      ],
+      "default": "new_lead"
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "facebook",
+        "website",
+        "webinar",
+        "referral",
+        "excel_import",
+        "manual"
+      ]
+    },
+    "service_type": {
+      "type": "string",
+      "enum": [
+        "retirement",
+        "economic_feasibility",
+        "investments",
+        "divorce_split",
+        "tax_advisory",
+        "annual_service"
+      ]
+    },
+    "assigned_to": {
+      "type": "string",
+      "description": "\u05d1\u05e8 / \u05d9\u05e2\u05dc / \u05d1\u05e9\u05de\u05ea"
+    },
+    "bot_status": {
+      "type": "string",
+      "enum": [
+        "new",
+        "waiting_agent",
+        "waiting_user_reply",
+        "in_conversation",
+        "escalated_to_agent",
+        "no_response",
+        "closed",
+        "not_relevant"
+      ],
+      "default": "new"
+    },
+    "conversation_owner": {
+      "type": "string",
+      "enum": [
+        "bot",
+        "bar",
+        "yael",
+        "system"
+      ],
+      "default": "bot"
+    },
+    "shoranss_linked": {
+      "type": "boolean",
+      "default": false
+    },
+    "shoranss_questionnaire": {
+      "type": "string",
+      "enum": [
+        "not_sent",
+        "sent",
+        "filled"
+      ],
+      "default": "not_sent"
+    },
+    "opt_in_future": {
+      "type": "boolean",
+      "default": false
+    },
+    "future_followup_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "annual_followup_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "last_contact_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "last_bot_interaction_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "current_service_request_id": {
+      "type": "string",
+      "description": "\u05e4\u05e0\u05d9\u05d9\u05d4 \u05e4\u05e2\u05d9\u05dc\u05d4 \u05e0\u05d5\u05db\u05d7\u05d9\u05ea"
+    },
+    "lead_temperature": {
+      "type": "string",
+      "enum": [
+        "hot",
+        "warm",
+        "cold"
+      ],
+      "default": "warm"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "VIP",
+          "returning",
+          "no_response",
+          "duplicate",
+          "cold"
+        ]
+      },
+      "default": []
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "full_name",
+    "phone"
+  ]
+}

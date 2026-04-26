@@ -1,0 +1,39 @@
+{
+  "name": "Document",
+  "type": "object",
+  "properties": {
+    "contact_id": {
+      "type": "string"
+    },
+    "service_request_id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string",
+      "description": "\u05e9\u05dd \u05d4\u05e7\u05d5\u05d1\u05e5"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "shoranss",
+        "identity",
+        "salary",
+        "tax",
+        "reports",
+        "agreements",
+        "pension_fund"
+      ]
+    },
+    "file_url": {
+      "type": "string"
+    },
+    "uploaded_by": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "contact_id",
+    "name",
+    "category"
+  ]
+}

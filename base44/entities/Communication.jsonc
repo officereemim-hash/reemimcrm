@@ -1,0 +1,71 @@
+{
+  "name": "Communication",
+  "type": "object",
+  "properties": {
+    "contact_id": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "whatsapp",
+        "email",
+        "call",
+        "note",
+        "system_error",
+        "bot_event"
+      ]
+    },
+    "direction": {
+      "type": "string",
+      "enum": [
+        "inbound",
+        "outbound"
+      ],
+      "default": "outbound"
+    },
+    "content": {
+      "type": "string"
+    },
+    "sent_by": {
+      "type": "string",
+      "enum": [
+        "system",
+        "bot",
+        "basmat",
+        "yael",
+        "bar"
+      ],
+      "default": "system"
+    },
+    "is_automated": {
+      "type": "boolean",
+      "default": false
+    },
+    "template_id": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "sent",
+        "delivered",
+        "read",
+        "failed",
+        "retried"
+      ]
+    },
+    "error_detail": {
+      "type": "string"
+    },
+    "retry_count": {
+      "type": "number",
+      "default": 0
+    }
+  },
+  "required": [
+    "contact_id",
+    "type",
+    "content"
+  ]
+}

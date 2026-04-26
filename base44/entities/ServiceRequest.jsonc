@@ -1,0 +1,120 @@
+{
+  "name": "ServiceRequest",
+  "type": "object",
+  "properties": {
+    "contact_id": {
+      "type": "string",
+      "description": "\u05e7\u05d9\u05e9\u05d5\u05e8 \u05dc-Contact"
+    },
+    "service_type": {
+      "type": "string",
+      "enum": [
+        "retirement",
+        "economic_feasibility",
+        "investments",
+        "divorce_split",
+        "tax_advisory",
+        "annual_service_call"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "new",
+        "in_progress",
+        "quote_sent",
+        "awaiting_client_decision",
+        "followup_active",
+        "meeting_scheduled",
+        "completed",
+        "cancelled",
+        "followup_closed",
+        "closed_lost"
+      ],
+      "default": "new"
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "bot",
+        "bar_call",
+        "excel_import",
+        "manual",
+        "webinar"
+      ]
+    },
+    "quote_sent": {
+      "type": "boolean",
+      "default": false
+    },
+    "quote_type": {
+      "type": "string",
+      "enum": [
+        "retirement",
+        "economic_feasibility",
+        "investments",
+        "divorce_split",
+        "tax_advisory"
+      ]
+    },
+    "quote_pdf_url": {
+      "type": "string"
+    },
+    "quote_sent_at": {
+      "type": "string",
+      "format": "date"
+    },
+    "quote_approved": {
+      "type": "boolean",
+      "default": false
+    },
+    "followup_stage": {
+      "type": "string",
+      "enum": [
+        "none",
+        "T+7",
+        "T+14",
+        "T+21",
+        "escalated"
+      ],
+      "default": "none"
+    },
+    "meeting_id": {
+      "type": "string"
+    },
+    "documents_status": {
+      "type": "string",
+      "enum": [
+        "not_required",
+        "pending",
+        "partial",
+        "complete"
+      ],
+      "default": "not_required"
+    },
+    "post_meeting_tasks_done": {
+      "type": "boolean",
+      "default": false
+    },
+    "closed_at": {
+      "type": "string",
+      "format": "date"
+    },
+    "closed_reason": {
+      "type": "string",
+      "enum": [
+        "won",
+        "lost_not_interested",
+        "lost_no_response",
+        "duplicate"
+      ]
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "contact_id",
+    "service_type"
+  ]
+}
