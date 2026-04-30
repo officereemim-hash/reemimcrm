@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { Mail, Send, Users, Calendar, Star, Bell, Plus, CheckCircle, Clock } from 'lucide-react';
+import { Mail, Send, Users, Calendar, Star, Bell, Plus, CheckCircle, Clock, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { format } from 'date-fns';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import ComposeDialog from '@/components/marketing/ComposeDialog';
+import TemplateEditor from '@/components/marketing/TemplateEditor';
 
 const MESSAGE_TYPES = [
   { key: 'newsletter', label: 'ניוזלטר תקופתי', icon: Mail, desc: 'שליחה לכלל הלקוחות הפעילים' },
@@ -22,6 +23,7 @@ export default function MarketingHub() {
   const [loading, setLoading] = useState(true);
   const [showCompose, setShowCompose] = useState(false);
   const [sentResult, setSentResult] = useState(null);
+  const [activeTab, setActiveTab] = useState('overview');
 
   const load = () => {
     Promise.all([
@@ -63,15 +65,43 @@ export default function MarketingHub() {
           <h1 className="text-2xl font-bold">מרכז דיוור</h1>
           <p className="text-muted-foreground text-sm mt-0.5">ניהול תקשורת שוטפת, דיוור ופולו-אפ</p>
         </div>
+        <div className="flex gap-2">
+          {isAdmin && (
+            <Button onClick={() => setShowCompose(true)} className="gap-2">
+              <Plus size={16} />
+              שליחה חדשה
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-2 border-b pb-2">
+        <button
+          onClick={() => setActiveTab('overview')}
+          className={`px-4 py-2 rounded-t-lg text-sm font-medium transition-colors ${
+            activeTab === 'overview' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
+          }`}
+        >
+          <Send size={14} className="inline ml-1" />
+          סקירה ושליחה
+        </button>
         {isAdmin && (
-          <Button onClick={() => setShowCompose(true)} className="gap-2">
-            <Plus size={16} />
-            שליחה חדשה
-          </Button>
+          <button
+            onClick={() => setActiveTab('templates')}
+            className={`px-4 py-2 rounded-t-lg text-sm font-medium transition-colors ${
+              activeTab === 'templates' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
+            }`}
+          >
+            <FileText size={14} className="inline ml-1" />
+            תבניות
+          </button>
         )}
       </div>
 
-      {sentResult && (
+      {activeTab === 'templates' && <TemplateEditor />}
+
+      {activeTab === 'overview' && sentResult && (
         <div className="flex items-center gap-3 bg-success/10 border border-success/30 rounded-lg px-4 py-3">
           <CheckCircle size={18} className="text-success" />
           <span className="text-sm font-medium">
@@ -81,6 +111,7 @@ export default function MarketingHub() {
         </div>
       )}
 
+      {activeTab === 'overview' && <>
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard label="סה״כ נשלחו" value={totalSent} icon={Send} color="bg-primary/10 text-primary" />
@@ -154,6 +185,8 @@ export default function MarketingHub() {
           )}
         </CardContent>
       </Card>
+
+      </>}
 
       {/* Compose Dialog */}
       <ComposeDialog

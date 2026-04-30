@@ -1,0 +1,61 @@
+{
+  "name": "MessageTemplate",
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": [
+        "newsletter",
+        "birthday",
+        "google_review",
+        "followup_after_meeting",
+        "annual_reminder"
+      ],
+      "description": "\u05e1\u05d5\u05d2 \u05d4\u05d4\u05d5\u05d3\u05e2\u05d4"
+    },
+    "name": {
+      "type": "string",
+      "description": "\u05e9\u05dd \u05d4\u05ea\u05d1\u05e0\u05d9\u05ea"
+    },
+    "subject": {
+      "type": "string",
+      "description": "\u05e0\u05d5\u05e9\u05d0 \u05d4\u05de\u05d9\u05d9\u05dc"
+    },
+    "header_title": {
+      "type": "string",
+      "description": "\u05db\u05d5\u05ea\u05e8\u05ea \u05e2\u05dc\u05d9\u05d5\u05e0\u05d4"
+    },
+    "greeting": {
+      "type": "string",
+      "description": "\u05d1\u05e8\u05db\u05ea \u05e4\u05ea\u05d9\u05d7\u05d4"
+    },
+    "intro_text": {
+      "type": "string",
+      "description": "\u05d8\u05e7\u05e1\u05d8 \u05e4\u05ea\u05d9\u05d7\u05d4"
+    },
+    "blocks": {
+      "type": "array",
+      "description": "\u05d1\u05dc\u05d5\u05e7\u05d9 \u05ea\u05d5\u05db\u05df",
+      "items": {
+        "type": "object"
+      }
+    },
+    "whatsapp_message": {
+      "type": "string",
+      "description": "\u05d4\u05d5\u05d3\u05e2\u05ea WhatsApp"
+    },
+    "contact_phone": {
+      "type": "string"
+    },
+    "contact_email": {
+      "type": "string"
+    },
+    "logo_url": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "type",
+    "name"
+  ]
+}

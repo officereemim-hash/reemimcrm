@@ -8,6 +8,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import SingleContactPicker from './SingleContactPicker';
+import EmojiPicker from './EmojiPicker';
+import buildEmailHtml from './buildEmailHtml';
 
 const MESSAGE_TYPES = [
   { key: 'newsletter', label: 'ניוזלטר תקופתי' },
@@ -35,6 +37,8 @@ export default function ComposeDialog({ open, onClose, contacts, onDone }) {
   const [singleRecipient, setSingleRecipient] = useState(null);
   const [sending, setSending] = useState(false);
   const [marketingSettings, setMarketingSettings] = useState({ email_live_mode: false, whatsapp_live_mode: false });
+  const [messageTemplates, setMessageTemplates] = useState([]);
+  const [waRef, setWaRef] = useState(null);
 
   useEffect(() => {
     base44.auth.me().then(user => {
@@ -42,7 +46,23 @@ export default function ComposeDialog({ open, onClose, contacts, onDone }) {
         setMarketingSettings(user.marketing_settings);
       }
     });
+    base44.entities.MessageTemplate.list().then(data => {
+      setMessageTemplates(data || []);
+    });
   }, []);
+
+  // Auto-load template when type changes
+  useEffect(() => {
+    const tpl = messageTemplates.find(t => t.type === form.type);
+    if (tpl) {
+      setForm(f => ({
+        ...f,
+        subject: tpl.subject || f.subject,
+        content: tpl.intro_text || f.content,
+        whatsappMessage: tpl.whatsapp_message || f.whatsappMessage,
+      }));
+    }
+  }, [form.type, messageTemplates]);
 
   const getAudienceCount = (key) => {
     const option = AUDIENCE_OPTIONS.find(o => o.key === key);
@@ -106,11 +126,23 @@ export default function ComposeDialog({ open, onClose, contacts, onDone }) {
 
       // Email
       if (form.channel === 'email' || form.channel === 'both') {
+        // Build HTML email from template if available
+        const tpl = messageTemplates.find(t => t.type === form.type);
+        let emailBody = personalizedContent;
+        if (tpl) {
+          const personalizedTpl = {
+            ...tpl,
+            greeting: (tpl.greeting || '').replace('{שם}', contact.full_name || '').replace('{name}', contact.full_name || ''),
+            intro_text: (tpl.intro_text || '').replace('{שם}', contact.full_name || '').replace('{name}', contact.full_name || ''),
+          };
+          emailBody = buildEmailHtml(personalizedTpl);
+        }
+
         if (marketingSettings.email_live_mode && contact.email) {
           await base44.integrations.Core.SendEmail({
             to: contact.email,
             subject: form.subject,
-            body: personalizedContent,
+            body: emailBody,
             from_name: 'קרנות ראמים',
           });
         }
@@ -277,15 +309,31 @@ export default function ComposeDialog({ open, onClose, contacts, onDone }) {
           {/* WhatsApp message */}
           {(form.channel === 'whatsapp' || form.channel === 'both') && (
             <div className="space-y-1">
-              <Label>הודעת WhatsApp *</Label>
+              <div className="flex items-center justify-between">
+                <Label>הודעת WhatsApp *</Label>
+                <EmojiPicker onSelect={(emoji) => {
+                  const ta = waRef;
+                  if (ta) {
+                    const start = ta.selectionStart;
+                    const end = ta.selectionEnd;
+                    const current = form.whatsappMessage || '';
+                    const newVal = current.slice(0, start) + emoji + current.slice(end);
+                    setForm(f => ({ ...f, whatsappMessage: newVal }));
+                    setTimeout(() => { ta.focus(); ta.setSelectionRange(start + emoji.length, start + emoji.length); }, 0);
+                  } else {
+                    setForm(f => ({ ...f, whatsappMessage: (f.whatsappMessage || '') + emoji }));
+                  }
+                }} />
+              </div>
               <Textarea
+                ref={el => setWaRef(el)}
                 value={form.whatsappMessage}
                 onChange={e => setForm(f => ({ ...f, whatsappMessage: e.target.value }))}
                 rows={4}
-                placeholder="היי {שם}, ..."
+                placeholder="היי {שם} 👋..."
               />
               <p className="text-xs text-muted-foreground">
-                השתמש ב-&#123;שם&#125; לשם פרסונלי
+                השתמש ב-&#123;שם&#125; לשם פרסונלי • לחצי 😊 לאימוג׳י
                 {marketingSettings.whatsapp_live_mode
                   ? ' • 🟢 מצב שליחה אמיתית'
                   : ' • 🔵 מצב לוג בלבד'
