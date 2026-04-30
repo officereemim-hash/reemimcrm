@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Link } from 'react-router-dom';
-import { Users, Calendar, CheckSquare, AlertTriangle, TrendingUp, Phone, Bell, FileX } from 'lucide-react';
+import { Users, Calendar, CheckSquare, AlertTriangle, TrendingUp, Phone, Bell, FileX, ShieldAlert } from 'lucide-react';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { format, isToday, parseISO } from 'date-fns';
 import { he } from 'date-fns/locale';
 
 export default function Dashboard() {
+  const { isAdmin, filterForUser } = useCurrentUser();
   const [contacts, setContacts] = useState([]);
   const [meetings, setMeetings] = useState([]);
   const [tasks, setTasks] = useState([]);
@@ -20,13 +22,13 @@ export default function Dashboard() {
       base44.entities.Task.list(),
       base44.entities.Communication.list(),
     ]).then(([c, m, t, comm]) => {
-      setContacts(c);
-      setMeetings(m);
-      setTasks(t);
+      setContacts(isAdmin ? c : filterForUser(c));
+      setMeetings(isAdmin ? m : filterForUser(m, 'contact_id'));
+      setTasks(isAdmin ? t : filterForUser(t));
       setCommunications(comm);
       setLoading(false);
     });
-  }, []);
+  }, [isAdmin]);
 
   const today = new Date();
   const todayStr = format(today, 'yyyy-MM-dd');
@@ -48,7 +50,12 @@ export default function Dashboard() {
     return bd.getDate() === today.getDate() && bd.getMonth() === today.getMonth();
   });
 
-  const systemErrors = communications.filter(c => c.type === 'system_error' && c.created_date > new Date(Date.now() - 7*24*60*60*1000).toISOString()).length;
+  const systemErrors = isAdmin ? communications.filter(c => c.type === 'system_error' && c.created_date > new Date(Date.now() - 7*24*60*60*1000).toISOString()).length : 0;
+  
+  // SLA overdue tasks
+  const slaOverdueTasks = tasks.filter(t => 
+    t.sla_due_at && new Date(t.sla_due_at) < new Date() && t.status !== 'done'
+  ).length;
   const urgentTasks = tasks.filter(t => ['high','urgent'].includes(t.priority) && t.status === 'open').length;
 
   const kpis = [
@@ -91,7 +98,7 @@ export default function Dashboard() {
               </Link>
             </div>
           )}
-          {systemErrors > 0 && (
+          {isAdmin && systemErrors > 0 && (
             <div className="flex items-center gap-3 bg-[#FDECEA] border-r-4 border-red-500 rounded-lg px-4 py-3">
               <FileX size={18} className="text-destructive flex-shrink-0" />
               <span className="text-sm font-medium text-foreground">
@@ -99,6 +106,17 @@ export default function Dashboard() {
               </span>
               <Link to="/communications?filter=system_error" className="mr-auto text-sm text-primary font-semibold hover:underline">
                 צפה בשגיאות
+              </Link>
+            </div>
+          )}
+          {slaOverdueTasks > 0 && (
+            <div className="flex items-center gap-3 bg-[#FFF8E1] border-r-4 border-[#D4A843] rounded-lg px-4 py-3">
+              <ShieldAlert size={18} className="text-gold flex-shrink-0" />
+              <span className="text-sm font-medium text-foreground">
+                {slaOverdueTasks} משימות SLA שעברו את המועד
+              </span>
+              <Link to="/meetings" className="mr-auto text-sm text-primary font-semibold hover:underline">
+                צפה במשימות
               </Link>
             </div>
           )}

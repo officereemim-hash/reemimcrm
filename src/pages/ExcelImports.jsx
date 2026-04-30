@@ -50,7 +50,9 @@ export default function ExcelImports() {
     if (!file) return;
     setSaving(true);
     const { file_url } = await base44.integrations.Core.UploadFile({ file });
-    await base44.entities.ExcelImport.create({ ...form, file_url, status: 'pending' });
+    const created = await base44.entities.ExcelImport.create({ ...form, file_url, status: 'pending' });
+    // Trigger processing
+    base44.functions.invoke('processExcelImport', { import_id: created.id }).catch(() => {});
     setShowForm(false);
     setFile(null);
     load();

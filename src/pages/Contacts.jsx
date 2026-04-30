@@ -8,6 +8,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { ContactStatusBadge, BotStatusBadge, SERVICE_TYPE_LABELS, SOURCE_LABELS } from '@/components/StatusBadge';
 import { format } from 'date-fns';
 import ContactFormDialog from '@/components/contacts/ContactFormDialog';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 
 const TABS = [
   { key: 'all', label: 'הכל' },
@@ -17,6 +18,7 @@ const TABS = [
 ];
 
 export default function Contacts() {
+  const { isAdmin, filterForUser } = useCurrentUser();
   const [contacts, setContacts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('all');
@@ -25,7 +27,7 @@ export default function Contacts() {
 
   const load = () => {
     base44.entities.Contact.list('-created_date', 200).then(data => {
-      setContacts(data);
+      setContacts(filterForUser(data));
       setLoading(false);
     });
   };
