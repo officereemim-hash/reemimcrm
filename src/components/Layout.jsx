@@ -17,7 +17,6 @@ const navItems = [
   { path: '/excel-imports', label: 'ייבוא אקסלים', icon: FileText },
   { path: '/bot-content', label: 'תוכן הבוט', icon: Bot },
   { path: '/service-content', label: 'ניהול תוכן', icon: FileText },
-  { path: '/bot-settings', label: 'הגדרות בוט', icon: Settings },
   { path: '/bot-chat', label: 'בדיקת בוט', icon: MessageSquare },
   { path: '/settings', label: 'הגדרות', icon: Settings },
 ];

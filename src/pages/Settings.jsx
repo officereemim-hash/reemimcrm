@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Settings as SettingsIcon, Bot, Zap, Clock, Shield, Mail } from 'lucide-react';
+import { Settings as SettingsIcon, Bot, Zap, Clock, Shield, Mail, Database } from 'lucide-react';
 import MarketingSettingsTab from '@/components/marketing/MarketingSettingsTab';
+import SystemSettingsTab from '@/components/settings/SystemSettingsTab';
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState('general');
@@ -25,6 +26,15 @@ export default function Settings() {
           כללי
         </button>
         <button
+          onClick={() => setActiveTab('system')}
+          className={`px-4 py-2 rounded-t-lg text-sm font-medium transition-colors ${
+            activeTab === 'system' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
+          }`}
+        >
+          <Database size={14} className="inline ml-1" />
+          הגדרות מערכת
+        </button>
+        <button
           onClick={() => setActiveTab('marketing')}
           className={`px-4 py-2 rounded-t-lg text-sm font-medium transition-colors ${
             activeTab === 'marketing' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
@@ -36,6 +46,8 @@ export default function Settings() {
       </div>
 
       {activeTab === 'marketing' && <MarketingSettingsTab />}
+
+      {activeTab === 'system' && <SystemSettingsTab />}
 
       {activeTab === 'general' && <div className="grid md:grid-cols-2 gap-6">
         <Card>

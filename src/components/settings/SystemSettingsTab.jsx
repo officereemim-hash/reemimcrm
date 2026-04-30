@@ -27,7 +27,7 @@ const VALUE_TYPES = [
 
 const EMPTY = { category: 'details', key: '', label: '', value: '', value_type: 'text' };
 
-export default function BotSettingsPage() {
+export default function SystemSettingsTab() {
   const [activeTab, setActiveTab] = useState('details');
   const [showDialog, setShowDialog] = useState(false);
   const [form, setForm] = useState(EMPTY);
@@ -62,32 +62,22 @@ export default function BotSettingsPage() {
   const filteredSettings = settings.filter(s => s.category === activeTab);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-            <Settings2 size={20} className="text-primary" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold">הגדרות מערכת</h1>
-            <p className="text-sm text-muted-foreground">הגדרות key/value למערכת הבוט</p>
-          </div>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex gap-2 flex-wrap">
+          {Object.entries(CATEGORY_CONFIG).map(([key, cfg]) => {
+            const Icon = cfg.icon;
+            const count = settings.filter(s => s.category === key).length;
+            return (
+              <Button key={key} variant={activeTab === key ? 'default' : 'outline'} size="sm" onClick={() => setActiveTab(key)} className="gap-2">
+                <Icon size={14} />{cfg.label} ({count})
+              </Button>
+            );
+          })}
         </div>
         <Button size="sm" onClick={() => { setForm({ ...EMPTY, category: activeTab }); setEditId(null); setShowDialog(true); }} className="gap-2">
           <Plus size={16} />הוסף הגדרה
         </Button>
-      </div>
-
-      <div className="flex gap-2 flex-wrap">
-        {Object.entries(CATEGORY_CONFIG).map(([key, cfg]) => {
-          const Icon = cfg.icon;
-          const count = settings.filter(s => s.category === key).length;
-          return (
-            <Button key={key} variant={activeTab === key ? 'default' : 'outline'} size="sm" onClick={() => setActiveTab(key)} className="gap-2">
-              <Icon size={14} />{cfg.label} ({count})
-            </Button>
-          );
-        })}
       </div>
 
       <Card className="shadow-sm">
