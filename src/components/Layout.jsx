@@ -12,7 +12,7 @@ const navItems = [
   { path: '/service-requests', label: 'פניות שירות', icon: FileText },
   { path: '/meetings', label: 'פגישות ומשימות', icon: Calendar },
   { path: '/marketing', label: 'מרכז דיוור', icon: Mail },
-  { path: '/communications', label: 'לוג תקשורת', icon: MessageSquare },
+
   { path: '/webinars', label: 'וובינרים', icon: Video },
   { path: '/excel-imports', label: 'ייבוא אקסלים', icon: FileText },
   { path: '/bot-content', label: 'תוכן הבוט', icon: Bot },

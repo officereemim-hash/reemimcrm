@@ -14,7 +14,7 @@ import ContactDetail from '@/pages/ContactDetail';
 import LeadsPipeline from '@/pages/LeadsPipeline';
 import ServiceRequests from '@/pages/ServiceRequests';
 import Meetings from '@/pages/Meetings';
-import Communications from '@/pages/Communications';
+
 import Webinars from '@/pages/Webinars';
 import ExcelImports from '@/pages/ExcelImports';
 import Settings from '@/pages/Settings';
@@ -53,7 +53,7 @@ const AuthenticatedApp = () => {
         <Route path="/pipeline" element={<LeadsPipeline />} />
         <Route path="/service-requests" element={<ServiceRequests />} />
         <Route path="/meetings" element={<Meetings />} />
-        <Route path="/communications" element={<Communications />} />
+
         <Route path="/webinars" element={<Webinars />} />
         <Route path="/excel-imports" element={<ExcelImports />} />
         <Route path="/settings" element={<Settings />} />

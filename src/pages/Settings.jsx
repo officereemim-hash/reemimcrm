@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Settings as SettingsIcon, Bot, Zap, Clock, Shield, Mail, Database } from 'lucide-react';
+import { Settings as SettingsIcon, Bot, Zap, Clock, Shield, Mail, Database, MessageSquare } from 'lucide-react';
 import MarketingSettingsTab from '@/components/marketing/MarketingSettingsTab';
 import SystemSettingsTab from '@/components/settings/SystemSettingsTab';
+import CommunicationsTab from '@/components/settings/CommunicationsTab';
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState('general');
@@ -35,6 +36,15 @@ export default function Settings() {
           הגדרות מערכת
         </button>
         <button
+          onClick={() => setActiveTab('communications')}
+          className={`px-4 py-2 rounded-t-lg text-sm font-medium transition-colors ${
+            activeTab === 'communications' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
+          }`}
+        >
+          <MessageSquare size={14} className="inline ml-1" />
+          לוג תקשורת
+        </button>
+        <button
           onClick={() => setActiveTab('marketing')}
           className={`px-4 py-2 rounded-t-lg text-sm font-medium transition-colors ${
             activeTab === 'marketing' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
@@ -48,6 +58,8 @@ export default function Settings() {
       {activeTab === 'marketing' && <MarketingSettingsTab />}
 
       {activeTab === 'system' && <SystemSettingsTab />}
+
+      {activeTab === 'communications' && <CommunicationsTab />}
 
       {activeTab === 'general' && <div className="grid md:grid-cols-2 gap-6">
         <Card>
