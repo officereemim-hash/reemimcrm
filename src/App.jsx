@@ -19,6 +19,10 @@ import Webinars from '@/pages/Webinars';
 import ExcelImports from '@/pages/ExcelImports';
 import Settings from '@/pages/Settings';
 import MarketingHub from '@/pages/MarketingHub';
+import BotContentPage from '@/pages/BotContentPage';
+import ServiceContentPage from '@/pages/ServiceContentPage';
+import BotSettingsPage from '@/pages/BotSettingsPage';
+import BotChat from '@/pages/BotChat';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -54,6 +58,10 @@ const AuthenticatedApp = () => {
         <Route path="/excel-imports" element={<ExcelImports />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/marketing" element={<MarketingHub />} />
+        <Route path="/bot-content" element={<BotContentPage />} />
+        <Route path="/service-content" element={<ServiceContentPage />} />
+        <Route path="/bot-settings" element={<BotSettingsPage />} />
+        <Route path="/bot-chat" element={<BotChat />} />
         <Route path="*" element={<PageNotFound />} />
       </Route>
     </Routes>
