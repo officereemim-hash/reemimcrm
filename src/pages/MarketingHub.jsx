@@ -3,13 +3,9 @@ import { base44 } from '@/api/base44Client';
 import { Mail, Send, Users, Calendar, Star, Bell, Plus, CheckCircle, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { format } from 'date-fns';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import ComposeDialog from '@/components/marketing/ComposeDialog';
 
 const MESSAGE_TYPES = [
   { key: 'newsletter', label: 'ניוזלטר תקופתי', icon: Mail, desc: 'שליחה לכלל הלקוחות הפעילים' },
@@ -19,21 +15,12 @@ const MESSAGE_TYPES = [
   { key: 'annual_reminder', label: 'תזכורת שנתית', icon: Clock, desc: 'מופעל אוטומטית לפי annual_followup_date' },
 ];
 
-const AUDIENCE_OPTIONS = [
-  { key: 'all_active', label: 'כל הלקוחות הפעילים', filter: c => c.status === 'active_client' },
-  { key: 'completed', label: 'לקוחות שהשלימו טיפול', filter: c => c.status === 'completed' },
-  { key: 'in_progress', label: 'לידים בטיפול', filter: c => ['in_progress', 'quote_sent'].includes(c.status) },
-  { key: 'new_leads', label: 'לידים חדשים', filter: c => c.status === 'new_lead' },
-];
-
 export default function MarketingHub() {
   const { isAdmin } = useCurrentUser();
   const [contacts, setContacts] = useState([]);
   const [communications, setCommunications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCompose, setShowCompose] = useState(false);
-  const [form, setForm] = useState({ type: 'newsletter', audience: 'all_active', subject: '', content: '', sender_name: 'קרנות ראמים' });
-  const [sending, setSending] = useState(false);
   const [sentResult, setSentResult] = useState(null);
 
   const load = () => {
@@ -49,45 +36,8 @@ export default function MarketingHub() {
 
   useEffect(() => { load(); }, []);
 
-  const getAudienceCount = (audienceKey) => {
-    const option = AUDIENCE_OPTIONS.find(o => o.key === audienceKey);
-    return option ? contacts.filter(option.filter).length : 0;
-  };
-
-  const handleSend = async () => {
-    if (!form.content) return;
-    setSending(true);
-    setSentResult(null);
-
-    const option = AUDIENCE_OPTIONS.find(o => o.key === form.audience);
-    const audience = contacts.filter(option.filter);
-    let successCount = 0;
-
-    for (const contact of audience) {
-      const personalizedContent = form.content
-        .replace('{שם}', contact.full_name || '')
-        .replace('{name}', contact.full_name || '');
-
-      await base44.entities.Communication.create({
-        contact_id: contact.id,
-        type: 'whatsapp',
-        direction: 'outbound',
-        content: personalizedContent,
-        sent_by: 'basmat',
-        is_automated: false,
-        status: 'sent',
-      });
-
-      await base44.entities.Contact.update(contact.id, {
-        last_contact_date: new Date().toISOString().split('T')[0],
-      });
-
-      successCount++;
-    }
-
-    setSentResult({ count: successCount, type: MESSAGE_TYPES.find(t => t.key === form.type)?.label });
-    setSending(false);
-    setShowCompose(false);
+  const handleSendDone = (result) => {
+    setSentResult(result);
     load();
   };
 
@@ -124,7 +74,10 @@ export default function MarketingHub() {
       {sentResult && (
         <div className="flex items-center gap-3 bg-success/10 border border-success/30 rounded-lg px-4 py-3">
           <CheckCircle size={18} className="text-success" />
-          <span className="text-sm font-medium">נשלח בהצלחה: {sentResult.type} ל-{sentResult.count} אנשי קשר</span>
+          <span className="text-sm font-medium">
+            נשלח בהצלחה: {sentResult.type} ל-{sentResult.count} אנשי קשר
+            {sentResult.channel && ` (${sentResult.channel === 'whatsapp' ? 'WhatsApp' : sentResult.channel === 'email' ? 'מייל' : 'WhatsApp + מייל'})`}
+          </span>
         </div>
       )}
 
@@ -159,7 +112,7 @@ export default function MarketingHub() {
                         size="sm"
                         variant="outline"
                         className="mt-2 h-7 text-xs gap-1"
-                        onClick={() => { setForm(f => ({ ...f, type: type.key })); setShowCompose(true); }}
+                        onClick={() => setShowCompose(true)}
                       >
                         <Send size={12} />
                         שלח עכשיו
@@ -203,61 +156,12 @@ export default function MarketingHub() {
       </Card>
 
       {/* Compose Dialog */}
-      {showCompose && (
-        <Dialog open onOpenChange={() => setShowCompose(false)}>
-          <DialogContent dir="rtl" className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle>שליחת הודעה</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 mt-2">
-              <div className="space-y-1">
-                <Label>סוג הודעה</Label>
-                <Select value={form.type} onValueChange={v => setForm(f => ({ ...f, type: v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {MESSAGE_TYPES.filter(t => !['birthday', 'annual_reminder'].includes(t.key)).map(t => (
-                      <SelectItem key={t.key} value={t.key}>{t.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1">
-                <Label>קהל יעד</Label>
-                <Select value={form.audience} onValueChange={v => setForm(f => ({ ...f, audience: v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {AUDIENCE_OPTIONS.map(o => (
-                      <SelectItem key={o.key} value={o.key}>{o.label} ({getAudienceCount(o.key)})</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  יישלח ל-{getAudienceCount(form.audience)} אנשי קשר
-                </p>
-              </div>
-
-              <div className="space-y-1">
-                <Label>תוכן ההודעה *</Label>
-                <Textarea
-                  value={form.content}
-                  onChange={e => setForm(f => ({ ...f, content: e.target.value }))}
-                  rows={5}
-                  placeholder="היי {שם}, ..."
-                />
-                <p className="text-xs text-muted-foreground">השתמש ב-&#123;שם&#125; לשם פרסונלי</p>
-              </div>
-
-              <div className="flex gap-2 justify-end">
-                <Button variant="outline" onClick={() => setShowCompose(false)}>ביטול</Button>
-                <Button onClick={handleSend} disabled={sending || !form.content || getAudienceCount(form.audience) === 0}>
-                  {sending ? 'שולח...' : `שלח ל-${getAudienceCount(form.audience)} אנשי קשר`}
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
+      <ComposeDialog
+        open={showCompose}
+        onClose={() => setShowCompose(false)}
+        contacts={contacts}
+        onDone={handleSendDone}
+      />
     </div>
   );
 }

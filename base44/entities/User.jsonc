@@ -1,0 +1,31 @@
+{
+  "name": "User",
+  "type": "object",
+  "properties": {
+    "role": {
+      "type": "string",
+      "enum": [
+        "admin",
+        "user"
+      ],
+      "default": "user"
+    },
+    "marketing_settings": {
+      "type": "object",
+      "properties": {
+        "email_live_mode": {
+          "type": "boolean",
+          "default": false
+        },
+        "whatsapp_live_mode": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "default": {
+        "email_live_mode": false,
+        "whatsapp_live_mode": false
+      }
+    }
+  }
+}

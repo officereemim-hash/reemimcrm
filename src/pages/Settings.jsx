@@ -1,7 +1,11 @@
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Settings as SettingsIcon, Bot, Zap, Clock, Shield } from 'lucide-react';
+import { Settings as SettingsIcon, Bot, Zap, Clock, Shield, Mail } from 'lucide-react';
+import MarketingSettingsTab from '@/components/marketing/MarketingSettingsTab';
 
 export default function Settings() {
+  const [activeTab, setActiveTab] = useState('general');
+
   return (
     <div className="space-y-6">
       <div>
@@ -9,7 +13,31 @@ export default function Settings() {
         <p className="text-muted-foreground text-sm mt-0.5">הגדרות מערכת — גישת Admin בלבד</p>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-6">
+      {/* Tabs */}
+      <div className="flex gap-2 border-b pb-2">
+        <button
+          onClick={() => setActiveTab('general')}
+          className={`px-4 py-2 rounded-t-lg text-sm font-medium transition-colors ${
+            activeTab === 'general' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
+          }`}
+        >
+          <SettingsIcon size={14} className="inline ml-1" />
+          כללי
+        </button>
+        <button
+          onClick={() => setActiveTab('marketing')}
+          className={`px-4 py-2 rounded-t-lg text-sm font-medium transition-colors ${
+            activeTab === 'marketing' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
+          }`}
+        >
+          <Mail size={14} className="inline ml-1" />
+          מרכז דיוור
+        </button>
+      </div>
+
+      {activeTab === 'marketing' && <MarketingSettingsTab />}
+
+      {activeTab === 'general' && <div className="grid md:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
@@ -93,7 +121,7 @@ export default function Settings() {
             </div>
           </CardContent>
         </Card>
-      </div>
+      </div>}
     </div>
   );
 }
