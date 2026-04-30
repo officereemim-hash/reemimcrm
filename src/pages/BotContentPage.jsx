@@ -6,7 +6,9 @@ import { Button } from '@/components/ui/button';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import BotContentFilters from '@/components/bot/BotContentFilters';
 import BotContentCard from '@/components/bot/BotContentCard';
+import BotContentTable from '@/components/bot/BotContentTable';
 import BotContentFormDialog from '@/components/bot/BotContentFormDialog';
+import ViewToggle from '@/components/shared/ViewToggle';
 
 export default function BotContentPage() {
   const [search, setSearch] = useState('');
@@ -15,6 +17,7 @@ export default function BotContentPage() {
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [viewMode, setViewMode] = useState('cards');
   const queryClient = useQueryClient();
 
   const { data: contents = [], isLoading } = useQuery({
@@ -56,7 +59,10 @@ export default function BotContentPage() {
             <p className="text-sm text-muted-foreground">ניהול הודעות, ניסוחים ומסלולים</p>
           </div>
         </div>
-        <Button onClick={handleNew} className="gap-2"><Plus size={16} />הודעה חדשה</Button>
+        <div className="flex gap-2 items-center">
+          <ViewToggle view={viewMode} onViewChange={setViewMode} />
+          <Button onClick={handleNew} className="gap-2" size="sm"><Plus size={16} />הודעה חדשה</Button>
+        </div>
       </div>
 
       <BotContentFilters search={search} onSearchChange={setSearch} category={category} onCategoryChange={setCategory} flow={flow} onFlowChange={setFlow} />
@@ -67,6 +73,8 @@ export default function BotContentPage() {
         </div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">אין הודעות להצגה</div>
+      ) : viewMode === 'table' ? (
+        <BotContentTable items={filtered} onEdit={handleEdit} onDelete={setDeleteTarget} />
       ) : (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map(item => (

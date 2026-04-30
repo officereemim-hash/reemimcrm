@@ -7,6 +7,7 @@ import { format } from 'date-fns';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import ComposeDialog from '@/components/marketing/ComposeDialog';
 import TemplateEditor from '@/components/marketing/TemplateEditor';
+import ViewToggle from '@/components/shared/ViewToggle';
 
 const MESSAGE_TYPES = [
   { key: 'newsletter', label: 'ניוזלטר תקופתי', icon: Mail, desc: 'שליחה לכלל הלקוחות הפעילים' },
@@ -24,6 +25,7 @@ export default function MarketingHub() {
   const [showCompose, setShowCompose] = useState(false);
   const [sentResult, setSentResult] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
+  const [viewMode, setViewMode] = useState('cards');
 
   const load = () => {
     Promise.all([
@@ -65,9 +67,10 @@ export default function MarketingHub() {
           <h1 className="text-2xl font-bold">מרכז דיוור</h1>
           <p className="text-muted-foreground text-sm mt-0.5">ניהול תקשורת שוטפת, דיוור ופולו-אפ</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          {activeTab === 'overview' && <ViewToggle view={viewMode} onViewChange={setViewMode} />}
           {isAdmin && (
-            <Button onClick={() => setShowCompose(true)} className="gap-2">
+            <Button onClick={() => setShowCompose(true)} className="gap-2" size="sm">
               <Plus size={16} />
               שליחה חדשה
             </Button>

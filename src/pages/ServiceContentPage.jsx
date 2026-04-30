@@ -8,6 +8,8 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import ServiceContentFormDialog, { CONTENT_TYPES, SERVICE_TYPES } from '@/components/bot/ServiceContentFormDialog';
+import ServiceContentTable from '@/components/bot/ServiceContentTable';
+import ViewToggle from '@/components/shared/ViewToggle';
 import { Pencil, Trash2 } from 'lucide-react';
 
 const ICON_MAP = { video: Video, pdf: FileText, questionnaire: ClipboardList, payment_link: CreditCard, external_link: LinkIcon, agreement: FileCheck, calendar_link: Calendar };
@@ -19,6 +21,7 @@ export default function ServiceContentPage() {
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [viewMode, setViewMode] = useState('cards');
   const queryClient = useQueryClient();
 
   const { data: contents = [], isLoading } = useQuery({
@@ -57,7 +60,10 @@ export default function ServiceContentPage() {
             <p className="text-sm text-muted-foreground">קישורים, PDFs, שאלונים, תשלומים ויומנים</p>
           </div>
         </div>
-        <Button onClick={() => { setEditItem(null); setShowForm(true); }} className="gap-2"><Plus size={16} />תוכן חדש</Button>
+        <div className="flex gap-2 items-center">
+          <ViewToggle view={viewMode} onViewChange={setViewMode} />
+          <Button onClick={() => { setEditItem(null); setShowForm(true); }} className="gap-2" size="sm"><Plus size={16} />תוכן חדש</Button>
+        </div>
       </div>
 
       <div className="space-y-3">
@@ -83,6 +89,8 @@ export default function ServiceContentPage() {
         <div className="flex justify-center py-12"><div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" /></div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">אין תוכן להצגה</div>
+      ) : viewMode === 'table' ? (
+        <ServiceContentTable items={filtered} onEdit={item => { setEditItem(item); setShowForm(true); }} onDelete={setDeleteTarget} />
       ) : (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map(item => {

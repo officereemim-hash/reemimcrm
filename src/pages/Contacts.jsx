@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Link } from 'react-router-dom';
-import { Plus, Search, Filter, Phone, Calendar, ChevronDown } from 'lucide-react';
+import { Plus, Search, Phone, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { ContactStatusBadge, BotStatusBadge, SERVICE_TYPE_LABELS, SOURCE_LABELS } from '@/components/StatusBadge';
 import { format } from 'date-fns';
 import ContactFormDialog from '@/components/contacts/ContactFormDialog';
+import ContactsTable from '@/components/contacts/ContactsTable';
+import ViewToggle from '@/components/shared/ViewToggle';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 
 const TABS = [
@@ -24,6 +26,7 @@ export default function Contacts() {
   const [activeTab, setActiveTab] = useState('all');
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
+  const [viewMode, setViewMode] = useState('cards');
 
   const load = () => {
     base44.entities.Contact.list('-created_date', 200).then(data => {
@@ -48,10 +51,13 @@ export default function Contacts() {
           <h1 className="text-2xl font-bold">לקוחות</h1>
           <p className="text-muted-foreground text-sm mt-0.5">{contacts.length} אנשי קשר במערכת</p>
         </div>
-        <Button onClick={() => setShowForm(true)} className="gap-2">
-          <Plus size={16} />
-          לקוח/ה חדש
-        </Button>
+        <div className="flex gap-2 items-center">
+          <ViewToggle view={viewMode} onViewChange={setViewMode} />
+          <Button onClick={() => setShowForm(true)} className="gap-2" size="sm">
+            <Plus size={16} />
+            לקוח/ה חדש
+          </Button>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -82,11 +88,13 @@ export default function Contacts() {
         />
       </div>
 
-      {/* List */}
+      {/* Content */}
       {loading ? (
         <div className="flex items-center justify-center h-40">
           <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
         </div>
+      ) : viewMode === 'table' ? (
+        <ContactsTable contacts={filtered} />
       ) : filtered.length === 0 ? (
         <div className="text-center text-muted-foreground py-16">לא נמצאו אנשי קשר</div>
       ) : (
