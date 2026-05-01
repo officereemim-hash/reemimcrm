@@ -11,8 +11,8 @@ export default function ServiceRequestCard({ request, contact, onEdit, onDelete 
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
-            <Link to={`/contacts/${request.contact_id}`} className="font-semibold text-sm hover:text-primary hover:underline">
-              {contact?.full_name || '—'}
+            <Link to={`/service-requests/${request.id}`} className="font-semibold text-sm hover:text-primary hover:underline">
+              {contact?.full_name || request.contact_name || '—'}
             </Link>
             <div className="flex items-center gap-2 mt-1 flex-wrap">
               <SRStatusBadge status={request.status} />

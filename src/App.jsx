@@ -23,6 +23,7 @@ import BotContentPage from '@/pages/BotContentPage';
 import ServiceContentPage from '@/pages/ServiceContentPage';
 
 import BotChat from '@/pages/BotChat';
+import ServiceRequestDetail from '@/pages/ServiceRequestDetail';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -52,6 +53,7 @@ const AuthenticatedApp = () => {
         <Route path="/contacts/:id" element={<ContactDetail />} />
         <Route path="/pipeline" element={<LeadsPipeline />} />
         <Route path="/service-requests" element={<ServiceRequests />} />
+        <Route path="/service-requests/:id" element={<ServiceRequestDetail />} />
         <Route path="/meetings" element={<Meetings />} />
 
         <Route path="/webinars" element={<Webinars />} />

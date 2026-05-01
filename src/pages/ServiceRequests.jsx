@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { base44 } from '@/api/base44Client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { SRStatusBadge, SERVICE_TYPE_LABELS } from '@/components/StatusBadge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -8,10 +9,12 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Search, Plus } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { toast } from 'sonner';
 import ViewToggle from '@/components/shared/ViewToggle';
 import ServiceRequestTable from '@/components/service-requests/ServiceRequestTable';
 import ServiceRequestCard from '@/components/service-requests/ServiceRequestCard';
 import ServiceRequestFormDialog from '@/components/service-requests/ServiceRequestFormDialog';
+import { handleBotMessage } from '@/lib/sendBotMessage';
 
 const SR_STATUS_COLUMNS = [
   { key: 'new_inprogress', label: 'פניות חדשות', statuses: ['new', 'in_progress'] },
@@ -41,9 +44,6 @@ const TYPE_FILTER_OPTIONS = [
 ];
 
 export default function ServiceRequests() {
-  const [requests, setRequests] = useState([]);
-  const [contacts, setContacts] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
@@ -51,63 +51,105 @@ export default function ServiceRequests() {
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const queryClient = useQueryClient();
 
-  const load = () => {
-    setLoading(true);
-    Promise.all([
-      base44.entities.ServiceRequest.list('-updated_date', 200),
-      base44.entities.Contact.list(),
-    ]).then(([srs, cs]) => {
-      setRequests(srs);
-      setContacts(cs);
-      setLoading(false);
-    });
-  };
+  const { data: requests = [], isLoading } = useQuery({
+    queryKey: ['service-requests'],
+    queryFn: () => base44.entities.ServiceRequest.list('-updated_date', 200),
+  });
 
-  useEffect(() => { load(); }, []);
+  const { data: contacts = [] } = useQuery({
+    queryKey: ['contacts'],
+    queryFn: () => base44.entities.Contact.list('-created_date', 500),
+  });
 
   const getContact = (id) => contacts.find(c => c.id === id);
 
   const filtered = requests.filter(r => {
     const matchSearch = !search || (() => {
       const c = getContact(r.contact_id);
-      return c?.full_name?.includes(search) || c?.phone?.includes(search);
+      return c?.full_name?.includes(search) || c?.phone?.includes(search) || (r.contact_name || '').includes(search) || (r.contact_phone || '').includes(search);
     })();
     const matchStatus = statusFilter === 'all' || r.status === statusFilter;
     const matchType = typeFilter === 'all' || r.service_type === typeFilter;
     return matchSearch && matchStatus && matchType;
   });
 
-  const handleSave = async (formData) => {
-    if (editItem) {
-      await base44.entities.ServiceRequest.update(editItem.id, formData);
-    } else {
-      await base44.entities.ServiceRequest.create(formData);
-    }
-    setShowForm(false);
-    setEditItem(null);
-    load();
-  };
+  const saveMutation = useMutation({
+    mutationFn: async (formData) => {
+      if (editItem) {
+        const oldStatus = editItem.status;
+        await base44.entities.ServiceRequest.update(editItem.id, formData);
+        if (formData.status && formData.status !== oldStatus) {
+          await base44.entities.ServiceRequestTimeline.create({
+            service_request_id: editItem.id, event_type: 'status_change', description: 'סטטוס שונה', old_value: oldStatus, new_value: formData.status,
+          });
+        }
+        return { id: editItem.id, statusChanged: formData.status && formData.status !== oldStatus };
+      } else {
+        const contact = contacts.find(c => c.id === formData.contact_id);
+        const result = await base44.entities.ServiceRequest.create({ ...formData, contact_name: contact?.full_name || '', contact_phone: contact?.phone || '' });
+        await base44.entities.ServiceRequestTimeline.create({ service_request_id: result.id, event_type: 'status_change', description: 'פנייה חדשה נוצרה', new_value: formData.status || 'new' });
+        return { id: result.id, statusChanged: false };
+      }
+    },
+    onSuccess: async (result) => {
+      queryClient.invalidateQueries({ queryKey: ['service-requests'] });
+      setShowForm(false);
+      setEditItem(null);
+      toast.success(editItem ? 'עודכן' : 'פנייה נוצרה');
+      if (result?.statusChanged) {
+        try {
+          const sent = await handleBotMessage(result.id);
+          if (sent) toast.success(`הודעת ${sent.trigger} נשלחה`);
+        } catch (err) { console.warn('Bot message failed:', err.message); }
+      }
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => base44.entities.ServiceRequest.delete(id),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['service-requests'] }); toast.success('נמחק'); },
+  });
+
+  const statusChangeMutation = useMutation({
+    mutationFn: async ({ req, newStatus }) => {
+      const oldStatus = req.status;
+      await base44.entities.ServiceRequest.update(req.id, { status: newStatus });
+      await base44.entities.ServiceRequestTimeline.create({
+        service_request_id: req.id, event_type: 'status_change', description: 'סטטוס שונה', old_value: oldStatus, new_value: newStatus,
+      });
+      return { id: req.id, statusChanged: true };
+    },
+    onSuccess: async (result) => {
+      queryClient.invalidateQueries({ queryKey: ['service-requests'] });
+      toast.success('סטטוס עודכן');
+      try {
+        const sent = await handleBotMessage(result.id);
+        if (sent) toast.success(`הודעת ${sent.trigger} נשלחה`);
+      } catch (err) { console.warn('Bot message failed:', err.message); }
+    },
+  });
+
+  const handleSave = (formData) => saveMutation.mutate(formData);
 
   const handleEdit = (req) => {
     setEditItem(req);
     setShowForm(true);
   };
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
     if (deleteTarget) {
-      await base44.entities.ServiceRequest.delete(deleteTarget.id);
+      deleteMutation.mutate(deleteTarget.id);
       setDeleteTarget(null);
-      load();
     }
   };
 
-  const handleStatusChange = async (req, newStatus) => {
-    await base44.entities.ServiceRequest.update(req.id, { status: newStatus });
-    load();
+  const handleStatusChange = (req, newStatus) => {
+    statusChangeMutation.mutate({ req, newStatus });
   };
 
-  if (loading) return (
+  if (isLoading) return (
     <div className="flex items-center justify-center h-64">
       <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
     </div>
@@ -193,7 +235,7 @@ export default function ServiceRequests() {
                   {items.map(r => {
                     const c = getContact(r.contact_id);
                     return (
-                      <Link key={r.id} to={`/contacts/${r.contact_id}`}>
+                      <Link key={r.id} to={`/service-requests/${r.id}`}>
                         <div className="bg-white rounded-lg p-2.5 shadow-sm hover:shadow-md transition-all border text-sm">
                           <div className="font-medium truncate">{c?.full_name || '—'}</div>
                           <div className="text-xs text-muted-foreground mt-0.5">{SERVICE_TYPE_LABELS[r.service_type]}</div>

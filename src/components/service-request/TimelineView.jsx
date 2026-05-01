@@ -1,0 +1,54 @@
+import React from 'react';
+import { ArrowLeftRight, FileText, MessageSquare, CreditCard, Footprints } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+const iconMap = {
+  status_change: ArrowLeftRight,
+  file_received: FileText,
+  system_note: MessageSquare,
+  payment: CreditCard,
+  message_sent: MessageSquare,
+  step_change: Footprints,
+};
+
+const colorMap = {
+  status_change: 'bg-violet-100 text-violet-600',
+  file_received: 'bg-yellow-100 text-yellow-700',
+  system_note: 'bg-stone-100 text-stone-600',
+  payment: 'bg-emerald-100 text-emerald-600',
+  message_sent: 'bg-rose-100 text-rose-600',
+  step_change: 'bg-teal-100 text-teal-600',
+};
+
+export default function TimelineView({ events }) {
+  if (!events || events.length === 0) {
+    return <p className="text-sm text-muted-foreground text-center py-6">אין אירועים עדיין</p>;
+  }
+
+  return (
+    <div className="space-y-4">
+      {events.map((event, idx) => {
+        const Icon = iconMap[event.event_type] || MessageSquare;
+        return (
+          <div key={event.id || idx} className="flex gap-3">
+            <div className="flex flex-col items-center">
+              <div className={cn("w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0", colorMap[event.event_type] || 'bg-stone-100 text-stone-500')}>
+                <Icon className="w-4 h-4" />
+              </div>
+              {idx < events.length - 1 && <div className="w-px flex-1 bg-border mt-1" />}
+            </div>
+            <div className="pb-4">
+              <p className="text-sm font-medium text-foreground">{event.description}</p>
+              {event.old_value && event.new_value && (
+                <p className="text-xs text-muted-foreground mt-0.5">{event.old_value} ← {event.new_value}</p>
+              )}
+              <p className="text-xs text-muted-foreground mt-1">
+                {event.created_date ? new Date(event.created_date).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''}
+              </p>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}

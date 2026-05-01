@@ -47,8 +47,8 @@ export default function ServiceRequestTable({ requests, contacts, onEdit, onDele
               return (
                 <TableRow key={req.id} className="hover:bg-muted/30">
                   <TableCell>
-                    <Link to={`/contacts/${req.contact_id}`} className="font-medium text-sm hover:text-primary hover:underline">
-                      {contact?.full_name || '—'}
+                    <Link to={`/service-requests/${req.id}`} className="font-medium text-sm hover:text-primary hover:underline">
+                      {contact?.full_name || req.contact_name || '—'}
                     </Link>
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">{contact?.phone || '—'}</TableCell>
