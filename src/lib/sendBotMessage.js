@@ -1,5 +1,6 @@
 import { base44 } from '@/api/base44Client';
 
+const AGENT_NAME = 'dr_adri_bot';
 const _sentTriggers = new Set();
 const _sendingLock = new Map();
 
@@ -87,6 +88,13 @@ async function isWhatsAppBotEnabled() {
   } catch { return false; }
 }
 
+async function ensureAgentConversation(conversationId) {
+  if (conversationId) return conversationId;
+  // Create a new agent conversation
+  const conv = await base44.agents.createConversation(AGENT_NAME);
+  return conv.id;
+}
+
 async function sendMessage(resultData, requestId, trigger, conversationId) {
   const botEnabled = await isWhatsAppBotEnabled();
   if (!botEnabled) {
@@ -101,23 +109,37 @@ async function sendMessage(resultData, requestId, trigger, conversationId) {
 
   const effectiveConvId = pending?.conversationId || conversationId;
 
-  // Send via WhatsApp if bot is enabled and we have a conversation
-  if (botEnabled && effectiveConvId) {
+  // Sync message to Agent conversation
+  if (effectiveConvId) {
     try {
-      const conv = await base44.agents.getConversation(effectiveConvId);
-      await base44.agents.addMessage(conv, { role: 'assistant', content: pending.message });
+      await base44.agents.addMessage(effectiveConvId, { role: 'assistant', content: pending.message });
     } catch (err) {
       console.warn('sendMessage: agent message failed:', err.message);
     }
   }
 
-  // Send WhatsApp copy if phone available
+  // Send WhatsApp copy if phone available and bot enabled
   const contactPhone = pending.contactPhone;
   if (botEnabled && contactPhone) {
     try {
       await base44.functions.invoke('sendWhatsAppMessage', { phone: contactPhone, message: pending.message });
     } catch (waErr) {
       console.warn('sendMessage: WhatsApp failed:', waErr.message);
+    }
+  }
+
+  // Log to WhatsAppMessageLog if we have phone
+  if (contactPhone && effectiveConvId) {
+    try {
+      await base44.entities.WhatsAppMessageLog.create({
+        phone: contactPhone,
+        direction: 'outgoing',
+        text: pending.message.substring(0, 500),
+        status: botEnabled ? 'replied' : 'skipped',
+        conversation_id: effectiveConvId,
+      });
+    } catch (logErr) {
+      console.warn('sendMessage: log failed:', logErr.message);
     }
   }
 
