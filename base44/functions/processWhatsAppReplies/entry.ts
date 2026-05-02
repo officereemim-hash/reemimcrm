@@ -37,8 +37,9 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      const messages = await base44.asServiceRole.agents.getMessages(log.conversation_id);
-      if (!messages || messages.length === 0) continue;
+      const conv = await base44.asServiceRole.agents.getConversation(log.conversation_id);
+      const messages = conv.messages || [];
+      if (messages.length === 0) continue;
 
       // Find the last assistant message after the user's message
       const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant' && m.content);

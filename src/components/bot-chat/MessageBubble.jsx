@@ -2,6 +2,7 @@ import { Bot, User } from 'lucide-react';
 
 export default function MessageBubble({ message }) {
   const isUser = message.role === 'user';
+  const isBot = message.role === 'assistant';
   const isSystem = message.role === 'system';
 
   if (isSystem) {
@@ -22,7 +23,7 @@ export default function MessageBubble({ message }) {
         <div className="flex items-center gap-1.5 mb-1">
           {isUser ? <User size={12} /> : <Bot size={12} />}
           <span className="text-xs font-medium text-muted-foreground">
-            {isUser ? 'לקוח' : 'בוט'}
+            {isUser ? 'לקוח' : 'בוט (Agent)'}
           </span>
         </div>
         <div className="whitespace-pre-wrap">{message.content}</div>

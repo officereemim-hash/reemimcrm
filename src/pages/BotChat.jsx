@@ -12,6 +12,7 @@ const AGENT_NAME = 'dr_adri_bot';
 export default function BotChat() {
   const [conversations, setConversations] = useState([]);
   const [activeConvId, setActiveConvId] = useState(null);
+  const [activeConv, setActiveConv] = useState(null);
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loadingConvs, setLoadingConvs] = useState(true);
@@ -21,7 +22,11 @@ export default function BotChat() {
   // Load conversations
   const loadConversations = useCallback(async () => {
     setLoadingConvs(true);
-    const convs = await base44.agents.listConversations(AGENT_NAME);
+    const convs = await base44.agents.listConversations({
+      limit: 50,
+      sort: '-created_date',
+      q: { agent_name: AGENT_NAME },
+    });
     setConversations(convs || []);
     setLoadingConvs(false);
   }, []);
@@ -34,11 +39,13 @@ export default function BotChat() {
   useEffect(() => {
     if (!activeConvId) {
       setMessages([]);
+      setActiveConv(null);
       return;
     }
     setLoading(true);
-    base44.agents.getMessages(activeConvId).then(msgs => {
-      setMessages(msgs || []);
+    base44.agents.getConversation(activeConvId).then(conv => {
+      setActiveConv(conv);
+      setMessages(conv.messages || []);
       setLoading(false);
     });
   }, [activeConvId]);
@@ -46,15 +53,9 @@ export default function BotChat() {
   // Subscribe to conversation updates
   useEffect(() => {
     if (!activeConvId) return;
-    const unsub = base44.agents.subscribeToConversation(activeConvId, (event) => {
-      if (event.message) {
-        setMessages(prev => {
-          // Avoid duplicates
-          const exists = prev.some(m => m.id === event.message.id);
-          if (exists) return prev;
-          return [...prev, event.message];
-        });
-      }
+    const unsub = base44.agents.subscribeToConversation(activeConvId, (updatedConv) => {
+      setMessages(updatedConv.messages || []);
+      setActiveConv(updatedConv);
     });
     return () => { if (unsub) unsub(); };
   }, [activeConvId]);
@@ -65,21 +66,24 @@ export default function BotChat() {
   }, [messages]);
 
   const handleNewConversation = async () => {
-    const conv = await base44.agents.createConversation(AGENT_NAME);
+    const conv = await base44.agents.createConversation({
+      agent_name: AGENT_NAME,
+    });
     setConversations(prev => [conv, ...prev]);
     setActiveConvId(conv.id);
-    setMessages([]);
+    setActiveConv(conv);
+    setMessages(conv.messages || []);
   };
 
   const handleSend = async (text) => {
-    if (!activeConvId || sending) return;
+    if (!activeConv || sending) return;
     setSending(true);
 
     // Optimistic add
     const tempMsg = { id: 'temp-' + Date.now(), role: 'user', content: text };
     setMessages(prev => [...prev, tempMsg]);
 
-    await base44.agents.addMessage(activeConvId, { role: 'user', content: text });
+    await base44.agents.addMessage(activeConv, { role: 'user', content: text });
     setSending(false);
   };
 
@@ -152,10 +156,7 @@ export default function BotChat() {
               {!loading && messages
                 .filter(m => m.role === 'user' || m.role === 'assistant')
                 .map((msg, i) => (
-                  <MessageBubble
-                    key={msg.id || i}
-                    message={{ ...msg, role: msg.role === 'assistant' ? 'bot' : msg.role }}
-                  />
+                  <MessageBubble key={msg.id || i} message={msg} />
                 ))
               }
               {sending && (

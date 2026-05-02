@@ -90,8 +90,7 @@ async function isWhatsAppBotEnabled() {
 
 async function ensureAgentConversation(conversationId) {
   if (conversationId) return conversationId;
-  // Create a new agent conversation
-  const conv = await base44.agents.createConversation(AGENT_NAME);
+  const conv = await base44.agents.createConversation({ agent_name: AGENT_NAME });
   return conv.id;
 }
 
@@ -112,7 +111,8 @@ async function sendMessage(resultData, requestId, trigger, conversationId) {
   // Sync message to Agent conversation
   if (effectiveConvId) {
     try {
-      await base44.agents.addMessage(effectiveConvId, { role: 'assistant', content: pending.message });
+      const conv = await base44.agents.getConversation(effectiveConvId);
+      await base44.agents.addMessage(conv, { role: 'assistant', content: pending.message });
     } catch (err) {
       console.warn('sendMessage: agent message failed:', err.message);
     }

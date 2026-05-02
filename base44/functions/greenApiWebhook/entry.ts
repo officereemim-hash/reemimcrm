@@ -102,7 +102,7 @@ Deno.serve(async (req) => {
 
     // If no conversation found, create one
     if (!conversationId) {
-      const conv = await base44.asServiceRole.agents.createConversation(AGENT_NAME);
+      const conv = await base44.asServiceRole.agents.createConversation({ agent_name: AGENT_NAME });
       conversationId = conv.id;
     }
 
@@ -117,8 +117,12 @@ Deno.serve(async (req) => {
       chat_id: chatId,
     });
 
+    // Get conversation object for addMessage
+    const convObj = await base44.asServiceRole.agents.getConversation(conversationId);
+    const msgCountBefore = (convObj.messages || []).length;
+
     // Send message to agent
-    await base44.asServiceRole.agents.addMessage(conversationId, {
+    await base44.asServiceRole.agents.addMessage(convObj, {
       role: 'user',
       content: text,
     });
@@ -131,9 +135,10 @@ Deno.serve(async (req) => {
     while (Date.now() - startTime < maxWait) {
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      const messages = await base44.asServiceRole.agents.getMessages(conversationId);
-      if (messages && messages.length > 0) {
-        const lastMsg = messages[messages.length - 1];
+      const updatedConv = await base44.asServiceRole.agents.getConversation(conversationId);
+      const msgs = updatedConv.messages || [];
+      if (msgs.length > msgCountBefore) {
+        const lastMsg = msgs[msgs.length - 1];
         if (lastMsg.role === 'assistant' && lastMsg.content) {
           agentReply = lastMsg.content;
           break;
