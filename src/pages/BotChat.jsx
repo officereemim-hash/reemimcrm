@@ -22,12 +22,16 @@ export default function BotChat() {
   // Load conversations
   const loadConversations = useCallback(async () => {
     setLoadingConvs(true);
-    const convs = await base44.agents.listConversations({
-      limit: 50,
-      sort: '-created_date',
-      q: { agent_name: AGENT_NAME },
-    });
-    setConversations(convs || []);
+    try {
+      const convs = await base44.agents.listConversations({
+        limit: 50,
+        sort: '-created_date',
+        q: { agent_name: AGENT_NAME },
+      });
+      setConversations(convs || []);
+    } catch (err) {
+      console.error('loadConversations error:', err);
+    }
     setLoadingConvs(false);
   }, []);
 
@@ -66,13 +70,18 @@ export default function BotChat() {
   }, [messages]);
 
   const handleNewConversation = async () => {
-    const conv = await base44.agents.createConversation({
-      agent_name: AGENT_NAME,
-    });
-    setConversations(prev => [conv, ...prev]);
-    setActiveConvId(conv.id);
-    setActiveConv(conv);
-    setMessages(conv.messages || []);
+    try {
+      const conv = await base44.agents.createConversation({
+        agent_name: AGENT_NAME,
+      });
+      console.log('Created conversation:', conv);
+      setConversations(prev => [conv, ...prev]);
+      setActiveConvId(conv.id);
+      setActiveConv(conv);
+      setMessages(conv.messages || []);
+    } catch (err) {
+      console.error('createConversation error:', err);
+    }
   };
 
   const handleSend = async (text) => {
@@ -83,7 +92,11 @@ export default function BotChat() {
     const tempMsg = { id: 'temp-' + Date.now(), role: 'user', content: text };
     setMessages(prev => [...prev, tempMsg]);
 
-    await base44.agents.addMessage(activeConv, { role: 'user', content: text });
+    try {
+      await base44.agents.addMessage(activeConv, { role: 'user', content: text });
+    } catch (err) {
+      console.error('addMessage error:', err);
+    }
     setSending(false);
   };
 
