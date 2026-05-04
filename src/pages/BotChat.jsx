@@ -87,13 +87,7 @@ export default function BotChat() {
       conversation_owner: 'bot',
     });
 
-    // 2. Create Agent conversation with context
-    const conv = await base44.agents.createConversation({
-      agent_name: AGENT_NAME,
-      metadata: { name: contact.full_name, phone: contact.phone, contact_id: contact.id, source: 'test' },
-    });
-
-    // 3. Create ServiceRequest linked to both
+    // 2. Create ServiceRequest FIRST (so we have the ID for metadata)
     const sr = await base44.entities.ServiceRequest.create({
       contact_id: contact.id,
       contact_name: contact.full_name,
@@ -102,13 +96,25 @@ export default function BotChat() {
       status: 'new',
       source: 'bot',
       is_test: true,
-      conversation_id: conv.id,
     });
 
-    // 4. Update Contact with service request link
-    await base44.entities.Contact.update(contact.id, {
-      current_service_request_id: sr.id,
+    // 3. Create Agent conversation with full context (contact_id + service_request_id)
+    const conv = await base44.agents.createConversation({
+      agent_name: AGENT_NAME,
+      metadata: {
+        name: contact.full_name,
+        phone: contact.phone,
+        contact_id: contact.id,
+        service_request_id: sr.id,
+        source: 'test',
+      },
     });
+
+    // 4. Update SR with conversation_id + Contact with SR link
+    await Promise.all([
+      base44.entities.ServiceRequest.update(sr.id, { conversation_id: conv.id }),
+      base44.entities.Contact.update(contact.id, { current_service_request_id: sr.id }),
+    ]);
 
     // Refresh list and select
     await loadTestRequests();
