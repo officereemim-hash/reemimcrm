@@ -87,9 +87,10 @@ export default function BotChat() {
       conversation_owner: 'bot',
     });
 
-    // 2. Create Agent conversation
+    // 2. Create Agent conversation with context
     const conv = await base44.agents.createConversation({
       agent_name: AGENT_NAME,
+      metadata: { name: contact.full_name, phone: contact.phone, contact_id: contact.id, source: 'test' },
     });
 
     // 3. Create ServiceRequest linked to both
