@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Link } from 'react-router-dom';
-import { Plus, Search, Phone, Calendar } from 'lucide-react';
+import { Plus, Search, Phone, Calendar, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { ContactStatusBadge, BotStatusBadge, SERVICE_TYPE_LABELS, SOURCE_LABELS } from '@/components/StatusBadge';
 import { format } from 'date-fns';
 import ContactFormDialog from '@/components/contacts/ContactFormDialog';
@@ -27,6 +29,8 @@ export default function Contacts() {
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [viewMode, setViewMode] = useState('cards');
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [deleteTarget, setDeleteTarget] = useState(null); // array of ids to confirm
 
   const load = () => {
     base44.entities.Contact.list('-created_date', 200).then(data => {
@@ -43,6 +47,24 @@ export default function Contacts() {
     return matchTab && matchSearch;
   });
 
+  const toggleSelect = (id) => {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  const toggleAll = () => {
+    setSelectedIds(prev => prev.length === filtered.length ? [] : filtered.map(c => c.id));
+  };
+
+  const handleDeleteConfirmed = async () => {
+    if (!deleteTarget) return;
+    for (const id of deleteTarget) {
+      await base44.entities.Contact.delete(id);
+    }
+    setDeleteTarget(null);
+    setSelectedIds([]);
+    load();
+  };
+
   return (
     <div className="space-y-5">
       {/* Header */}
@@ -52,6 +74,12 @@ export default function Contacts() {
           <p className="text-muted-foreground text-sm mt-0.5">{contacts.length} אנשי קשר במערכת</p>
         </div>
         <div className="flex gap-2 items-center">
+          {selectedIds.length > 0 && (
+            <Button variant="destructive" size="sm" className="gap-1" onClick={() => setDeleteTarget(selectedIds)}>
+              <Trash2 size={14} />
+              מחק {selectedIds.length}
+            </Button>
+          )}
           <ViewToggle view={viewMode} onViewChange={setViewMode} />
           <Button onClick={() => setShowForm(true)} className="gap-2" size="sm">
             <Plus size={16} />
@@ -94,15 +122,26 @@ export default function Contacts() {
           <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
         </div>
       ) : viewMode === 'table' ? (
-        <ContactsTable contacts={filtered} />
+        <ContactsTable
+          contacts={filtered}
+          selectedIds={selectedIds}
+          onToggleSelect={toggleSelect}
+          onToggleAll={toggleAll}
+          onDelete={(ids) => setDeleteTarget(ids)}
+        />
       ) : filtered.length === 0 ? (
         <div className="text-center text-muted-foreground py-16">לא נמצאו אנשי קשר</div>
       ) : (
         <div className="space-y-2">
           {filtered.map(contact => (
-            <Link key={contact.id} to={`/contacts/${contact.id}`}>
-              <Card className="hover:shadow-md transition-all hover:border-primary/30 cursor-pointer">
-                <CardContent className="p-4 flex items-center gap-4">
+            <Card key={contact.id} className={`hover:shadow-md transition-all hover:border-primary/30 ${selectedIds.includes(contact.id) ? 'border-primary/50 bg-primary/5' : ''}`}>
+              <CardContent className="p-4 flex items-center gap-4">
+                <Checkbox
+                  checked={selectedIds.includes(contact.id)}
+                  onCheckedChange={() => toggleSelect(contact.id)}
+                  className="shrink-0"
+                />
+                <Link to={`/contacts/${contact.id}`} className="flex items-center gap-4 flex-1 min-w-0">
                   <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary text-sm flex-shrink-0">
                     {contact.full_name?.charAt(0) || '?'}
                   </div>
@@ -140,9 +179,12 @@ export default function Contacts() {
                       {contact.lead_temperature === 'hot' ? '🔥 חם' : contact.lead_temperature === 'warm' ? '☀️ פושר' : '❄️ קר'}
                     </div>
                   )}
-                </CardContent>
-              </Card>
-            </Link>
+                </Link>
+                <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive" onClick={() => setDeleteTarget([contact.id])}>
+                  <Trash2 size={14} />
+                </Button>
+              </CardContent>
+            </Card>
           ))}
         </div>
       )}
@@ -153,6 +195,19 @@ export default function Contacts() {
           onSave={() => { setShowForm(false); load(); }}
         />
       )}
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>מחיקת {deleteTarget?.length === 1 ? 'איש קשר' : `${deleteTarget?.length} אנשי קשר`}</AlertDialogTitle>
+            <AlertDialogDescription>פעולה זו בלתי הפיכה. האם להמשיך?</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>ביטול</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteConfirmed} className="bg-destructive hover:bg-destructive/90">מחק</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
