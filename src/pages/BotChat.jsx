@@ -28,9 +28,23 @@ export default function BotChat() {
         sort: '-created_date',
         q: { agent_name: AGENT_NAME },
       });
-      console.log('listConversations result:', result);
-      // Handle both array and object responses
-      const convs = Array.isArray(result) ? result : (result?.conversations || result?.items || []);
+      console.log('listConversations raw result:', JSON.stringify(result).substring(0, 500));
+      // The API may return an array directly or an object with a data property
+      let convs = [];
+      if (Array.isArray(result)) {
+        convs = result;
+      } else if (result?.data && Array.isArray(result.data)) {
+        convs = result.data;
+      } else if (result?.conversations) {
+        convs = result.conversations;
+      } else if (result?.items) {
+        convs = result.items;
+      } else if (typeof result === 'object' && result !== null) {
+        // Try to extract any array from the result
+        const arrays = Object.values(result).filter(v => Array.isArray(v));
+        if (arrays.length > 0) convs = arrays[0];
+      }
+      console.log('Parsed conversations count:', convs.length);
       setConversations(convs);
     } catch (err) {
       console.error('loadConversations error:', err);
