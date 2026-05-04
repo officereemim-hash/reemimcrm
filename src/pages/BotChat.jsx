@@ -1,124 +1,154 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
-import { Bot, Loader2, RotateCcw } from 'lucide-react';
+import { Bot, Loader2, RotateCcw, Trash2, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import ConversationsList from '@/components/bot-chat/ConversationsList';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import BotConversationsList from '@/components/bot-chat/BotConversationsList';
 import MessageBubble from '@/components/bot-chat/MessageBubble';
 import ChatInput from '@/components/bot-chat/ChatInput';
 
 const AGENT_NAME = 'dr_adri_bot';
 
 export default function BotChat() {
-  const [conversations, setConversations] = useState([]);
-  const [activeConvId, setActiveConvId] = useState(null);
-  const [activeConv, setActiveConv] = useState(null);
+  const [testRequests, setTestRequests] = useState([]);
+  const [activeRequestId, setActiveRequestId] = useState(null);
+  const [activeRequest, setActiveRequest] = useState(null);
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [loadingConvs, setLoadingConvs] = useState(true);
+  const [loadingList, setLoadingList] = useState(true);
   const [sending, setSending] = useState(false);
   const scrollRef = useRef(null);
 
-  // Load conversations
-  const loadConversations = useCallback(async () => {
-    setLoadingConvs(true);
-    try {
-      const result = await base44.agents.listConversations({
-        limit: 50,
-        sort: '-created_date',
-        q: { agent_name: AGENT_NAME },
-      });
-      console.log('listConversations raw result:', JSON.stringify(result).substring(0, 500));
-      // The API may return an array directly or an object with a data property
-      let convs = [];
-      if (Array.isArray(result)) {
-        convs = result;
-      } else if (result?.data && Array.isArray(result.data)) {
-        convs = result.data;
-      } else if (result?.conversations) {
-        convs = result.conversations;
-      } else if (result?.items) {
-        convs = result.items;
-      } else if (typeof result === 'object' && result !== null) {
-        // Try to extract any array from the result
-        const arrays = Object.values(result).filter(v => Array.isArray(v));
-        if (arrays.length > 0) convs = arrays[0];
-      }
-      console.log('Parsed conversations count:', convs.length);
-      setConversations(convs);
-    } catch (err) {
-      console.error('loadConversations error:', err);
-    }
-    setLoadingConvs(false);
+  // Load test ServiceRequests (our "conversations")
+  const loadTestRequests = useCallback(async () => {
+    setLoadingList(true);
+    const requests = await base44.entities.ServiceRequest.filter(
+      { is_test: true },
+      '-created_date',
+      50
+    );
+    setTestRequests(requests);
+    setLoadingList(false);
   }, []);
 
   useEffect(() => {
-    loadConversations();
-  }, [loadConversations]);
+    loadTestRequests();
+  }, [loadTestRequests]);
 
-  // Load messages when conversation changes
+  // Load messages when active request changes
   useEffect(() => {
-    if (!activeConvId) {
+    if (!activeRequestId) {
       setMessages([]);
-      setActiveConv(null);
+      setActiveRequest(null);
       return;
     }
     setLoading(true);
-    base44.agents.getConversation(activeConvId).then(conv => {
-      setActiveConv(conv);
-      setMessages(conv.messages || []);
-      setLoading(false);
-    });
-  }, [activeConvId]);
+    const req = testRequests.find(r => r.id === activeRequestId);
+    setActiveRequest(req);
 
-  // Subscribe to conversation updates
+    if (req?.conversation_id) {
+      base44.agents.getConversation(req.conversation_id).then(conv => {
+        setMessages(conv.messages || []);
+        setLoading(false);
+      }).catch(() => {
+        setMessages([]);
+        setLoading(false);
+      });
+    } else {
+      setMessages([]);
+      setLoading(false);
+    }
+  }, [activeRequestId, testRequests]);
+
+  // Subscribe to conversation updates for real-time messages
   useEffect(() => {
-    if (!activeConvId) return;
-    const unsub = base44.agents.subscribeToConversation(activeConvId, (updatedConv) => {
+    if (!activeRequest?.conversation_id) return;
+    const unsub = base44.agents.subscribeToConversation(activeRequest.conversation_id, (updatedConv) => {
       setMessages(updatedConv.messages || []);
-      setActiveConv(updatedConv);
     });
     return () => { if (unsub) unsub(); };
-  }, [activeConvId]);
+  }, [activeRequest?.conversation_id]);
 
   // Auto-scroll
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Create new test conversation (Contact + ServiceRequest + Agent Conversation)
   const handleNewConversation = async () => {
-    try {
-      const conv = await base44.agents.createConversation({
-        agent_name: AGENT_NAME,
-      });
-      console.log('Created conversation:', conv);
-      setConversations(prev => [conv, ...prev]);
-      setActiveConvId(conv.id);
-      setActiveConv(conv);
-      setMessages(conv.messages || []);
-    } catch (err) {
-      console.error('createConversation error:', err);
-    }
+    // 1. Create test contact
+    const contact = await base44.entities.Contact.create({
+      full_name: 'בדיקה ' + new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }),
+      phone: '0500000000',
+      status: 'new_lead',
+      source: 'manual',
+      bot_status: 'new',
+      conversation_owner: 'bot',
+    });
+
+    // 2. Create Agent conversation
+    const conv = await base44.agents.createConversation({
+      agent_name: AGENT_NAME,
+    });
+
+    // 3. Create ServiceRequest linked to both
+    const sr = await base44.entities.ServiceRequest.create({
+      contact_id: contact.id,
+      contact_name: contact.full_name,
+      contact_phone: contact.phone,
+      service_type: 'retirement',
+      status: 'new',
+      source: 'bot',
+      is_test: true,
+      conversation_id: conv.id,
+    });
+
+    // 4. Update Contact with service request link
+    await base44.entities.Contact.update(contact.id, {
+      current_service_request_id: sr.id,
+    });
+
+    // Refresh list and select
+    await loadTestRequests();
+    setActiveRequestId(sr.id);
   };
 
+  // Send message — goes through the Agent, like the real system
   const handleSend = async (text) => {
-    if (!activeConv || sending) return;
+    if (!activeRequest?.conversation_id || sending) return;
     setSending(true);
 
     // Optimistic add
     const tempMsg = { id: 'temp-' + Date.now(), role: 'user', content: text };
     setMessages(prev => [...prev, tempMsg]);
 
-    try {
-      await base44.agents.addMessage(activeConv, { role: 'user', content: text });
-    } catch (err) {
-      console.error('addMessage error:', err);
-    }
+    const conv = await base44.agents.getConversation(activeRequest.conversation_id);
+    await base44.agents.addMessage(conv, { role: 'user', content: text });
+
     setSending(false);
   };
 
-  const handleSelectConversation = (convId) => {
-    setActiveConvId(convId);
+  // Delete test request (and its contact)
+  const handleDelete = async (requestId) => {
+    const req = testRequests.find(r => r.id === requestId);
+    if (req?.contact_id) {
+      await base44.entities.Contact.delete(req.contact_id).catch(() => {});
+    }
+    await base44.entities.ServiceRequest.delete(requestId);
+    if (activeRequestId === requestId) {
+      setActiveRequestId(null);
+    }
+    await loadTestRequests();
+  };
+
+  // Hide test request (mark is_test = false to remove from list but keep data)
+  const handleHide = async (requestId) => {
+    await base44.entities.ServiceRequest.update(requestId, { is_test: false });
+    if (activeRequestId === requestId) {
+      setActiveRequestId(null);
+    }
+    await loadTestRequests();
   };
 
   return (
@@ -130,10 +160,10 @@ export default function BotChat() {
           </div>
           <div>
             <h1 className="text-2xl font-bold">בדיקת בוט</h1>
-            <p className="text-sm text-muted-foreground">שיחות עם ה-Agent — נשמרות במערכת</p>
+            <p className="text-sm text-muted-foreground">שיחות בדיקה — נשמרות כפניות שירות אמיתיות</p>
           </div>
         </div>
-        <Button variant="outline" size="sm" onClick={loadConversations} className="gap-1">
+        <Button variant="outline" size="sm" onClick={loadTestRequests} className="gap-1">
           <RotateCcw size={14} />
           רענון
         </Button>
@@ -143,12 +173,14 @@ export default function BotChat() {
         <div className="flex h-[500px]">
           {/* Conversations sidebar */}
           <div className="w-64 shrink-0 hidden md:block">
-            <ConversationsList
-              conversations={conversations}
-              activeId={activeConvId}
-              onSelect={handleSelectConversation}
+            <BotConversationsList
+              requests={testRequests}
+              activeId={activeRequestId}
+              onSelect={setActiveRequestId}
               onNew={handleNewConversation}
-              loading={loadingConvs}
+              onDelete={handleDelete}
+              onHide={handleHide}
+              loading={loadingList}
             />
           </div>
 
@@ -162,23 +194,50 @@ export default function BotChat() {
               <div className="flex-1">
                 <div className="font-semibold text-sm">בוט קרנות ראמים</div>
                 <div className="text-xs text-muted-foreground">
-                  {activeConvId ? `שיחה #${activeConvId.slice(-4)}` : 'בחר שיחה או צור חדשה'}
+                  {activeRequest
+                    ? `${activeRequest.contact_name || 'בדיקה'} • ${activeRequest.service_type || ''}`
+                    : 'בחר שיחה או צור חדשה'}
                 </div>
               </div>
               {/* Mobile new button */}
               <Button size="sm" variant="outline" onClick={handleNewConversation} className="md:hidden">
                 שיחה חדשה
               </Button>
+              {/* Actions for active request */}
+              {activeRequest && (
+                <div className="flex gap-1">
+                  <Button size="icon" variant="ghost" className="h-8 w-8" title="הסתר" onClick={() => handleHide(activeRequestId)}>
+                    <EyeOff size={14} />
+                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" title="מחק">
+                        <Trash2 size={14} />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>מחיקת בדיקה</AlertDialogTitle>
+                        <AlertDialogDescription>הפניה ואיש הקשר ייחמקו לצמיתות. בטוח?</AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>ביטול</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => handleDelete(activeRequestId)}>מחק</AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+              )}
             </div>
 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-muted/20">
-              {!activeConvId && (
+              {!activeRequestId && (
                 <div className="text-center text-muted-foreground text-sm py-16">
                   בחר שיחה מהרשימה או צור שיחה חדשה כדי להתחיל 💬
                 </div>
               )}
-              {loading && activeConvId && (
+              {loading && activeRequestId && (
                 <div className="flex justify-center py-8">
                   <Loader2 size={24} className="animate-spin text-muted-foreground" />
                 </div>
@@ -200,7 +259,7 @@ export default function BotChat() {
             </div>
 
             {/* Input */}
-            <ChatInput onSend={handleSend} disabled={!activeConvId || sending} />
+            <ChatInput onSend={handleSend} disabled={!activeRequestId || sending} />
           </div>
         </div>
       </Card>
