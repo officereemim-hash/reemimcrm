@@ -23,12 +23,15 @@ export default function BotChat() {
   const loadConversations = useCallback(async () => {
     setLoadingConvs(true);
     try {
-      const convs = await base44.agents.listConversations({
+      const result = await base44.agents.listConversations({
         limit: 50,
         sort: '-created_date',
         q: { agent_name: AGENT_NAME },
       });
-      setConversations(convs || []);
+      console.log('listConversations result:', result);
+      // Handle both array and object responses
+      const convs = Array.isArray(result) ? result : (result?.conversations || result?.items || []);
+      setConversations(convs);
     } catch (err) {
       console.error('loadConversations error:', err);
     }

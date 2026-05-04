@@ -1,8 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
-const INSTANCE_ID = Deno.env.get('GREEN_API_INSTANCE_ID');
-const API_TOKEN = Deno.env.get('GREEN_API_TOKEN');
-
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
@@ -11,87 +8,161 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Forbidden: Admin access required' }, { status: 403 });
     }
 
-    // Find pending messages (incoming that haven't been replied to)
-    const pendingLogs = await base44.asServiceRole.entities.WhatsAppMessageLog.filter(
-      { status: 'pending_reply', direction: 'incoming' }, '-created_date', 50
-    );
+    // Check if WhatsApp bot is enabled
+    const botSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' });
+    const botEnabled = botSettings.length > 0 && botSettings[0].value === 'true';
+    if (!botEnabled) {
+      console.log('processWhatsAppReplies: bot disabled, skipping');
+      return Response.json({ ok: true, processed: 0, reason: 'bot_disabled' });
+    }
 
-    let processed = 0;
-    let replied = 0;
-    let timedOut = 0;
+    const instanceId = Deno.env.get('GREEN_API_INSTANCE_ID');
+    const token = Deno.env.get('GREEN_API_TOKEN');
 
-    for (const log of pendingLogs) {
-      processed++;
+    // ===== PROCESS PENDING BOT MESSAGES =====
+    const allRequests = await base44.asServiceRole.entities.ServiceRequest.list('-updated_date', 50);
+    const pendingBotRequests = allRequests.filter(r => r.pending_bot_message && r.pending_bot_message.length > 0);
 
-      // Check if too old (> 30 minutes = timeout)
-      const createdAt = new Date(log.created_date).getTime();
-      const now = Date.now();
-      if (now - createdAt > 30 * 60 * 1000) {
-        await base44.asServiceRole.entities.WhatsAppMessageLog.update(log.id, { status: 'timeout' });
-        timedOut++;
-        continue;
-      }
+    for (const sr of pendingBotRequests) {
+      try {
+        console.log(`processWhatsAppReplies: found pending_bot_message=${sr.pending_bot_message} for ${sr.id}`);
 
-      // Check conversation for agent reply
-      if (!log.conversation_id) {
-        continue;
-      }
-
-      const conv = await base44.asServiceRole.agents.getConversation(log.conversation_id);
-      const messages = conv.messages || [];
-      if (messages.length === 0) continue;
-
-      // Find the last assistant message after the user's message
-      const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant' && m.content);
-      if (!lastAssistant) continue;
-
-      // Check if we already sent this reply (by checking outgoing logs for this conversation)
-      const existingOutgoing = await base44.asServiceRole.entities.WhatsAppMessageLog.filter(
-        { conversation_id: log.conversation_id, direction: 'outgoing', text: lastAssistant.content.substring(0, 100) },
-        '-created_date', 1
-      );
-      if (existingOutgoing.length > 0) {
-        // Already sent, mark as replied
-        await base44.asServiceRole.entities.WhatsAppMessageLog.update(log.id, { status: 'replied' });
-        replied++;
-        continue;
-      }
-
-      // Send via WhatsApp
-      const chatId = log.chat_id || `${log.phone}@c.us`;
-      const sendUrl = `https://api.green-api.com/waInstance${INSTANCE_ID}/sendMessage/${API_TOKEN}`;
-      const sendResponse = await fetch(sendUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chatId, message: lastAssistant.content }),
-      });
-
-      if (sendResponse.ok) {
-        const sendResult = await sendResponse.json();
-
-        // Log outgoing
-        await base44.asServiceRole.entities.WhatsAppMessageLog.create({
-          id_message: sendResult.idMessage || '',
-          phone: log.phone,
-          direction: 'outgoing',
-          text: lastAssistant.content.substring(0, 500),
-          status: 'replied',
-          conversation_id: log.conversation_id,
-          chat_id: chatId,
+        const botResult = await base44.asServiceRole.functions.invoke('onServiceRequestUpdate', {
+          event: { type: 'update', entity_name: 'ServiceRequest', entity_id: sr.id },
+          data: { ...sr, status: sr.pending_bot_message, conversation_id: sr.conversation_id },
+          old_data: { ...sr, status: 'previous' },
         });
 
-        // Update incoming status
-        await base44.asServiceRole.entities.WhatsAppMessageLog.update(log.id, { status: 'replied' });
-        replied++;
-      } else {
-        console.error('Failed to send WhatsApp:', await sendResponse.text());
-        await base44.asServiceRole.entities.WhatsAppMessageLog.update(log.id, { status: 'error' });
+        const pendingMsg = botResult?.pendingBotMessage;
+        if (pendingMsg?.message && pendingMsg?.contactPhone) {
+          let cleanPhone = pendingMsg.contactPhone.replace(/[\s\-\+]/g, '');
+          if (cleanPhone.startsWith('0')) cleanPhone = '972' + cleanPhone.substring(1);
+          const chatId = `${cleanPhone}@c.us`;
+
+          // Send text
+          const sendUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+          const sendResp = await fetch(sendUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chatId, message: pendingMsg.message }),
+          });
+
+          if (sendResp.ok) {
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({
+              id_message: `out_${Date.now()}_pb`,
+              phone: cleanPhone,
+              direction: 'outgoing',
+              text: (pendingMsg.message || '').substring(0, 500),
+              status: 'replied',
+              chat_id: chatId,
+            });
+            console.log(`processWhatsAppReplies: sent pending bot message to ${cleanPhone}`);
+          }
+
+          // Add to bot conversation if available
+          if (pendingMsg.conversationId && /^[a-f0-9]{24}$/i.test(pendingMsg.conversationId)) {
+            try {
+              const conv = await base44.asServiceRole.agents.getConversation(pendingMsg.conversationId);
+              await base44.asServiceRole.agents.addMessage(conv, { role: 'assistant', content: pendingMsg.message });
+            } catch (convErr) {
+              console.warn('processWhatsAppReplies: conv error:', convErr.message);
+            }
+          }
+
+          await base44.asServiceRole.entities.ServiceRequestTimeline.create({
+            service_request_id: sr.id,
+            event_type: 'message_sent',
+            description: `הודעת ${pendingMsg.botTrigger || sr.pending_bot_message} נשלחה אוטומטית (processWhatsAppReplies)`,
+          });
+        }
+
+        // Clear the flag
+        await base44.asServiceRole.entities.ServiceRequest.update(sr.id, { pending_bot_message: '' });
+      } catch (pendErr) {
+        console.warn('processWhatsAppReplies: pending bot error:', pendErr.message);
       }
     }
 
-    return Response.json({ ok: true, processed, replied, timedOut });
+    // ===== PROCESS PENDING WHATSAPP REPLIES =====
+    const pending = await base44.asServiceRole.entities.WhatsAppMessageLog.filter({ status: 'pending_reply' });
+
+    if (pending.length === 0) {
+      return Response.json({ ok: true, processed: 0 });
+    }
+
+    console.log(`Processing ${pending.length} pending WhatsApp replies`);
+
+    let processed = 0;
+    let errors = 0;
+
+    for (const msg of pending) {
+      try {
+        const createdAt = new Date(msg.created_date);
+        const ageMs = Date.now() - createdAt.getTime();
+        if (ageMs > 5 * 60 * 1000) {
+          console.log(`Message ${msg.id_message} timed out (${Math.round(ageMs / 1000)}s old)`);
+          await base44.asServiceRole.entities.WhatsAppMessageLog.update(msg.id, { status: 'timeout' });
+          continue;
+        }
+
+        if (!msg.conversation_id || !msg.chat_id) {
+          await base44.asServiceRole.entities.WhatsAppMessageLog.update(msg.id, { status: 'error' });
+          continue;
+        }
+
+        const conversation = await base44.asServiceRole.agents.getConversation(msg.conversation_id);
+        const messages = conversation.messages || [];
+        const expectedCount = msg.message_count_at_send || 0;
+
+        let botReply = '';
+        if (messages.length > expectedCount) {
+          for (let i = messages.length - 1; i >= expectedCount; i--) {
+            if (messages[i].role === 'assistant' && messages[i].content) {
+              botReply = messages[i].content;
+              break;
+            }
+          }
+        }
+
+        if (!botReply) {
+          console.log(`No reply yet for ${msg.id_message} (${Math.round(ageMs / 1000)}s old)`);
+          continue;
+        }
+
+        // Send via WhatsApp
+        const sendUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+        const sendResponse = await fetch(sendUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chatId: msg.chat_id, message: botReply }),
+        });
+
+        if (sendResponse.ok) {
+          await base44.asServiceRole.entities.WhatsAppMessageLog.update(msg.id, { status: 'replied' });
+          await base44.asServiceRole.entities.WhatsAppMessageLog.create({
+            id_message: `out_${Date.now()}_pr`,
+            phone: msg.phone || msg.chat_id?.replace('@c.us', '') || '',
+            direction: 'outgoing',
+            text: botReply.substring(0, 500),
+            status: 'replied',
+            chat_id: msg.chat_id,
+          });
+          console.log(`Reply sent to ${msg.chat_id} for message ${msg.id_message}`);
+          processed++;
+        } else {
+          console.error('Failed to send WhatsApp:', await sendResponse.text());
+          await base44.asServiceRole.entities.WhatsAppMessageLog.update(msg.id, { status: 'error' });
+          errors++;
+        }
+      } catch (err) {
+        console.error(`Error processing message ${msg.id_message}:`, err.message);
+        errors++;
+      }
+    }
+
+    return Response.json({ ok: true, processed, errors, total: pending.length });
   } catch (error) {
-    console.error('processWhatsAppReplies error:', error.message);
+    console.error('processWhatsAppReplies error:', error);
     return Response.json({ error: error.message }, { status: 500 });
   }
 });

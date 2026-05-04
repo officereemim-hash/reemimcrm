@@ -1,4 +1,5 @@
 import { base44 } from '@/api/base44Client';
+import { findAndSaveConversationId } from '@/lib/findConversationId';
 
 const AGENT_NAME = 'dr_adri_bot';
 const _sentTriggers = new Set();
@@ -6,7 +7,9 @@ const _sendingLock = new Map();
 
 async function wasTriggerRecentlySent(requestId, trigger) {
   const timeline = await base44.entities.ServiceRequestTimeline.filter(
-    { service_request_id: requestId, event_type: 'message_sent' }, '-created_date', 10
+    { service_request_id: requestId, event_type: 'message_sent' },
+    '-created_date',
+    10
   );
   const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
   return timeline.some(t => {
@@ -31,11 +34,20 @@ export async function handleBotMessage(requestId, { skipIfNoTrigger = false, tri
 
 async function _handleBotMessageInternal(requestId, skipIfNoTrigger = false) {
   await new Promise(resolve => setTimeout(resolve, 2000));
+
   const requests = await base44.entities.ServiceRequest.filter({ id: requestId });
   const req = requests[0];
-  if (!req) return null;
+  if (!req) {
+    console.log('handleBotMessage: request not found', requestId);
+    return null;
+  }
 
-  const conversationId = req.conversation_id;
+  // Find conversation_id if missing
+  let conversationId = req.conversation_id;
+  const isValid = (id) => /^[a-f0-9]{24}$/i.test(id || '') && id !== req.contact_id;
+  if (!isValid(conversationId) && req.contact_phone) {
+    conversationId = await findAndSaveConversationId(requestId, req.contact_phone);
+  }
 
   const trigger = req.pending_bot_message;
   if (trigger) {
@@ -88,12 +100,6 @@ async function isWhatsAppBotEnabled() {
   } catch { return false; }
 }
 
-async function ensureAgentConversation(conversationId) {
-  if (conversationId) return conversationId;
-  const conv = await base44.agents.createConversation({ agent_name: AGENT_NAME });
-  return conv.id;
-}
-
 async function sendMessage(resultData, requestId, trigger, conversationId) {
   const botEnabled = await isWhatsAppBotEnabled();
   if (!botEnabled) {
@@ -128,7 +134,7 @@ async function sendMessage(resultData, requestId, trigger, conversationId) {
     }
   }
 
-  // Log to WhatsAppMessageLog if we have phone
+  // Log to WhatsAppMessageLog
   if (contactPhone && effectiveConvId) {
     try {
       await base44.entities.WhatsAppMessageLog.create({
@@ -143,7 +149,7 @@ async function sendMessage(resultData, requestId, trigger, conversationId) {
     }
   }
 
-  // Always log to timeline
+  // Log to timeline
   await base44.entities.ServiceRequestTimeline.create({
     service_request_id: requestId,
     event_type: 'message_sent',
