@@ -3,7 +3,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 const INSTANCE_ID = Deno.env.get('GREEN_API_INSTANCE_ID');
 const API_TOKEN = Deno.env.get('GREEN_API_TOKEN');
 const WEBHOOK_SECRET = Deno.env.get('GREEN_API_WEBHOOK_SECRET');
-const AGENT_NAME = 'dr_adri_bot';
+const AGENT_NAME = 'bot_reemim';
 
 Deno.serve(async (req) => {
   try {
@@ -32,6 +32,14 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, skipped: 'group_chat' });
     }
 
+    // === IDEMPOTENCY CHECK — skip if message already processed ===
+    if (idMessage) {
+      const existing = await base44.asServiceRole.entities.WhatsAppMessageLog.filter({ id_message: idMessage });
+      if (existing.length > 0) {
+        return Response.json({ ok: true, skipped: true, reason: 'duplicate' });
+      }
+    }
+
     // Extract text
     let text = '';
     if (messageData?.typeMessage === 'textMessage') {
@@ -56,41 +64,23 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, skipped: 'blocked' });
     }
 
-    // Find or create Contact
+    // Find Contact (do NOT create — Agent is responsible for creation)
     let contacts = await base44.asServiceRole.entities.Contact.filter({ phone });
-    let contact;
-    if (contacts.length > 0) {
-      contact = contacts[0];
-    } else {
-      // Also try with +972 prefix
+    if (contacts.length === 0) {
       const phoneWith972 = phone.startsWith('972') ? '+' + phone : phone;
       contacts = await base44.asServiceRole.entities.Contact.filter({ phone: phoneWith972 });
-      if (contacts.length > 0) {
-        contact = contacts[0];
-      } else {
-        // Create new contact
-        const senderName = senderData?.senderName || 'לא ידוע';
-        contact = await base44.asServiceRole.entities.Contact.create({
-          full_name: senderName,
-          phone: phone,
-          status: 'new_lead',
-          source: 'facebook',
-          bot_status: 'new',
-          conversation_owner: 'bot',
-        });
-      }
+    }
+    const contact = contacts.length > 0 ? contacts[0] : null;
+
+    if (contact) {
+      await base44.asServiceRole.entities.Contact.update(contact.id, {
+        last_bot_interaction_at: new Date().toISOString(),
+        bot_status: contact.bot_status === 'new' ? 'in_conversation' : contact.bot_status,
+      });
     }
 
-    // Update contact last interaction
-    await base44.asServiceRole.entities.Contact.update(contact.id, {
-      last_bot_interaction_at: new Date().toISOString(),
-      bot_status: contact.bot_status === 'new' ? 'in_conversation' : contact.bot_status,
-    });
-
     // Find or create agent conversation
-    let conversationId = contact.current_service_request_id
-      ? null
-      : null;
+    let conversationId = null;
 
     // Try to find existing conversation via WhatsAppMessageLog
     const recentLogs = await base44.asServiceRole.entities.WhatsAppMessageLog.filter(

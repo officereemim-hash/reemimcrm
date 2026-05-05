@@ -8,7 +8,7 @@ import BotConversationsList from '@/components/bot-chat/BotConversationsList';
 import MessageBubble from '@/components/bot-chat/MessageBubble';
 import ChatInput from '@/components/bot-chat/ChatInput';
 
-const AGENT_NAME = 'dr_adri_bot';
+const AGENT_NAME = 'bot_reemim';
 
 export default function BotChat() {
   const [testRequests, setTestRequests] = useState([]);

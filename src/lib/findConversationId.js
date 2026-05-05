@@ -1,6 +1,6 @@
 import { base44 } from '@/api/base44Client';
 
-const AGENT_NAME = 'dr_adri_bot';
+const AGENT_NAME = 'bot_reemim';
 
 /**
  * Finds the conversation_id for a service request by looking at WhatsAppMessageLog
