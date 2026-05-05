@@ -111,10 +111,12 @@ export default function BotChat() {
     });
 
     // 4. Update SR with conversation_id + Contact with SR link
-    await Promise.all([
-      base44.entities.ServiceRequest.update(sr.id, { conversation_id: conv.id }),
-      base44.entities.Contact.update(contact.id, { current_service_request_id: sr.id }),
-    ]);
+    await base44.entities.ServiceRequest.update(sr.id, { conversation_id: conv.id });
+    try {
+      await base44.entities.Contact.update(contact.id, { current_service_request_id: sr.id });
+    } catch (e) {
+      console.warn('Could not update contact:', e.message);
+    }
 
     // Refresh list and select
     await loadTestRequests();
