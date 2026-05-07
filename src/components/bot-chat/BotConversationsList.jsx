@@ -1,8 +1,8 @@
-import { MessageSquare, Plus, Trash2, EyeOff } from 'lucide-react';
+import { MessageSquare, Plus, EyeOff, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-export default function BotConversationsList({ requests, activeId, onSelect, onNew, onDelete, onHide, loading }) {
+export default function BotConversationsList({ requests, activeId, onSelect, onNew, onDelete, loading }) {
   return (
     <div className="border-l h-full flex flex-col">
       <div className="p-3 border-b flex items-center justify-between">
@@ -44,16 +44,9 @@ export default function BotConversationsList({ requests, activeId, onSelect, onN
                 <button
                   className="p-1 rounded hover:bg-muted"
                   title="הסתר"
-                  onClick={e => { e.stopPropagation(); onHide(req.id); }}
-                >
-                  <EyeOff size={12} className="text-muted-foreground" />
-                </button>
-                <button
-                  className="p-1 rounded hover:bg-destructive/10"
-                  title="מחק"
                   onClick={e => { e.stopPropagation(); onDelete(req.id); }}
                 >
-                  <Trash2 size={12} className="text-destructive" />
+                  <EyeOff size={12} className="text-muted-foreground" />
                 </button>
               </div>
             </div>
