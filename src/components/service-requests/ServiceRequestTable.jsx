@@ -23,17 +23,17 @@ export default function ServiceRequestTable({ requests, contacts, onEdit, onDele
   const getContact = (id) => contacts.find(c => c.id === id);
 
   return (
-    <div className="border rounded-lg overflow-hidden">
-      <Table>
+    <div className="border rounded-lg overflow-x-auto">
+      <Table className="min-w-[900px] table-fixed" dir="rtl">
         <TableHeader>
           <TableRow>
-            <TableHead>שם לקוח</TableHead>
-            <TableHead>טלפון</TableHead>
-            <TableHead>סוג שירות</TableHead>
-            <TableHead>סטטוס</TableHead>
-            <TableHead>מקור</TableHead>
-            <TableHead>תאריך</TableHead>
-            <TableHead>פעולות</TableHead>
+            <TableHead className="w-[22%] text-right">שם לקוח</TableHead>
+            <TableHead className="w-[16%] text-right">טלפון</TableHead>
+            <TableHead className="w-[18%] text-right">סוג שירות</TableHead>
+            <TableHead className="w-[14%] text-right">סטטוס</TableHead>
+            <TableHead className="w-[10%] text-right">מקור</TableHead>
+            <TableHead className="w-[10%] text-right">תאריך</TableHead>
+            <TableHead className="w-[10%] text-right">פעולות</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -46,16 +46,16 @@ export default function ServiceRequestTable({ requests, contacts, onEdit, onDele
               const contact = getContact(req.contact_id);
               return (
                 <TableRow key={req.id} className="hover:bg-muted/30">
-                  <TableCell>
+                  <TableCell className="text-right align-middle">
                     <Link to={`/service-requests/${req.id}`} className="font-medium text-sm hover:text-primary hover:underline">
                       {contact?.full_name || req.contact_name || '—'}
                     </Link>
                   </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{contact?.phone || '—'}</TableCell>
-                  <TableCell className="text-sm">{SERVICE_TYPE_LABELS[req.service_type] || req.service_type}</TableCell>
-                  <TableCell>
+                  <TableCell className="text-right align-middle text-sm text-muted-foreground">{contact?.phone || req.contact_phone || '—'}</TableCell>
+                  <TableCell className="text-right align-middle text-sm">{SERVICE_TYPE_LABELS[req.service_type] || req.service_type || '—'}</TableCell>
+                  <TableCell className="text-right align-middle">
                     <Select value={req.status} onValueChange={v => onStatusChange(req, v)}>
-                      <SelectTrigger className="h-7 w-auto border-0 p-0">
+                      <SelectTrigger className="h-7 w-fit min-w-[72px] border-0 p-0 justify-start">
                         <SRStatusBadge status={req.status} />
                       </SelectTrigger>
                       <SelectContent>
@@ -65,12 +65,12 @@ export default function ServiceRequestTable({ requests, contacts, onEdit, onDele
                       </SelectContent>
                     </Select>
                   </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{SOURCE_LABELS[req.source] || req.source || '—'}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
+                  <TableCell className="text-right align-middle text-xs text-muted-foreground">{SOURCE_LABELS[req.source] || req.source || '—'}</TableCell>
+                  <TableCell className="text-right align-middle text-xs text-muted-foreground">
                     {req.created_date ? format(new Date(req.created_date), 'dd/MM/yy') : '—'}
                   </TableCell>
-                  <TableCell>
-                    <div className="flex gap-1">
+                  <TableCell className="text-right align-middle">
+                    <div className="flex gap-1 justify-start">
                       <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit(req)}>
                         <Pencil size={14} />
                       </Button>

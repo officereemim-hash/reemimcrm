@@ -173,27 +173,27 @@ export default function ServiceRequests() {
       </div>
 
       {/* Filters */}
-      <div className="flex gap-3 flex-wrap items-end">
-        <div className="flex-1 min-w-[200px] max-w-sm">
-          <label className="text-xs text-muted-foreground mb-1 block">חיפוש</label>
+      <div className="grid grid-cols-1 md:grid-cols-[minmax(260px,360px)_160px_160px] gap-3 items-end justify-end">
+        <div className="w-full">
+          <label className="text-xs text-muted-foreground mb-1 block text-right">חיפוש</label>
           <div className="relative">
             <Search size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <Input placeholder="חיפוש לפי שם / טלפון..." value={search} onChange={e => setSearch(e.target.value)} className="pr-9" />
+            <Input placeholder="חיפוש לפי שם / טלפון..." value={search} onChange={e => setSearch(e.target.value)} className="pr-9 text-right" />
           </div>
         </div>
-        <div>
-          <label className="text-xs text-muted-foreground mb-1 block">סטטוס</label>
+        <div className="w-full">
+          <label className="text-xs text-muted-foreground mb-1 block text-right">סטטוס</label>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
             <SelectContent>
               {STATUS_FILTER_OPTIONS.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
-        <div>
-          <label className="text-xs text-muted-foreground mb-1 block">סוג שירות</label>
+        <div className="w-full">
+          <label className="text-xs text-muted-foreground mb-1 block text-right">סוג שירות</label>
           <Select value={typeFilter} onValueChange={setTypeFilter}>
-            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
             <SelectContent>
               {TYPE_FILTER_OPTIONS.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
             </SelectContent>
