@@ -54,16 +54,18 @@ export default function ServiceRequestTable({ requests, contacts, onEdit, onDele
                   <TableCell className="text-right align-middle text-sm text-muted-foreground">{contact?.phone || req.contact_phone || '—'}</TableCell>
                   <TableCell className="text-right align-middle text-sm">{SERVICE_TYPE_LABELS[req.service_type] || req.service_type || '—'}</TableCell>
                   <TableCell className="text-right align-middle">
-                    <Select value={req.status} onValueChange={v => onStatusChange(req, v)}>
-                      <SelectTrigger className="h-7 w-fit min-w-[72px] border-0 p-0 justify-start">
-                        <SRStatusBadge status={req.status} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {SR_STATUS_OPTIONS.map(s => (
-                          <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <div className="flex justify-start">
+                      <Select value={req.status} onValueChange={v => onStatusChange(req, v)}>
+                        <SelectTrigger className="h-7 w-[86px] border-0 bg-transparent p-0 justify-start gap-1 shadow-none hover:bg-transparent [&>svg]:h-3 [&>svg]:w-3">
+                          <SRStatusBadge status={req.status} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {SR_STATUS_OPTIONS.map(s => (
+                            <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </TableCell>
                   <TableCell className="text-right align-middle text-xs text-muted-foreground">{SOURCE_LABELS[req.source] || req.source || '—'}</TableCell>
                   <TableCell className="text-right align-middle text-xs text-muted-foreground">
