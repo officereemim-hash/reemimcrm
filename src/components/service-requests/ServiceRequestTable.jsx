@@ -30,7 +30,7 @@ export default function ServiceRequestTable({ requests, contacts, onEdit, onDele
             <TableHead className="w-[22%] text-right">שם לקוח</TableHead>
             <TableHead className="w-[16%] text-right">טלפון</TableHead>
             <TableHead className="w-[18%] text-right">סוג שירות</TableHead>
-            <TableHead className="w-[14%] text-right">סטטוס</TableHead>
+            <TableHead className="w-[14%] text-center">סטטוס</TableHead>
             <TableHead className="w-[10%] text-right">מקור</TableHead>
             <TableHead className="w-[10%] text-right">תאריך</TableHead>
             <TableHead className="w-[10%] text-right">פעולות</TableHead>
@@ -53,10 +53,10 @@ export default function ServiceRequestTable({ requests, contacts, onEdit, onDele
                   </TableCell>
                   <TableCell className="text-right align-middle text-sm text-muted-foreground">{contact?.phone || req.contact_phone || '—'}</TableCell>
                   <TableCell className="text-right align-middle text-sm">{SERVICE_TYPE_LABELS[req.service_type] || req.service_type || '—'}</TableCell>
-                  <TableCell className="text-right align-middle">
-                    <div className="flex justify-start">
+                  <TableCell className="text-center align-middle">
+                    <div className="flex justify-center">
                       <Select value={req.status} onValueChange={v => onStatusChange(req, v)}>
-                        <SelectTrigger className="h-7 w-[86px] border-0 bg-transparent p-0 justify-start gap-1 shadow-none hover:bg-transparent [&>svg]:h-3 [&>svg]:w-3">
+                        <SelectTrigger className="h-7 w-[86px] border-0 bg-transparent p-0 justify-center gap-1 shadow-none hover:bg-transparent [&>svg]:h-3 [&>svg]:w-3">
                           <SRStatusBadge status={req.status} />
                         </SelectTrigger>
                         <SelectContent>
