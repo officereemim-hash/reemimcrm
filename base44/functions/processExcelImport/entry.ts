@@ -44,6 +44,7 @@ Deno.serve(async (req) => {
     }
 
     const rows = extracted.output.rows || extracted.output || [];
+    await base44.asServiceRole.entities.ExcelImport.update(import_id, { total_rows: rows.length });
     let importedCount = 0;
     let failedCount = 0;
     const duplicates = [];
