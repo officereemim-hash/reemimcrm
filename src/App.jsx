@@ -24,6 +24,7 @@ import ServiceContentPage from '@/pages/ServiceContentPage';
 
 import BotChat from '@/pages/BotChat';
 import ServiceRequestDetail from '@/pages/ServiceRequestDetail';
+import ScheduleMeeting from '@/pages/ScheduleMeeting';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -74,7 +75,11 @@ function App() {
     <AuthProvider>
       <QueryClientProvider client={queryClientInstance}>
         <Router>
-          <AuthenticatedApp />
+          <Routes>
+            {/* Public route — no auth required */}
+            <Route path="/schedule" element={<ScheduleMeeting />} />
+            <Route path="*" element={<AuthenticatedApp />} />
+          </Routes>
         </Router>
         <Toaster />
       </QueryClientProvider>

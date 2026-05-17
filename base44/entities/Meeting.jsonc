@@ -88,6 +88,14 @@
         "not_interested",
         "rescheduled"
       ]
+    },
+    "scheduling_token": {
+      "type": "string",
+      "description": "טוקן ייחודי לתיאום פגישה ע\"י הלקוח (ScheduleMeeting page)"
+    },
+    "google_event_id": {
+      "type": "string",
+      "description": "מזהה האירוע ב-Google Calendar אחרי יצירה"
     }
   },
   "required": [
