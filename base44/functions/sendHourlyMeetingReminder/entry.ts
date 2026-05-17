@@ -34,7 +34,7 @@ Deno.serve(async (req) => {
 
     const templates = await base44.asServiceRole.entities.BotContent.filter({ key: 'meeting_day_reminder' });
     const template = templates[0]?.content || '';
-    if (!template) return Response.json({ success: false, error: 'Missing BotContent meeting_day_reminder' }, { status: 400 });
+    if (!template) return Response.json({ success: true, sent: 0, failed: 0, skipped: 0, total: 0, note: 'BotContent meeting_day_reminder is empty' });
 
     const now = new Date();
     const windowStart = new Date(now.getTime() + 45 * 60 * 1000);

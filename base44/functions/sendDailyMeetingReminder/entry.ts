@@ -44,7 +44,7 @@ Deno.serve(async (req) => {
 
     const templates = await base44.asServiceRole.entities.BotContent.filter({ key: 'pre_meeting_reminder' });
     const template = templates[0]?.content || '';
-    if (!template) return Response.json({ success: false, error: 'Missing BotContent pre_meeting_reminder' }, { status: 400 });
+    if (!template) return Response.json({ success: true, sent: 0, failed: 0, skipped: 0, total: 0, note: 'BotContent pre_meeting_reminder is empty' });
 
     const tomorrow = toIsraelDateString(addDays(new Date(), 1));
     const meetings = await base44.asServiceRole.entities.Meeting.filter({ status: 'scheduled', reminder_d1_sent: false });
