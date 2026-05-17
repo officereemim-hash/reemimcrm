@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
+import QuotePDFButton from './QuotePDFButton';
 
 const allStatuses = [
   { value: 'new', label: 'חדש' },
@@ -20,7 +21,7 @@ const allStatuses = [
   { value: 'closed_lost', label: 'נסגר — אבוד' },
 ];
 
-export default function StatusActions({ request, onUpdate, isUpdating }) {
+export default function StatusActions({ request, contact, onUpdate, isUpdating }) {
   const [status, setStatus] = useState(request.status);
   const [step, setStep] = useState(request.current_step || '');
   const [notes, setNotes] = useState(request.notes || '');
@@ -81,6 +82,15 @@ export default function StatusActions({ request, onUpdate, isUpdating }) {
         <Button onClick={handleSave} disabled={isUpdating} className="w-full">
           {isUpdating ? 'שומר...' : 'שמור שינויים'}
         </Button>
+
+        {/* הפקת הצעת מחיר PDF */}
+        <div className="pt-2 border-t border-border">
+          <QuotePDFButton
+            contact={contact}
+            request={request}
+            onQuoteSent={() => onUpdate({ quote_sent: true, quote_sent_at: new Date().toISOString().split('T')[0] })}
+          />
+        </div>
       </CardContent>
     </Card>
   );

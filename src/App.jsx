@@ -25,6 +25,7 @@ import ServiceContentPage from '@/pages/ServiceContentPage';
 import BotChat from '@/pages/BotChat';
 import ServiceRequestDetail from '@/pages/ServiceRequestDetail';
 import ScheduleMeeting from '@/pages/ScheduleMeeting';
+import SignDocument from '@/pages/SignDocument';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -76,8 +77,9 @@ function App() {
       <QueryClientProvider client={queryClientInstance}>
         <Router>
           <Routes>
-            {/* Public route — no auth required */}
+            {/* Public routes — no auth required */}
             <Route path="/schedule" element={<ScheduleMeeting />} />
+            <Route path="/sign" element={<SignDocument />} />
             <Route path="*" element={<AuthenticatedApp />} />
           </Routes>
         </Router>
