@@ -39,12 +39,8 @@ async function sendWhatsApp(phone, message) {
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
-    if (user?.role !== 'admin') return Response.json({ error: 'Forbidden' }, { status: 403 });
 
-    const templates = await base44.asServiceRole.entities.BotContent.filter({ key: 'pre_meeting_reminder' });
-    const template = templates[0]?.content || '';
-    if (!template) return Response.json({ success: true, sent: 0, failed: 0, skipped: 0, total: 0, note: 'BotContent pre_meeting_reminder is empty' });
+    const template = 'מחר בשעה {time} הפגישה שלנו! 📍 {location}\nנתראה, קרנות ראמים 🌿';
 
     const tomorrow = toIsraelDateString(addDays(new Date(), 1));
     const meetings = await base44.asServiceRole.entities.Meeting.filter({ status: 'scheduled', reminder_d1_sent: false });

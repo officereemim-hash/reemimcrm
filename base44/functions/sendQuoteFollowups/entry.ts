@@ -4,9 +4,9 @@ const INSTANCE_ID = Deno.env.get('GREEN_API_INSTANCE_ID');
 const API_TOKEN = Deno.env.get('GREEN_API_TOKEN');
 
 const TEMPLATE_BY_STAGE = {
-  'T+7': 'followup_t7',
-  'T+14': 'followup_t14',
-  'T+21': 'followup_t21',
+  'T+7': 'היי {שם}! 😊 רק לוודא שקיבלת את ההצעה שלנו. יש שאלות? נשמח לעזור! קרנות ראמים',
+  'T+14': 'היי {שם}, חזרנו לבדוק 🌱 האם הגעת להחלטה? אנחנו כאן לכל שאלה. קרנות ראמים',
+  'T+21': 'היי {שם} 🙏 עדיין פתוחים לשאלות לפני שנסגור את הפנייה. קרנות ראמים',
 };
 
 function daysSince(dateString) {
@@ -46,12 +46,9 @@ async function sendWhatsApp(phone, message) {
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
-    if (user?.role !== 'admin') return Response.json({ error: 'Forbidden' }, { status: 403 });
 
     const requests = await base44.asServiceRole.entities.ServiceRequest.filter({ quote_sent: true, quote_approved: false });
-    const botContents = await base44.asServiceRole.entities.BotContent.list();
-    const templates = Object.fromEntries(botContents.map(item => [item.key, item.content || '']));
+    const templates = TEMPLATE_BY_STAGE;
 
     let sent = 0;
     let failed = 0;
@@ -91,8 +88,7 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      const templateKey = TEMPLATE_BY_STAGE[nextStage];
-      const template = templates[templateKey];
+      const template = templates[nextStage];
       if (!template || !contact?.phone) {
         skipped++;
         continue;
@@ -108,15 +104,8 @@ Deno.serve(async (req) => {
         content: message,
         sent_by: 'system',
         is_automated: true,
-        template_id: templateKey,
+        template_id: nextStage,
         status: ok ? 'sent' : 'failed',
-      });
-
-      await base44.asServiceRole.entities.ServiceRequestTimeline.create({
-        service_request_id: requestItem.id,
-        event_type: 'message_sent',
-        description: `נשלח פולו-אפ ${nextStage}`,
-        new_value: templateKey,
       });
 
       if (ok) {

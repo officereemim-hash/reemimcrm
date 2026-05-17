@@ -69,11 +69,6 @@ Deno.serve(async (req) => {
             }
           }
 
-          await base44.asServiceRole.entities.ServiceRequestTimeline.create({
-            service_request_id: sr.id,
-            event_type: 'message_sent',
-            description: `הודעת ${pendingMsg.botTrigger || sr.pending_bot_message} נשלחה אוטומטית (processWhatsAppReplies)`,
-          });
         }
 
         // Clear the flag + record last_system_message for bot context sync
