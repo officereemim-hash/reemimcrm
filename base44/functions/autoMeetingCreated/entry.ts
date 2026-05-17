@@ -38,10 +38,7 @@ Deno.serve(async (req) => {
     const token = generateToken();
     await base44.asServiceRole.entities.Meeting.update(meeting.id, { scheduling_token: token });
 
-    const appUrl = Deno.env.get('BASE44_APP_URL');
-    if (!appUrl) {
-      return Response.json({ success: true, token_created: true, whatsapp_sent: false, note: 'BASE44_APP_URL is not set' });
-    }
+    const appUrl = Deno.env.get('BASE44_APP_URL') || 'https://preview-sandbox--69f3c646e222353462c92ace.base44.app';
 
     const contacts = await base44.asServiceRole.entities.Contact.filter({ id: meeting.contact_id });
     const contact = contacts[0];
