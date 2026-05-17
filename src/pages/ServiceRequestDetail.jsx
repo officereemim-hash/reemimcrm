@@ -116,7 +116,7 @@ export default function ServiceRequestDetail() {
           </Card>
         </div>
         <div className="space-y-4 order-first lg:order-none">
-          <StatusActions request={request} onUpdate={(updates, oldStatus) => updateMutation.mutate({ updates, oldStatus })} isUpdating={updateMutation.isPending} />
+          <StatusActions request={request} contact={contact} onUpdate={(updates, oldStatus) => updateMutation.mutate({ updates, oldStatus })} isUpdating={updateMutation.isPending} />
           <TestBotMessageButton requestId={id} />
         </div>
       </div>
