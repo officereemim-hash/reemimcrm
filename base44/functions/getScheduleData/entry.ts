@@ -1,5 +1,20 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
+const MEETING_TYPE_LABELS: Record<string, string> = {
+  intro_sale: 'פגישת היכרות',
+  advisory: 'ייעוץ',
+  annual_service: 'שירות שנתי',
+  zoom: 'פגישת זום',
+  followup: 'פולו-אפ',
+};
+
+const LOCATION_LABELS: Record<string, string> = {
+  modiin: 'מודיעין',
+  petah_tikva_wednesday: 'פתח תקווה (רביעי)',
+  zoom: 'זום',
+  phone: 'טלפון',
+};
+
 // Public endpoint — no auth required
 Deno.serve(async (req) => {
   try {
@@ -12,24 +27,22 @@ Deno.serve(async (req) => {
     const meeting = meetings[0];
     if (!meeting) return Response.json({ error: 'not_found' }, { status: 404 });
 
-    if (meeting.scheduled_at && meeting.status === 'scheduled') {
-      return Response.json({ error: 'already_scheduled', scheduled_at: meeting.scheduled_at }, { status: 409 });
+    if (meeting.status === 'completed' || meeting.status === 'cancelled') {
+      return Response.json({ error: 'meeting_closed', status: meeting.status }, { status: 410 });
     }
 
     const contacts = await base44.asServiceRole.entities.Contact.filter({ id: meeting.contact_id });
     const contact = contacts[0];
 
     return Response.json({
-      meeting: {
-        id: meeting.id,
-        type: meeting.type,
-        location: meeting.location,
-        duration_minutes: meeting.duration_minutes || 60,
-        status: meeting.status,
-      },
-      contact: contact
-        ? { full_name: contact.full_name }
-        : null,
+      meeting_id: meeting.id,
+      type: meeting.type,
+      type_label: MEETING_TYPE_LABELS[meeting.type] || meeting.type,
+      duration: meeting.duration_minutes || 60,
+      location: meeting.location || '',
+      location_label: LOCATION_LABELS[meeting.location] || meeting.location || '',
+      scheduled_at: meeting.scheduled_at || null,
+      client_name: contact?.full_name || '',
     });
   } catch (error) {
     console.error('getScheduleData error:', error.message);
