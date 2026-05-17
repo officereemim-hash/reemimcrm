@@ -29,6 +29,27 @@
     },
     "uploaded_by": {
       "type": "string"
+    },
+    "signature_token": {
+      "type": "string"
+    },
+    "signature_data": {
+      "type": "string"
+    },
+    "signed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "signer_name": {
+      "type": "string"
+    },
+    "signature_status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "signed"
+      ],
+      "default": "pending"
     }
   },
   "required": [

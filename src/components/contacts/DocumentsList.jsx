@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { base44 } from '@/api/base44Client';
-import { Plus, FileText, Trash2, ExternalLink } from 'lucide-react';
+import { Plus, FileText, Trash2, ExternalLink, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { format } from 'date-fns';
+import { toast } from 'sonner';
 
 const CATEGORY_LABELS = {
   shoranss: 'שורנס / מסלקה',
@@ -18,11 +19,12 @@ const CATEGORY_LABELS = {
   pension_fund: 'קרן פנסיה',
 };
 
-export default function DocumentsList({ contactId, documents, onRefresh }) {
+export default function DocumentsList({ contactId, documents, onRefresh, contact }) {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name: '', category: 'identity' });
   const [file, setFile] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [sendingSig, setSendingSig] = useState(null);
 
   const handleUpload = async () => {
     if (!file) return;
@@ -38,6 +40,38 @@ export default function DocumentsList({ contactId, documents, onRefresh }) {
     setForm({ name: '', category: 'identity' });
     onRefresh();
     setSaving(false);
+  };
+
+  const sendDocumentForSignature = async (documentId, documentName) => {
+    if (!contact?.phone) {
+      toast.error('אין מספר טלפון לקוח');
+      return;
+    }
+    setSendingSig(documentId);
+    try {
+      const token = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+        .map(b => b.toString(16).padStart(2, '0')).join('');
+
+      await base44.entities.Document.update(documentId, {
+        signature_token: token,
+        signature_status: 'pending',
+      });
+
+      const appUrl = import.meta.env.VITE_BASE44_APP_BASE_URL || '';
+      const signUrl = `${appUrl}/sign?token=${token}`;
+
+      await base44.functions.invoke('sendWhatsAppMessage', {
+        phone: contact.phone,
+        message: `שלום ${contact.full_name} 🌿\nלחתימה על המסמך "${documentName}":\n${signUrl}`,
+      });
+
+      toast.success('לינק לחתימה נשלח ב-WhatsApp');
+      onRefresh();
+    } catch (error) {
+      toast.error('שגיאה בשליחת המסמך: ' + error.message);
+    } finally {
+      setSendingSig(null);
+    }
   };
 
   const grouped = documents.reduce((acc, doc) => {
@@ -71,6 +105,18 @@ export default function DocumentsList({ contactId, documents, onRefresh }) {
                   <span className="text-xs text-muted-foreground">
                     {doc.created_date ? format(new Date(doc.created_date), 'dd/MM/yy') : ''}
                   </span>
+                  {doc.category === 'agreements' && doc.signature_status === 'pending' && (
+                    <Button 
+                      size="sm" 
+                      variant="ghost"
+                      onClick={() => sendDocumentForSignature(doc.id, doc.name)}
+                      disabled={sendingSig === doc.id}
+                      className="gap-1 h-6"
+                    >
+                      <Send size={13} />
+                      {sendingSig === doc.id ? 'שולח...' : 'לחתימה'}
+                    </Button>
+                  )}
                   {doc.file_url && (
                     <a href={doc.file_url} target="_blank" rel="noreferrer" className="text-primary hover:text-primary/70">
                       <ExternalLink size={14} />

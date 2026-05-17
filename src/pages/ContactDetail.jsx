@@ -144,7 +144,7 @@ export default function ContactDetail() {
         </TabsContent>
 
         <TabsContent value="documents" className="mt-4">
-          <DocumentsList contactId={id} documents={documents} onRefresh={load} />
+          <DocumentsList contactId={id} documents={documents} onRefresh={load} contact={contact} />
         </TabsContent>
 
         <TabsContent value="meetings" className="mt-4">
