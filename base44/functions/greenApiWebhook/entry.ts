@@ -80,24 +80,35 @@ Deno.serve(async (req) => {
     }
 
     // Find or create agent conversation
+    // Only reuse conversation if contact is actively in conversation AND last message is recent (< 24h)
     let conversationId = null;
 
-    // Try to find existing conversation via WhatsAppMessageLog
-    const recentLogs = await base44.asServiceRole.entities.WhatsAppMessageLog.filter(
-      { phone, direction: 'incoming' }, '-created_date', 1
-    );
-    if (recentLogs.length > 0 && recentLogs[0].conversation_id) {
-      conversationId = recentLogs[0].conversation_id;
+    const shouldReuseConversation =
+      contact &&
+      contact.bot_status === 'in_conversation' &&
+      contact.last_bot_interaction_at &&
+      (Date.now() - new Date(contact.last_bot_interaction_at).getTime()) < 24 * 60 * 60 * 1000;
+
+    if (shouldReuseConversation) {
+      const recentLogs = await base44.asServiceRole.entities.WhatsAppMessageLog.filter(
+        { phone, direction: 'incoming' }, '-created_date', 1
+      );
+      if (recentLogs.length > 0 && recentLogs[0].conversation_id) {
+        conversationId = recentLogs[0].conversation_id;
+      }
     }
 
-    // If no conversation found, create one
     if (!conversationId) {
       const conv = await base44.asServiceRole.agents.createConversation({ agent_name: AGENT_NAME });
       conversationId = conv.id;
     }
 
-    // Log incoming message
-    await base44.asServiceRole.entities.WhatsAppMessageLog.create({
+    // Get message count BEFORE adding user message (for processWhatsAppReplies to detect reply)
+    const convObj = await base44.asServiceRole.agents.getConversation(conversationId);
+    const msgCountBefore = (convObj.messages || []).length;
+
+    // Log incoming message with message_count_at_send
+    const incomingLog = await base44.asServiceRole.entities.WhatsAppMessageLog.create({
       id_message: idMessage,
       phone,
       direction: 'incoming',
@@ -105,11 +116,8 @@ Deno.serve(async (req) => {
       status: 'pending_reply',
       conversation_id: conversationId,
       chat_id: chatId,
+      message_count_at_send: msgCountBefore,
     });
-
-    // Get conversation object for addMessage
-    const convObj = await base44.asServiceRole.agents.getConversation(conversationId);
-    const msgCountBefore = (convObj.messages || []).length;
 
     // Send message to agent
     await base44.asServiceRole.agents.addMessage(convObj, {
@@ -137,6 +145,13 @@ Deno.serve(async (req) => {
     }
 
     if (agentReply) {
+      // Mark incoming log as 'replied' BEFORE sending — prevents race condition with processWhatsAppReplies
+      if (incomingLog?.id) {
+        await base44.asServiceRole.entities.WhatsAppMessageLog.update(incomingLog.id, {
+          status: 'replied',
+        });
+      }
+
       // Send reply via WhatsApp
       const sendUrl = `https://api.green-api.com/waInstance${INSTANCE_ID}/sendMessage/${API_TOKEN}`;
       const sendResponse = await fetch(sendUrl, {
@@ -148,7 +163,7 @@ Deno.serve(async (req) => {
 
       // Log outgoing message
       await base44.asServiceRole.entities.WhatsAppMessageLog.create({
-        id_message: sendResult.idMessage || '',
+        id_message: sendResult.idMessage || `out_${Date.now()}`,
         phone,
         direction: 'outgoing',
         text: agentReply.substring(0, 500),
@@ -156,16 +171,6 @@ Deno.serve(async (req) => {
         conversation_id: conversationId,
         chat_id: chatId,
       });
-
-      // Update incoming log status
-      const incomingLogs = await base44.asServiceRole.entities.WhatsAppMessageLog.filter(
-        { id_message: idMessage }
-      );
-      if (incomingLogs.length > 0) {
-        await base44.asServiceRole.entities.WhatsAppMessageLog.update(incomingLogs[0].id, {
-          status: 'replied',
-        });
-      }
     }
 
     return Response.json({ ok: true, conversationId, replied: !!agentReply });

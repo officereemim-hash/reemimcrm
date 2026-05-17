@@ -76,10 +76,17 @@ Deno.serve(async (req) => {
           });
         }
 
-        // Clear the flag
-        await base44.asServiceRole.entities.ServiceRequest.update(sr.id, { pending_bot_message: '' });
+        // Clear the flag + record last_system_message for bot context sync
+        await base44.asServiceRole.entities.ServiceRequest.update(sr.id, {
+          pending_bot_message: '',
+          last_system_message: sr.pending_bot_message,
+        });
       } catch (pendErr) {
         console.warn('processWhatsAppReplies: pending bot error:', pendErr.message);
+        // Always clear the flag even on error — prevents infinite retry loop
+        try {
+          await base44.asServiceRole.entities.ServiceRequest.update(sr.id, { pending_bot_message: '' });
+        } catch (_) { /* ignore cleanup error */ }
       }
     }
 
