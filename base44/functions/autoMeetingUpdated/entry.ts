@@ -66,6 +66,9 @@ Deno.serve(async (req) => {
     const meeting = payload.data;
 
     if (!meeting?.id || !meeting.scheduled_at) return Response.json({ success: true, skipped: true });
+    if (meeting.calcom_event_id) {
+      return Response.json({ success: true, skipped: true, reason: 'calcom_meeting_uses_outlook' });
+    }
 
     const contacts = await base44.asServiceRole.entities.Contact.filter({ id: meeting.contact_id });
     const contact = contacts[0];

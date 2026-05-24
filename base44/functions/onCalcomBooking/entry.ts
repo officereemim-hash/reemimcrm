@@ -1,0 +1,261 @@
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+
+const INSTANCE_ID = Deno.env.get('GREEN_API_INSTANCE_ID');
+const API_TOKEN = Deno.env.get('GREEN_API_TOKEN');
+const WEBHOOK_SECRET = Deno.env.get('CALCOM_WEBHOOK_SECRET');
+
+function normalizePhone(phone) {
+  let cleanPhone = String(phone || '').replace(/[\s\-\+\(\)]/g, '');
+  if (cleanPhone.startsWith('0')) cleanPhone = '972' + cleanPhone.substring(1);
+  return cleanPhone;
+}
+
+function getPayload(reqBody) {
+  return reqBody.payload || reqBody.data || reqBody;
+}
+
+function getEventType(reqBody) {
+  return reqBody.triggerEvent || reqBody.event_type || reqBody.type || reqBody.eventType || '';
+}
+
+function getSlug(payload) {
+  const raw = payload.eventType?.slug || payload.eventTypeSlug || payload.event_type_slug || payload.slug || payload.eventType?.url || payload.url || '';
+  return decodeURIComponent(String(raw));
+}
+
+function getAttendee(payload) {
+  const attendees = payload.attendees || payload.booking?.attendees || [];
+  const attendee = attendees[0] || payload.attendee || payload.responses || {};
+  return {
+    name: attendee.name || attendee.full_name || payload.name || payload.title || '',
+    email: attendee.email || payload.email || '',
+    phone: attendee.phone || attendee.phoneNumber || attendee.phone_number || payload.phone || payload.phoneNumber || '',
+  };
+}
+
+function detectMeeting(slug) {
+  const result = { location: 'zoom', serviceType: '', meetingType: 'advisory' };
+
+  if (slug.includes('מודיעין')) result.location = 'modiin';
+  if (slug.includes('פתח-תקווה') || slug.includes('פתח תקווה')) result.location = 'petah_tikva_wednesday';
+  if (slug.includes('פגישת-עבודה') || slug.includes('פגישת עבודה')) result.location = 'zoom';
+  if (slug.includes('שיחת-טלפון') || slug.includes('שיחת טלפון')) {
+    result.location = 'phone';
+    result.meetingType = 'followup';
+  }
+  if (slug.includes('איזון')) {
+    result.location = 'zoom';
+    result.serviceType = 'divorce_split';
+  }
+  if (slug.includes('שירות-שנתי') || slug.includes('שירות שנתיות') || slug.includes('שנתיות')) {
+    result.serviceType = 'annual_service_call';
+    result.meetingType = 'annual_service';
+  }
+
+  return result;
+}
+
+function formatDateTime(dateString) {
+  return new Intl.DateTimeFormat('he-IL', {
+    timeZone: 'Asia/Jerusalem',
+    dateStyle: 'full',
+    timeStyle: 'short',
+  }).format(new Date(dateString));
+}
+
+function chooseTemplateKey(location, serviceType) {
+  if (serviceType === 'divorce_split') return 'meeting_scheduled_divorce_split';
+  if (serviceType === 'annual_service_call') return 'meeting_scheduled_annual_service';
+  if (location === 'modiin') return 'meeting_scheduled_modiin';
+  if (location === 'petah_tikva_wednesday') return 'meeting_scheduled_petah_tikva';
+  if (location === 'phone') return 'meeting_scheduled_phone';
+  return 'meeting_scheduled_zoom';
+}
+
+async function getServiceUrl(base44, subType) {
+  const records = await base44.asServiceRole.entities.ServiceContent.filter({ sub_type: subType, is_active: true });
+  return records[0]?.url || '';
+}
+
+async function getTemplate(base44, key) {
+  const records = await base44.asServiceRole.entities.BotContent.filter({ key, is_active: true });
+  return records[0]?.content || '';
+}
+
+function fillTemplate(template, values) {
+  return String(template || '')
+    .replaceAll('{name}', values.name || '')
+    .replaceAll('{שם}', values.name || '')
+    .replaceAll('{time}', values.time || '')
+    .replaceAll('{location}', values.location || '')
+    .replaceAll('{address}', values.address || '')
+    .replaceAll('{waze_link}', values.waze_link || '')
+    .replaceAll('{zoom_link}', values.zoom_link || '')
+    .replaceAll('{calendar_link}', values.calendar_link || '')
+    .replaceAll('{meeting_link}', values.meeting_link || '');
+}
+
+async function sendWhatsApp(phone, message) {
+  if (!phone || !message) return false;
+  const chatId = `${normalizePhone(phone)}@c.us`;
+  const response = await fetch(`https://api.green-api.com/waInstance${INSTANCE_ID}/sendMessage/${API_TOKEN}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chatId, message }),
+  });
+  return response.ok;
+}
+
+async function findContact(base44, attendee) {
+  if (attendee.email) {
+    const byEmail = await base44.asServiceRole.entities.Contact.filter({ email: attendee.email });
+    if (byEmail[0]) return byEmail[0];
+  }
+
+  if (attendee.phone) {
+    const clean = normalizePhone(attendee.phone);
+    const byPhone = await base44.asServiceRole.entities.Contact.filter({ phone: clean });
+    if (byPhone[0]) return byPhone[0];
+    const byPlusPhone = await base44.asServiceRole.entities.Contact.filter({ phone: `+${clean}` });
+    if (byPlusPhone[0]) return byPlusPhone[0];
+  }
+
+  return null;
+}
+
+async function findServiceRequest(base44, contactId, serviceType) {
+  const requests = await base44.asServiceRole.entities.ServiceRequest.filter({ contact_id: contactId }, '-updated_date', 20);
+  const open = requests.find(request => !['completed', 'cancelled', 'closed_lost', 'followup_closed'].includes(request.status));
+  if (open) return open;
+  if (requests[0]) return requests[0];
+
+  return await base44.asServiceRole.entities.ServiceRequest.create({
+    contact_id: contactId,
+    service_type: serviceType || 'retirement',
+    source: 'bot',
+    status: 'new',
+  });
+}
+
+Deno.serve(async (req) => {
+  try {
+    const base44 = createClientFromRequest(req);
+    const providedSecret = req.headers.get('x-cal-secret') || req.headers.get('x-webhook-secret') || req.headers.get('authorization')?.replace('Bearer ', '');
+
+    if (WEBHOOK_SECRET && providedSecret !== WEBHOOK_SECRET) {
+      return Response.json({ error: 'Invalid webhook secret' }, { status: 403 });
+    }
+
+    const body = await req.json();
+    const eventType = getEventType(body);
+    if (eventType && eventType !== 'BOOKING_CREATED') {
+      return Response.json({ ok: true, skipped: true, eventType });
+    }
+
+    const payload = getPayload(body);
+    const slug = getSlug(payload);
+    const attendee = getAttendee(payload);
+    const detected = detectMeeting(slug);
+    const contact = await findContact(base44, attendee);
+
+    if (!contact) {
+      await base44.asServiceRole.entities.Communication.create({
+        contact_id: 'unknown',
+        type: 'system_error',
+        direction: 'inbound',
+        content: `Cal.com booking — איש קשר לא נמצא: ${attendee.email || attendee.phone || attendee.name || 'ללא פרטים'}`,
+        sent_by: 'system',
+        is_automated: true,
+        status: 'failed',
+      });
+      return Response.json({ error: 'Contact not found' }, { status: 404 });
+    }
+
+    const serviceRequest = await findServiceRequest(base44, contact.id, detected.serviceType || contact.service_type);
+    const finalServiceType = detected.serviceType || serviceRequest.service_type || contact.service_type;
+    const startTime = payload.startTime || payload.start_time || payload.start || payload.booking?.startTime;
+    const endTime = payload.endTime || payload.end_time || payload.end || payload.booking?.endTime;
+    const duration = startTime && endTime ? Math.max(15, Math.round((new Date(endTime).getTime() - new Date(startTime).getTime()) / 60000)) : 60;
+    const calcomId = payload.uid || payload.id || payload.bookingId || payload.booking?.id;
+    const meetingUrl = payload.conferenceUrl || payload.meetingUrl || payload.videoCallUrl || payload.location?.link || '';
+
+    if (!startTime) return Response.json({ error: 'Missing startTime' }, { status: 400 });
+
+    const existingMeetings = calcomId ? await base44.asServiceRole.entities.Meeting.filter({ calcom_event_id: String(calcomId) }) : [];
+    const meetingData = {
+      contact_id: contact.id,
+      service_request_id: serviceRequest.id,
+      type: detected.meetingType,
+      meeting_source: 'bot',
+      location: detected.location,
+      scheduled_at: new Date(startTime).toISOString(),
+      duration_minutes: duration,
+      calcom_event_id: calcomId ? String(calcomId) : '',
+      calendar_link: meetingUrl || await getServiceUrl(base44, detected.location === 'phone' ? 'phone_calendar' : detected.location === 'modiin' ? 'modiin_calendar' : detected.location === 'petah_tikva_wednesday' ? 'petah_tikva_calendar' : 'zoom_personal_room'),
+      status: 'scheduled',
+    };
+
+    const meeting = existingMeetings[0]
+      ? await base44.asServiceRole.entities.Meeting.update(existingMeetings[0].id, meetingData)
+      : await base44.asServiceRole.entities.Meeting.create(meetingData);
+
+    await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, {
+      status: 'meeting_scheduled',
+      meeting_id: meeting.id,
+      scheduled_date_clinic: ['modiin', 'petah_tikva_wednesday'].includes(detected.location) ? new Date(startTime).toISOString() : serviceRequest.scheduled_date_clinic,
+      scheduled_date_whatsapp: detected.location === 'zoom' ? new Date(startTime).toISOString() : serviceRequest.scheduled_date_whatsapp,
+      last_appointment_time_str: formatDateTime(startTime),
+      last_appointment_type: detected.location,
+    });
+
+    await base44.asServiceRole.entities.Contact.update(contact.id, {
+      bot_status: 'closed',
+      last_bot_interaction_at: new Date().toISOString(),
+      current_service_request_id: serviceRequest.id,
+    });
+
+    await base44.asServiceRole.entities.ServiceRequestTimeline.create({
+      service_request_id: serviceRequest.id,
+      event_type: 'status_change',
+      description: `פגישה נקבעה דרך Cal.com ל-${formatDateTime(startTime)}`,
+      old_value: serviceRequest.status || '',
+      new_value: 'meeting_scheduled',
+      metadata: JSON.stringify({ calcom_event_id: calcomId, slug, location: detected.location }),
+    });
+
+    const templateKey = chooseTemplateKey(detected.location, finalServiceType);
+    const template = await getTemplate(base44, templateKey);
+    const zoomLink = meetingUrl || await getServiceUrl(base44, 'zoom_personal_room');
+    const wazeLink = detected.location === 'modiin' ? await getServiceUrl(base44, 'waze_modiin') : detected.location === 'petah_tikva_wednesday' ? await getServiceUrl(base44, 'waze_petah_tikva') : '';
+    const address = detected.location === 'modiin' ? 'המעיין 44, קומה 1, מתחם M.dot, מודיעין' : detected.location === 'petah_tikva_wednesday' ? 'השחם 1, פתח תקווה, בניין C, קומה 6' : '';
+
+    const message = fillTemplate(template, {
+      name: contact.full_name || attendee.name,
+      time: formatDateTime(startTime),
+      location: detected.location,
+      address,
+      waze_link: wazeLink,
+      zoom_link: zoomLink,
+      calendar_link: meetingData.calendar_link,
+      meeting_link: meetingData.calendar_link || zoomLink,
+    });
+
+    const whatsappSent = await sendWhatsApp(contact.phone || attendee.phone, message);
+
+    await base44.asServiceRole.entities.Communication.create({
+      contact_id: contact.id,
+      type: 'whatsapp',
+      direction: 'outbound',
+      content: message,
+      sent_by: 'system',
+      is_automated: true,
+      template_id: templateKey,
+      status: whatsappSent ? 'sent' : 'failed',
+    });
+
+    return Response.json({ success: true, meeting_id: meeting.id, service_request_id: serviceRequest.id, whatsapp_sent: whatsappSent });
+  } catch (error) {
+    console.error('onCalcomBooking error:', error.message);
+    return Response.json({ error: error.message }, { status: 500 });
+  }
+});
