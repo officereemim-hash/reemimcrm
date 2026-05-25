@@ -29,6 +29,7 @@ Deno.serve(async (req) => {
       document_name: doc.name || 'מסמך לחתימה',
       agreement_text: doc.agreement_text || '',
       signature_status: doc.signature_status || 'pending',
+      file_url: doc.file_url || '',
     });
   } catch (error) {
     console.error('getAgreementData error:', error.message);
