@@ -13,6 +13,7 @@ export default function SignDocument() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [signedFileUrl, setSignedFileUrl] = useState(null);
   const lastPos = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
@@ -95,6 +96,7 @@ export default function SignDocument() {
         signer_name: signerName.trim(),
       });
       if (res?.data?.ok) {
+        setSignedFileUrl(res?.data?.file_url || null);
         setSubmitted(true);
       } else {
         setError(res?.data?.error === 'already_signed'
@@ -132,6 +134,24 @@ export default function SignDocument() {
         <h2 style={{ color: '#2A6A2A', margin: '16px 0 8px' }}>החתימה התקבלה!</h2>
         <p style={{ color: '#555', margin: 0 }}>תודה {signerName}. המסמך נחתם בהצלחה ונשמר במערכת שלנו.</p>
         <p style={{ color: '#888', fontSize: '13px', marginTop: '16px' }}>קרנות ראמים יצרו איתך קשר בקרוב.</p>
+        {signedFileUrl && (
+          <button
+            onClick={() => window.open(signedFileUrl, '_blank')}
+            style={{
+              marginTop: '20px',
+              background: '#4A2C78',
+              color: 'white',
+              border: 'none',
+              padding: '12px 24px',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: '600',
+            }}
+          >
+            📥 צפה במסמך החתום
+          </button>
+        )}
       </div>
     </div>
   );

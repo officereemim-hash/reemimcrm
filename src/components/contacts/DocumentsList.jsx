@@ -146,6 +146,15 @@ export default function DocumentsList({ contactId, documents, onRefresh, contact
                       {sendingSig === doc.id ? 'שולח...' : 'לחתימה'}
                     </Button>
                   )}
+                  {doc.signature_status === 'signed' && (
+                    <div className="flex items-center gap-2 text-xs text-success">
+                      <span>✍️ נחתם</span>
+                      <span className="text-muted-foreground">
+                        {doc.signer_name && `${doc.signer_name} • `}
+                        {doc.signed_at ? format(new Date(doc.signed_at), 'dd/MM/yy') : ''}
+                      </span>
+                    </div>
+                  )}
                   {doc.file_url && (
                     <a href={doc.file_url} target="_blank" rel="noreferrer" className="text-primary hover:text-primary/70">
                       <ExternalLink size={14} />
