@@ -57,7 +57,7 @@ export default function DocumentsList({ contactId, documents, onRefresh, contact
         signature_status: 'pending',
       });
 
-      const appUrl = import.meta.env.VITE_BASE44_APP_BASE_URL || '';
+      const appUrl = import.meta.env.VITE_BASE44_APP_BASE_URL || window.location.origin;
       const signUrl = `${appUrl}/sign?token=${token}`;
       const message = `שלום ${contact.full_name} 🌿\nלחתימה על המסמך "${documentName}":\n${signUrl}`;
       const sentChannels = [];
