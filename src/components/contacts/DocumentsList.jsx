@@ -105,7 +105,7 @@ export default function DocumentsList({ contactId, documents, onRefresh, contact
                   <span className="text-xs text-muted-foreground">
                     {doc.created_date ? format(new Date(doc.created_date), 'dd/MM/yy') : ''}
                   </span>
-                  {doc.category === 'agreements' && doc.signature_status === 'pending' && (
+                  {doc.signature_status === 'pending' && (
                     <Button 
                       size="sm" 
                       variant="ghost"
