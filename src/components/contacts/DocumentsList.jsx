@@ -60,22 +60,28 @@ export default function DocumentsList({ contactId, documents, onRefresh, contact
       const appUrl = import.meta.env.VITE_BASE44_APP_BASE_URL || '';
       const signUrl = `${appUrl}/sign?token=${token}`;
       const message = `שלום ${contact.full_name} 🌿\nלחתימה על המסמך "${documentName}":\n${signUrl}`;
+      const sentChannels = [];
 
       if (contact.phone) {
-        await base44.functions.invoke('sendWhatsAppMessage', {
-          phone: contact.phone,
-          message,
-        });
+        try {
+          await base44.functions.invoke('sendWhatsAppMessage', {
+            phone: contact.phone,
+            message,
+          });
 
-        await base44.entities.Communication.create({
-          contact_id: contactId,
-          type: 'whatsapp',
-          direction: 'outbound',
-          content: message,
-          sent_by: 'system',
-          is_automated: false,
-          status: 'sent',
-        });
+          await base44.entities.Communication.create({
+            contact_id: contactId,
+            type: 'whatsapp',
+            direction: 'outbound',
+            content: message,
+            sent_by: 'system',
+            is_automated: false,
+            status: 'sent',
+          });
+          sentChannels.push('WhatsApp');
+        } catch (error) {
+          console.warn('WhatsApp signature send failed:', error.message);
+        }
       }
 
       if (contact.email) {
@@ -85,9 +91,10 @@ export default function DocumentsList({ contactId, documents, onRefresh, contact
           html_body: `שלום ${contact.full_name || ''},<br /><br />לחתימה על המסמך "${documentName}":<br /><a href="${signUrl}">${signUrl}</a>`,
           template_id: 'document_signature',
         });
+        sentChannels.push('מייל');
       }
 
-      toast.success(contact.phone && contact.email ? 'לינק לחתימה נשלח ב-WhatsApp ובמייל' : 'לינק לחתימה נשלח');
+      toast.success(sentChannels.length ? `לינק לחתימה נשלח ב-${sentChannels.join(' ו-')}` : 'לא נשלח לינק לחתימה');
       onRefresh();
     } catch (error) {
       toast.error('שגיאה בשליחת המסמך: ' + error.message);
