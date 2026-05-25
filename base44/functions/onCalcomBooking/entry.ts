@@ -124,17 +124,62 @@ async function findContact(base44, attendee) {
 }
 
 async function findServiceRequest(base44, contactId, serviceType) {
-  const requests = await base44.asServiceRole.entities.ServiceRequest.filter({ contact_id: contactId }, '-updated_date', 20);
-  const open = requests.find(request => !['completed', 'cancelled', 'closed_lost', 'followup_closed'].includes(request.status));
-  if (open) return open;
-  if (requests[0]) return requests[0];
+   const requests = await base44.asServiceRole.entities.ServiceRequest.filter({ contact_id: contactId }, '-updated_date', 20);
+   const open = requests.find(request => !['completed', 'cancelled', 'closed_lost', 'followup_closed'].includes(request.status));
+   if (open) return open;
+   if (requests[0]) return requests[0];
 
-  return await base44.asServiceRole.entities.ServiceRequest.create({
-    contact_id: contactId,
-    service_type: serviceType || 'retirement',
-    source: 'bot',
-    status: 'new',
-  });
+   return await base44.asServiceRole.entities.ServiceRequest.create({
+     contact_id: contactId,
+     service_type: serviceType || 'retirement',
+     source: 'bot',
+     status: 'new',
+   });
+}
+
+async function createGoogleCalendarEvent(base44, meeting, contact, detected) {
+   try {
+     const { accessToken } = await base44.asServiceRole.connectors.getConnection('googlecalendar');
+     const startTime = new Date(meeting.scheduled_at);
+     const endTime = new Date(startTime.getTime() + meeting.duration_minutes * 60000);
+
+     const locationMap = {
+       modiin: 'המעיין 44, קומה 1, מתחם M.dot, מודיעין',
+       petah_tikva_wednesday: 'השחם 1, פתח תקווה, בניין C, קומה 6',
+       zoom: 'ישיבה דרך Zoom',
+       phone: 'שיחת טלפון',
+     };
+
+     const description = `זימון פגישה דרך Cal.com\n${contact.full_name || ''}\n${contact.phone || ''}\n${contact.email || ''}`;
+
+     const eventBody = {
+       summary: `פגישה - ${contact.full_name || 'לקוח'} (${detected.meetingType})`,
+       description,
+       start: { dateTime: startTime.toISOString() },
+       end: { dateTime: endTime.toISOString() },
+       location: locationMap[detected.location] || '',
+       attendees: contact.email ? [{ email: contact.email }] : [],
+     };
+
+     const response = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+       method: 'POST',
+       headers: {
+         'Authorization': `Bearer ${accessToken}`,
+         'Content-Type': 'application/json',
+       },
+       body: JSON.stringify(eventBody),
+     });
+
+     if (response.ok) {
+       const eventData = await response.json();
+       return eventData.id;
+     }
+     console.warn('Google Calendar event creation failed:', await response.text());
+     return null;
+   } catch (error) {
+     console.warn('Google Calendar integration error:', error.message);
+     return null;
+   }
 }
 
 Deno.serve(async (req) => {
@@ -195,9 +240,16 @@ Deno.serve(async (req) => {
       status: 'scheduled',
     };
 
-    const meeting = existingMeetings[0]
+    let meeting = existingMeetings[0]
       ? await base44.asServiceRole.entities.Meeting.update(existingMeetings[0].id, meetingData)
       : await base44.asServiceRole.entities.Meeting.create(meetingData);
+
+    if (!meeting.google_event_id) {
+      const googleEventId = await createGoogleCalendarEvent(base44, meeting, contact, detected);
+      if (googleEventId) {
+        meeting = await base44.asServiceRole.entities.Meeting.update(meeting.id, { google_event_id: googleEventId });
+      }
+    }
 
     await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, {
       status: 'meeting_scheduled',
