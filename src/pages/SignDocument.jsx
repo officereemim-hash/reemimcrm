@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
+import { PDFDocument, rgb, StandardFonts } from 'https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js';
 
 export default function SignDocument() {
   const token = new URLSearchParams(window.location.search).get('token');
@@ -90,10 +91,63 @@ export default function SignDocument() {
     setSubmitting(true);
     try {
       const signatureData = canvasRef.current.toDataURL('image/png');
+      const pdfBytes = await fetch(docData.file_url).then(res => res.arrayBuffer());
+      const pdfDoc = await PDFDocument.load(pdfBytes);
+      const pages = pdfDoc.getPages();
+      const lastPage = pages[pages.length - 1];
+      const { width } = lastPage.getSize();
+      const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+
+      const base64Data = signatureData.split(',')[1];
+      const binary = atob(base64Data);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const sigImage = await pdfDoc.embedPng(bytes);
+
+      const sigW = 160;
+      const sigH = 60;
+      const sigX = width - sigW - 40;
+      const sigY = 60;
+
+      lastPage.drawRectangle({
+        x: sigX - 5, y: sigY - 18,
+        width: sigW + 10, height: sigH + 28,
+        color: rgb(0.97, 0.97, 0.97),
+        borderColor: rgb(0.75, 0.75, 0.75),
+        borderWidth: 0.5,
+      });
+
+      lastPage.drawImage(sigImage, { x: sigX, y: sigY, width: sigW, height: sigH });
+
+      lastPage.drawLine({
+        start: { x: sigX - 2, y: sigY - 2 },
+        end: { x: sigX + sigW + 2, y: sigY - 2 },
+        thickness: 0.7, color: rgb(0.4, 0.4, 0.4),
+      });
+
+      lastPage.drawText(signerName.trim(), {
+        x: sigX, y: sigY - 14, size: 9, font, color: rgb(0.15, 0.15, 0.15),
+      });
+
+      lastPage.drawText(new Date().toLocaleDateString('he-IL'), {
+        x: sigX + sigW - 50, y: sigY - 14, size: 9, font, color: rgb(0.5, 0.5, 0.5),
+      });
+
+      lastPage.drawText('Digital Signature', {
+        x: sigX, y: sigY + sigH + 5, size: 7, font, color: rgb(0.65, 0.65, 0.65),
+      });
+
+      const signedPdfBytes = await pdfDoc.save();
+      let signedPdfBase64 = '';
+      for (let i = 0; i < signedPdfBytes.length; i += 32768) {
+        signedPdfBase64 += String.fromCharCode(...signedPdfBytes.subarray(i, i + 32768));
+      }
+
       const res = await base44.functions.invoke('submitSignature', {
         token,
         signature_data: signatureData,
         signer_name: signerName.trim(),
+        signed_pdf_base64: btoa(signedPdfBase64),
       });
       if (res?.data?.ok) {
         setSignedFileUrl(res?.data?.file_url || null);
