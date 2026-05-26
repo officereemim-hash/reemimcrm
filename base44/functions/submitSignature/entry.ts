@@ -3,38 +3,40 @@ import { PDFDocument, rgb, StandardFonts } from 'npm:pdf-lib@1.17.1';
 
 Deno.serve(async (req) => {
   try {
-    const base44 = createClientFromRequest(req);
     const body = await req.json();
-    const { token, signature_data, signer_name, original_pdf_base64 } = body;
+    const base44 = createClientFromRequest(req);
+    const { token, signer_name, signature_image_url } = body;
 
-    if (!token || !signature_data || !signer_name) {
-      return Response.json({ error: 'missing_fields: token, signature_data, signer_name required' }, { status: 400 });
+    if (!token || !signer_name || !signature_image_url) {
+      return Response.json({ error: 'missing_fields' }, { status: 400 });
     }
 
     const docs = await base44.asServiceRole.entities.Document.filter({ signature_token: token });
-    if (!docs || docs.length === 0) return Response.json({ error: 'not_found' }, { status: 404 });
+    if (!docs?.length) return Response.json({ error: 'not_found' }, { status: 404 });
     const doc = docs[0];
     if (doc.signature_status === 'signed') return Response.json({ error: 'already_signed' }, { status: 410 });
 
-    let updatedFileUrl = doc.file_url;
+    const signedAt = new Date().toISOString();
+    const signedAtDisplay = new Date().toLocaleString('he-IL');
 
-    if (original_pdf_base64) {
+    let signedPdfUrl = doc.file_url;
+
+    if (doc.file_url) {
       try {
-        const pdfBytes = Uint8Array.from(atob(original_pdf_base64), c => c.charCodeAt(0));
-        const pdfDoc = await PDFDocument.load(pdfBytes);
+        const pdfRes = await fetch(doc.file_url);
+        const existingPdfBytes = await pdfRes.arrayBuffer();
+        const pdfDoc = await PDFDocument.load(existingPdfBytes);
         const pages = pdfDoc.getPages();
         const lastPage = pages[pages.length - 1];
         const { width } = lastPage.getSize();
         const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
-        const base64Data = signature_data.split(',')[1];
-        const binary = atob(base64Data);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-        const sigImage = await pdfDoc.embedPng(bytes.buffer);
+        // KEY: signature_image_url is HTTPS — fetch() works in Deno
+        const imgRes = await fetch(signature_image_url);
+        const sigImageBytes = new Uint8Array(await imgRes.arrayBuffer());
+        const sigImage = await pdfDoc.embedPng(sigImageBytes);
 
-        const sigW = 160;
-        const sigH = 60;
+        const sigW = 160, sigH = 60;
         const sigX = width - sigW - 40;
         const sigY = 60;
 
@@ -45,43 +47,37 @@ Deno.serve(async (req) => {
           borderColor: rgb(0.75, 0.75, 0.75),
           borderWidth: 0.5,
         });
-
         lastPage.drawImage(sigImage, { x: sigX, y: sigY, width: sigW, height: sigH });
-
         lastPage.drawLine({
           start: { x: sigX - 2, y: sigY - 2 },
           end: { x: sigX + sigW + 2, y: sigY - 2 },
           thickness: 0.7, color: rgb(0.4, 0.4, 0.4),
         });
-
-        lastPage.drawText(signer_name.trim(), {
-          x: sigX, y: sigY - 14, size: 9, font, color: rgb(0.15, 0.15, 0.15),
-        });
-
-        lastPage.drawText(new Date().toLocaleDateString('he-IL'), {
-          x: sigX + sigW - 50, y: sigY - 14, size: 9, font, color: rgb(0.5, 0.5, 0.5),
-        });
-
         lastPage.drawText('Digital Signature', {
-          x: sigX, y: sigY + sigH + 5, size: 7, font, color: rgb(0.65, 0.65, 0.65),
+          x: sigX, y: sigY + sigH + 5,
+          size: 7, font, color: rgb(0.65, 0.65, 0.65),
+        });
+        lastPage.drawText('Signed: ' + new Date().toLocaleDateString('en-GB'), {
+          x: sigX, y: sigY - 14,
+          size: 8, font, color: rgb(0.4, 0.4, 0.4),
         });
 
         const signedPdfBytes = await pdfDoc.save();
         const blob = new Blob([signedPdfBytes], { type: 'application/pdf' });
-        const file = new File([blob], `signed_${doc.name || 'document'}.pdf`, { type: 'application/pdf' });
+        const file = new File([blob], `signed_${(doc.name || 'document').replace(/\s/g, '_')}.pdf`, { type: 'application/pdf' });
         const uploadResult = await base44.asServiceRole.integrations.Core.UploadFile({ file });
-        if (uploadResult?.file_url) updatedFileUrl = uploadResult.file_url;
+        if (uploadResult?.file_url) signedPdfUrl = uploadResult.file_url;
       } catch (pdfErr) {
         console.error('PDF embedding failed:', pdfErr.message);
       }
     }
 
     await base44.asServiceRole.entities.Document.update(doc.id, {
-      signature_data,
-      signer_name: signer_name.trim(),
-      signed_at: new Date().toISOString(),
       signature_status: 'signed',
-      file_url: updatedFileUrl,
+      signed_at: signedAt,
+      signer_name,
+      signature_image_url,
+      file_url: signedPdfUrl,
     });
 
     if (doc.contact_id) {
@@ -89,16 +85,16 @@ Deno.serve(async (req) => {
         contact_id: doc.contact_id,
         type: 'bot_event',
         direction: 'inbound',
-        content: `מסמך "${doc.name}" נחתם דיגיטלית על ידי ${signer_name}`,
+        content: `מסמך "${doc.name}" נחתם דיגיטלית על ידי ${signer_name} ב-${signedAtDisplay}`,
         sent_by: 'system',
         is_automated: true,
         status: 'sent',
       });
     }
 
-    return Response.json({ ok: true, file_url: updatedFileUrl });
-  } catch (error) {
-    console.error('submitSignature error:', error.message);
-    return Response.json({ error: error.message }, { status: 500 });
+    return Response.json({ ok: true, file_url: signedPdfUrl });
+  } catch (err) {
+    console.error('submitSignature error:', err.message);
+    return Response.json({ error: err.message }, { status: 500 });
   }
 });
