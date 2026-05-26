@@ -78,16 +78,13 @@ export default function SignDocument() {
     setError('');
     setSubmitting(true);
     try {
-      // Upload signature as PNG file → get HTTPS URL (data: URLs don't work in Deno)
-      const canvas = canvasRef.current;
-      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-      const sigFile = new File([blob], 'signature.png', { type: 'image/png' });
-      const { file_url: signatureImageUrl } = await base44.integrations.Core.UploadFile({ file: sigFile });
+      // Send base64 directly — no browser upload (page is public, no auth)
+      const signatureData = canvasRef.current.toDataURL('image/png');
 
       const res = await base44.functions.invoke('submitSignature', {
         token,
         signer_name: signerName.trim(),
-        signature_image_url: signatureImageUrl,
+        signature_data: signatureData,
       });
 
       if (res?.data?.ok) {
