@@ -24,7 +24,6 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'already_signed' }, { status: 410 });
     }
 
-    // מחזיר רק מה שהלקוח צריך — לא פרטים פנימיים
     return Response.json({
       document_name: doc.name || 'מסמך לחתימה',
       agreement_text: doc.agreement_text || '',
