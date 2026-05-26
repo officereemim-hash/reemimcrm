@@ -5,9 +5,9 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json();
     const base44 = createClientFromRequest(req);
-    const { token, signer_name, signature_image_url } = body;
+    const { token, signer_name, signature_data } = body;
 
-    if (!token || !signer_name || !signature_image_url) {
+    if (!token || !signer_name || !signature_data) {
       return Response.json({ error: 'missing_fields' }, { status: 400 });
     }
 
@@ -24,6 +24,8 @@ Deno.serve(async (req) => {
     if (doc.file_url) {
       try {
         const pdfRes = await fetch(doc.file_url);
+        if (!pdfRes.ok) throw new Error(`PDF fetch failed: ${pdfRes.status}`);
+
         const existingPdfBytes = await pdfRes.arrayBuffer();
         const pdfDoc = await PDFDocument.load(existingPdfBytes);
         const pages = pdfDoc.getPages();
@@ -31,10 +33,12 @@ Deno.serve(async (req) => {
         const { width } = lastPage.getSize();
         const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
-        // KEY: signature_image_url is HTTPS — fetch() works in Deno
-        const imgRes = await fetch(signature_image_url);
-        const sigImageBytes = new Uint8Array(await imgRes.arrayBuffer());
-        const sigImage = await pdfDoc.embedPng(sigImageBytes);
+        // Decode base64 signature directly in backend — no browser upload needed
+        const base64Data = signature_data.includes(',') ? signature_data.split(',')[1] : signature_data;
+        const binary = atob(base64Data);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const sigImage = await pdfDoc.embedPng(bytes);
 
         const sigW = 160, sigH = 60;
         const sigX = width - sigW - 40;
@@ -76,7 +80,7 @@ Deno.serve(async (req) => {
       signature_status: 'signed',
       signed_at: signedAt,
       signer_name,
-      signature_image_url,
+      signature_data,
       file_url: signedPdfUrl,
     });
 
