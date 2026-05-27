@@ -37,7 +37,7 @@ export default function BotContentPage() {
 
   const filtered = contents
     .filter(c => category === 'all' || c.category === category)
-    .filter(c => flow === 'all' || c.service_type_flow === flow)
+    .filter(c => flow === 'all' || c.service_type_flow === 'general' || !c.service_type_flow || c.service_type_flow === flow)
     .filter(c => {
       if (!search.trim()) return true;
       const q = search.trim().toLowerCase();
