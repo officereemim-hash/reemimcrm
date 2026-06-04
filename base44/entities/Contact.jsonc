@@ -44,8 +44,7 @@
         "webinar",
         "referral",
         "excel_import",
-        "manual",
-        "bot"
+        "manual"
       ]
     },
     "service_type": {
@@ -83,7 +82,6 @@
         "bot",
         "bar",
         "yael",
-        "basmat",
         "system"
       ],
       "default": "bot"
