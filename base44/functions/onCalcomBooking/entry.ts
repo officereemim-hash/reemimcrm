@@ -87,6 +87,11 @@ async function getTemplate(base44, key) {
   return records[0]?.content || '';
 }
 
+async function getSetting(base44, key) {
+  const records = await base44.asServiceRole.entities.SystemSetting.filter({ key });
+  return records[0]?.value || '';
+}
+
 function fillTemplate(template, values) {
   return String(template || '')
     .replaceAll('{name}', values.name || '')
@@ -94,6 +99,7 @@ function fillTemplate(template, values) {
     .replaceAll('{time}', values.time || '')
     .replaceAll('{location}', values.location || '')
     .replaceAll('{address}', values.address || '')
+    .replaceAll('{caller_phone}', values.caller_phone || '')
     .replaceAll('{waze_link}', values.waze_link || '')
     .replaceAll('{zoom_link}', values.zoom_link || '')
     .replaceAll('{calendar_link}', values.calendar_link || '')
@@ -134,12 +140,13 @@ async function findServiceRequest(base44, contactId, serviceType) {
   if (open) return open;
   if (requests[0]) return requests[0];
 
-  return await base44.asServiceRole.entities.ServiceRequest.create({
+  const requestData = {
     contact_id: contactId,
-    service_type: serviceType || 'retirement',
     source: 'bot',
     status: 'new',
-  });
+  };
+  if (serviceType) requestData.service_type = serviceType;
+  return await base44.asServiceRole.entities.ServiceRequest.create(requestData);
 }
 
 async function createGoogleCalendarEvent(base44, meeting, contact, detected) {
@@ -248,7 +255,13 @@ Deno.serve(async (req) => {
     }
 
     if (detected.isCoordinatorCall) {
-      await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { status: 'in_progress', meeting_id: meeting.id });
+      await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, {
+        status: 'phone_meeting',
+        meeting_id: meeting.id,
+        scheduled_date_whatsapp: new Date(startTime).toISOString(),
+        last_appointment_time_str: formatDateTime(startTime),
+        last_appointment_type: 'phone',
+      });
       await base44.asServiceRole.entities.Contact.update(contact.id, { bot_status: 'waiting_agent', last_bot_interaction_at: new Date().toISOString() });
       await base44.asServiceRole.entities.Task.create({
         contact_id: contact.id,
@@ -261,7 +274,12 @@ Deno.serve(async (req) => {
         auto_generated: true,
       });
       const coordTemplate = await getTemplate(base44, 'meeting_scheduled_phone');
-      const coordMsg = fillTemplate(coordTemplate, { name: contact.full_name || attendee.name, time: formatDateTime(startTime) });
+      const callerPhone = await getSetting(base44, 'coordinator_phone') || 'מספר המתאמת יישלח בהמשך';
+      const coordMsg = fillTemplate(coordTemplate, {
+        name: contact.full_name || attendee.name,
+        time: formatDateTime(startTime),
+        caller_phone: callerPhone,
+      });
       const coordSent = await sendWhatsApp(contact.phone || attendee.phone, coordMsg);
       await base44.asServiceRole.entities.Communication.create({
         contact_id: contact.id,

@@ -9,6 +9,15 @@ function normalizePhone(phone) {
   return cleanPhone;
 }
 
+function fillTemplate(template, values) {
+  return String(template || '')
+    .replaceAll('{name}', values.name || '')
+    .replaceAll('{שם}', values.name || '')
+    .replaceAll('{link}', values.link || '')
+    .replaceAll('{reviews_link}', values.reviews_link || '')
+    .replaceAll('{qa_link}', values.qa_link || '');
+}
+
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
@@ -48,8 +57,10 @@ Deno.serve(async (req) => {
     }
 
     async function getUrl(contentType, subType) {
-      const records = await base44.asServiceRole.entities.ServiceContent.filter({ content_type: contentType, sub_type: subType, is_active: true });
-      if (records[0]) return records[0].url || '';
+      if (subType) {
+        const records = await base44.asServiceRole.entities.ServiceContent.filter({ content_type: contentType, sub_type: subType, is_active: true });
+        if (records[0]) return records[0].url || '';
+      }
 
       const fallbackRecords = await base44.asServiceRole.entities.ServiceContent.filter({ content_type: contentType, service_type: serviceType, is_active: true });
       return fallbackRecords[0]?.url || '';
@@ -80,7 +91,7 @@ Deno.serve(async (req) => {
 
     if (pendingChanged && newPending === 'send_basmat_schedule') {
       const intro = await getContent('schedule_intro');
-      const message = intro || `היי ${contact.full_name || ''}! 😊\nנשמח לקבוע פגישה עם בשמת.\nאיפה הכי נוח?\n1. מודיעין\n2. פתח תקווה\n3. זום\n4. טלפון`;
+      const message = intro || 'מעולה, השלב הבא הוא תיאום פגישה עם בשמת. איך תרצה לקיים את הפגישה? זום / מודיעין / פתח תקווה / טלפון';
       const sent = await sendWhatsApp(message);
       await logCommunication(message, 'schedule_intro', sent);
       await base44.asServiceRole.entities.Contact.update(contact.id, {
@@ -92,9 +103,26 @@ Deno.serve(async (req) => {
     }
 
     if (statusChanged && newStatus === 'quote_sent') {
+      const intro = await getContent('schedule_intro');
+      const message = fillTemplate(intro || 'מעולה, שמחנו לשמוע שתרצה להתקדם. השלב הבא הוא תיאום פגישה עם בשמת.', {
+        name: contact.full_name || '',
+      });
+      const sent = await sendWhatsApp(message);
+      await logCommunication(message, 'schedule_intro', sent);
+      await base44.asServiceRole.entities.Contact.update(contact.id, {
+        bot_status: 'waiting_user_reply',
+        last_bot_interaction_at: new Date().toISOString(),
+      });
+      return Response.json({ ok: true, action: 'route_a_interested', whatsapp_sent: sent });
+    }
+
+    if (statusChanged && newStatus === 'awaiting_client_decision') {
       const quoteContent = await getContent('quote_sent');
-      const quoteUrl = await getUrl('pdf', `quote_${serviceType}`);
-      const message = (quoteContent || 'שמחתי לדבר! הנה הצעת המחיר 📄').replace('{link}', quoteUrl).replace('{name}', contact.full_name || '');
+      const quoteUrl = await getUrl('pdf', 'quote_' + serviceType);
+      const message = fillTemplate(quoteContent || 'שמחתי לדבר! הנה הצעת המחיר כמובקש 📄 {link}', {
+        name: contact.full_name || '',
+        link: quoteUrl,
+      });
       const sent = await sendWhatsApp(message);
       if (quoteUrl && !message.includes(quoteUrl)) await sendWhatsApp(quoteUrl);
       await logCommunication(message, 'quote_sent', sent);
@@ -112,25 +140,26 @@ Deno.serve(async (req) => {
         due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
         auto_generated: true,
       });
-      return Response.json({ ok: true, action: 'quote_sent', whatsapp_sent: sent });
+      return Response.json({ ok: true, action: 'route_b_thinking', whatsapp_sent: sent });
     }
 
-    if (statusChanged && newStatus === 'closed_lost') {
+    if (statusChanged && (newStatus === 'followup_active' || newStatus === 'closed_lost')) {
       const reviewsUrl = await getUrl('external_link', 'reviews_page');
       const qaUrl = await getUrl('external_link', 'qa_page');
       const reasonTemplate = await getContent('not_interested_reason');
       const valueTemplate = await getContent('value_proposition');
       const optInTemplate = await getContent('opt_in_future');
-      const firstMessage = (reasonTemplate || `מבינים לגמרי 😊`).replace('{name}', contact.full_name || '');
-      const secondMessage = valueTemplate.replace('{reviews_link}', reviewsUrl).replace('{qa_link}', qaUrl);
+      const firstMessage = fillTemplate(reasonTemplate || 'מבינים לגמרי 🙏 נשמח לדעת בקצרה מה הסיבה שהשירות פחות מתאים כרגע.', { name: contact.full_name || '' });
+      const secondMessage = fillTemplate(valueTemplate, { reviews_link: reviewsUrl, qa_link: qaUrl });
+      const thirdMessage = fillTemplate(optInTemplate, { name: contact.full_name || '' });
       const sent = await sendWhatsApp(firstMessage);
       if (secondMessage) {
-        await new Promise(resolve => setTimeout(resolve, 1500));
+        await new Promise(resolve => setTimeout(resolve, 1200));
         await sendWhatsApp(secondMessage);
       }
-      if (optInTemplate) {
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        await sendWhatsApp(optInTemplate);
+      if (thirdMessage) {
+        await new Promise(resolve => setTimeout(resolve, 1200));
+        await sendWhatsApp(thirdMessage);
       }
       await logCommunication(firstMessage, 'not_interested_reason', sent);
       await base44.asServiceRole.entities.Contact.update(contact.id, {
@@ -139,7 +168,7 @@ Deno.serve(async (req) => {
         future_followup_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
         last_bot_interaction_at: new Date().toISOString(),
       });
-      return Response.json({ ok: true, action: 'not_interested', whatsapp_sent: sent });
+      return Response.json({ ok: true, action: 'route_c_not_interested', whatsapp_sent: sent });
     }
 
     return Response.json({ ok: true, skipped: 'no_matching_action' });

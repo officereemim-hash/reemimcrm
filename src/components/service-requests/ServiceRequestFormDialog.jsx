@@ -13,6 +13,7 @@ const SR_STATUS_OPTIONS = [
   { value: 'quote_sent', label: 'הצעה נשלחה' },
   { value: 'awaiting_client_decision', label: 'ממתין להחלטה' },
   { value: 'followup_active', label: 'פולו-אפ פעיל' },
+  { value: 'phone_meeting', label: 'פגישה טלפונית' },
   { value: 'meeting_scheduled', label: 'פגישה נקבעה' },
   { value: 'completed', label: 'הושלם' },
   { value: 'cancelled', label: 'בוטל' },
