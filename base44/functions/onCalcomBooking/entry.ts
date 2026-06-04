@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 
 const INSTANCE_ID = Deno.env.get('GREEN_API_INSTANCE_ID');
 const API_TOKEN = Deno.env.get('GREEN_API_TOKEN');
@@ -34,7 +34,7 @@ function getAttendee(payload) {
 }
 
 function detectMeeting(slug) {
-  const result = { location: 'zoom', serviceType: '', meetingType: 'advisory' };
+  const result = { location: 'zoom', serviceType: '', meetingType: 'advisory', isCoordinatorCall: false };
 
   if (slug.includes('מודיעין')) result.location = 'modiin';
   if (slug.includes('פתח-תקווה') || slug.includes('פתח תקווה')) result.location = 'petah_tikva_wednesday';
@@ -50,6 +50,11 @@ function detectMeeting(slug) {
   if (slug.includes('שירות-שנתי') || slug.includes('שירות שנתיות') || slug.includes('שנתיות')) {
     result.serviceType = 'annual_service_call';
     result.meetingType = 'annual_service';
+  }
+  if (slug.includes('מתאמת') || slug.includes('coordinator') || slug.includes('שיחה-מקדימה')) {
+    result.location = 'phone';
+    result.meetingType = 'intro_sale';
+    result.isCoordinatorCall = true;
   }
 
   return result;
@@ -124,69 +129,63 @@ async function findContact(base44, attendee) {
 }
 
 async function findServiceRequest(base44, contactId, serviceType) {
-   const requests = await base44.asServiceRole.entities.ServiceRequest.filter({ contact_id: contactId }, '-updated_date', 20);
-   const open = requests.find(request => !['completed', 'cancelled', 'closed_lost', 'followup_closed'].includes(request.status));
-   if (open) return open;
-   if (requests[0]) return requests[0];
+  const requests = await base44.asServiceRole.entities.ServiceRequest.filter({ contact_id: contactId }, '-updated_date', 20);
+  const open = requests.find(request => !['completed', 'cancelled', 'closed_lost', 'followup_closed'].includes(request.status));
+  if (open) return open;
+  if (requests[0]) return requests[0];
 
-   return await base44.asServiceRole.entities.ServiceRequest.create({
-     contact_id: contactId,
-     service_type: serviceType || 'retirement',
-     source: 'bot',
-     status: 'new',
-   });
+  return await base44.asServiceRole.entities.ServiceRequest.create({
+    contact_id: contactId,
+    service_type: serviceType || 'retirement',
+    source: 'bot',
+    status: 'new',
+  });
 }
 
 async function createGoogleCalendarEvent(base44, meeting, contact, detected) {
-   try {
-     const { accessToken } = await base44.asServiceRole.connectors.getConnection('googlecalendar');
-     const startTime = new Date(meeting.scheduled_at);
-     const endTime = new Date(startTime.getTime() + meeting.duration_minutes * 60000);
+  try {
+    const { accessToken } = await base44.asServiceRole.connectors.getConnection('googlecalendar');
+    const startTime = new Date(meeting.scheduled_at);
+    const endTime = new Date(startTime.getTime() + meeting.duration_minutes * 60000);
 
-     const locationMap = {
-       modiin: 'המעיין 44, קומה 1, מתחם M.dot, מודיעין',
-       petah_tikva_wednesday: 'השחם 1, פתח תקווה, בניין C, קומה 6',
-       zoom: 'ישיבה דרך Zoom',
-       phone: 'שיחת טלפון',
-     };
+    const locationMap = {
+      modiin: 'המעיין 44, קומה 1, מתחם M.dot, מודיעין',
+      petah_tikva_wednesday: 'השחם 1, פתח תקווה, בניין C, קומה 6',
+      zoom: 'ישיבה דרך Zoom',
+      phone: 'שיחת טלפון',
+    };
 
-     const description = `זימון פגישה דרך Cal.com\n${contact.full_name || ''}\n${contact.phone || ''}\n${contact.email || ''}`;
+    const eventBody = {
+      summary: `פגישה - ${contact.full_name || 'לקוח'} (${detected.meetingType})`,
+      description: `זימון פגישה דרך Cal.com\n${contact.full_name || ''}\n${contact.phone || ''}\n${contact.email || ''}`,
+      start: { dateTime: startTime.toISOString() },
+      end: { dateTime: endTime.toISOString() },
+      location: locationMap[detected.location] || '',
+      attendees: contact.email ? [{ email: contact.email }] : [],
+    };
 
-     const eventBody = {
-       summary: `פגישה - ${contact.full_name || 'לקוח'} (${detected.meetingType})`,
-       description,
-       start: { dateTime: startTime.toISOString() },
-       end: { dateTime: endTime.toISOString() },
-       location: locationMap[detected.location] || '',
-       attendees: contact.email ? [{ email: contact.email }] : [],
-     };
+    const response = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(eventBody),
+    });
 
-     const response = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
-       method: 'POST',
-       headers: {
-         'Authorization': `Bearer ${accessToken}`,
-         'Content-Type': 'application/json',
-       },
-       body: JSON.stringify(eventBody),
-     });
-
-     if (response.ok) {
-       const eventData = await response.json();
-       return eventData.id;
-     }
-     console.warn('Google Calendar event creation failed:', await response.text());
-     return null;
-   } catch (error) {
-     console.warn('Google Calendar integration error:', error.message);
-     return null;
-   }
+    if (response.ok) return (await response.json()).id;
+    console.warn('Google Calendar failed:', await response.text());
+    return null;
+  } catch (error) {
+    console.warn('Google Calendar error:', error.message);
+    return null;
+  }
 }
 
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
     const providedSecret = req.headers.get('x-cal-secret') || req.headers.get('x-webhook-secret') || req.headers.get('authorization')?.replace('Bearer ', '');
-
     if (WEBHOOK_SECRET && providedSecret !== WEBHOOK_SECRET) {
       return Response.json({ error: 'Invalid webhook secret' }, { status: 403 });
     }
@@ -223,7 +222,6 @@ Deno.serve(async (req) => {
     const duration = startTime && endTime ? Math.max(15, Math.round((new Date(endTime).getTime() - new Date(startTime).getTime()) / 60000)) : 60;
     const calcomId = payload.uid || payload.id || payload.bookingId || payload.booking?.id;
     const meetingUrl = payload.conferenceUrl || payload.meetingUrl || payload.videoCallUrl || payload.location?.link || '';
-
     if (!startTime) return Response.json({ error: 'Missing startTime' }, { status: 400 });
 
     const existingMeetings = calcomId ? await base44.asServiceRole.entities.Meeting.filter({ calcom_event_id: String(calcomId) }) : [];
@@ -246,9 +244,36 @@ Deno.serve(async (req) => {
 
     if (!meeting.google_event_id) {
       const googleEventId = await createGoogleCalendarEvent(base44, meeting, contact, detected);
-      if (googleEventId) {
-        meeting = await base44.asServiceRole.entities.Meeting.update(meeting.id, { google_event_id: googleEventId });
-      }
+      if (googleEventId) meeting = await base44.asServiceRole.entities.Meeting.update(meeting.id, { google_event_id: googleEventId });
+    }
+
+    if (detected.isCoordinatorCall) {
+      await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { status: 'in_progress', meeting_id: meeting.id });
+      await base44.asServiceRole.entities.Contact.update(contact.id, { bot_status: 'waiting_agent', last_bot_interaction_at: new Date().toISOString() });
+      await base44.asServiceRole.entities.Task.create({
+        contact_id: contact.id,
+        service_request_id: serviceRequest.id,
+        title: `שיחת מכירה — ${contact.full_name || attendee.name} — ${formatDateTime(startTime)}`,
+        type: 'followup',
+        category: 'sales',
+        assigned_to: 'bar',
+        due_date: new Date(startTime).toISOString().split('T')[0],
+        auto_generated: true,
+      });
+      const coordTemplate = await getTemplate(base44, 'meeting_scheduled_phone');
+      const coordMsg = fillTemplate(coordTemplate, { name: contact.full_name || attendee.name, time: formatDateTime(startTime) });
+      const coordSent = await sendWhatsApp(contact.phone || attendee.phone, coordMsg);
+      await base44.asServiceRole.entities.Communication.create({
+        contact_id: contact.id,
+        type: 'whatsapp',
+        direction: 'outbound',
+        content: coordMsg,
+        sent_by: 'system',
+        is_automated: true,
+        template_id: 'meeting_scheduled_phone',
+        status: coordSent ? 'sent' : 'failed',
+      });
+      return Response.json({ success: true, type: 'coordinator_call', meeting_id: meeting.id, whatsapp_sent: coordSent });
     }
 
     await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, {
@@ -280,7 +305,6 @@ Deno.serve(async (req) => {
     const zoomLink = meetingUrl || await getServiceUrl(base44, 'zoom_personal_room');
     const wazeLink = detected.location === 'modiin' ? await getServiceUrl(base44, 'waze_modiin') : detected.location === 'petah_tikva_wednesday' ? await getServiceUrl(base44, 'waze_petah_tikva') : '';
     const address = detected.location === 'modiin' ? 'המעיין 44, קומה 1, מתחם M.dot, מודיעין' : detected.location === 'petah_tikva_wednesday' ? 'השחם 1, פתח תקווה, בניין C, קומה 6' : '';
-
     const message = fillTemplate(template, {
       name: contact.full_name || attendee.name,
       time: formatDateTime(startTime),
@@ -293,7 +317,6 @@ Deno.serve(async (req) => {
     });
 
     const whatsappSent = await sendWhatsApp(contact.phone || attendee.phone, message);
-
     await base44.asServiceRole.entities.Communication.create({
       contact_id: contact.id,
       type: 'whatsapp',
