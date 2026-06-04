@@ -41,6 +41,7 @@
         "quote_sent",
         "awaiting_client_decision",
         "followup_active",
+        "phone_meeting",
         "meeting_scheduled",
         "completed",
         "cancelled",
