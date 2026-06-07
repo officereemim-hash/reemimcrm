@@ -14,6 +14,7 @@ export default function BotChat() {
   const [activeConvId, setActiveConvId] = useState(null);
   const [activeConv, setActiveConv] = useState(null);
   const [messages, setMessages] = useState([]);
+  const [statusMessages, setStatusMessages] = useState([]);
   const [isSending, setIsSending] = useState(false);
   const [isLoadingList, setIsLoadingList] = useState(true);
   const messagesEndRef = useRef(null);
@@ -61,10 +62,56 @@ export default function BotChat() {
     return () => { if (unsubscribe) unsubscribe(); };
   }, [activeConvId]);
 
+  const extractPhoneFromMessages = useCallback((items) => {
+    const text = (items || []).map(m => m.content || '').join(' ');
+    const match = text.match(/(?:\+?972|0)5\d[\s-]?\d{3}[\s-]?\d{4}/);
+    return match ? match[0].replace(/[\s-]/g, '') : '';
+  }, []);
+
+  const loadStatusMessages = useCallback(async (conv, currentMessages) => {
+    const phone = extractPhoneFromMessages(currentMessages);
+    if (!phone) {
+      setStatusMessages([]);
+      return;
+    }
+
+    const normalizedPhone = phone.startsWith('0') ? `972${phone.substring(1)}` : phone.replace(/^\+/, '');
+    const contactsByOriginal = await base44.entities.Contact.filter({ phone });
+    const contactsByNormalized = contactsByOriginal.length ? [] : await base44.entities.Contact.filter({ phone: normalizedPhone });
+    const contactsByPlus = contactsByOriginal.length || contactsByNormalized.length ? [] : await base44.entities.Contact.filter({ phone: `+${normalizedPhone}` });
+    const contact = contactsByOriginal[0] || contactsByNormalized[0] || contactsByPlus[0];
+    if (!contact) {
+      setStatusMessages([]);
+      return;
+    }
+
+    const communications = await base44.entities.Communication.filter({ contact_id: contact.id, type: 'whatsapp', direction: 'outbound' }, '-created_date', 20);
+    const startedAt = conv?.created_date ? new Date(conv.created_date).getTime() : 0;
+    const synced = communications
+      .filter(item => item.is_automated && item.content && new Date(item.created_date).getTime() >= startedAt)
+      .map(item => ({
+        id: `status-${item.id}`,
+        role: 'assistant',
+        content: item.content,
+        created_date: item.created_date,
+        source: 'status_automation',
+      }))
+      .reverse();
+    setStatusMessages(synced);
+  }, [extractPhoneFromMessages]);
+
+  useEffect(() => {
+    if (activeConv) loadStatusMessages(activeConv, messages);
+  }, [activeConv, messages, loadStatusMessages]);
+
+  const displayMessages = [...messages, ...statusMessages]
+    .filter((message, index, self) => index === self.findIndex(m => (m.id || m.content) === (message.id || message.content)))
+    .sort((a, b) => new Date(a.created_date || 0).getTime() - new Date(b.created_date || 0).getTime());
+
   // Auto-scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [displayMessages]);
 
   const handleNewConversation = async () => {
     const conv = await base44.agents.createConversation({
@@ -150,7 +197,7 @@ export default function BotChat() {
                 בחר שיחה מהרשימה או צור שיחה חדשה 💬
               </div>
             ) : (
-              messages
+              displayMessages
                 .filter(m => m.role === 'user' || m.role === 'assistant')
                 .map((msg, i) => <MessageBubble key={msg.id || i} message={msg} />)
             )}

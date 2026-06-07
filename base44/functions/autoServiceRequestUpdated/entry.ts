@@ -126,11 +126,14 @@ Deno.serve(async (req) => {
     if (statusChanged && newStatus === 'phone_meeting') {
       const phoneTemplate = await getContent('meeting_scheduled_phone');
       const callerPhone = await getSetting('coordinator_phone') || 'מספר המתאמת יישלח בהמשך';
-      const message = fillTemplate(phoneTemplate, {
+      let message = fillTemplate(phoneTemplate, {
         name: contact.full_name || '',
         time: serviceRequest.last_appointment_time_str || '',
         caller_phone: callerPhone,
       });
+      if (!serviceRequest.last_appointment_time_str) {
+        message = message.replace(/\s*במועד:\s*\n\s*/g, '\n');
+      }
       const sent = await sendWhatsApp(message);
       await logCommunication(message, 'meeting_scheduled_phone', sent);
       await base44.asServiceRole.entities.Contact.update(contact.id, {
