@@ -106,7 +106,12 @@ export default function BotChat() {
 
   const displayMessages = [...messages, ...statusMessages]
     .filter((message, index, self) => index === self.findIndex(m => (m.id || m.content) === (message.id || message.content)))
-    .sort((a, b) => new Date(a.created_date || 0).getTime() - new Date(b.created_date || 0).getTime());
+    .map((message, index) => ({
+      ...message,
+      _sortTime: message.created_date ? new Date(message.created_date).getTime() : Date.now() + index,
+      _sortOrder: index,
+    }))
+    .sort((a, b) => (a._sortTime - b._sortTime) || (a._sortOrder - b._sortOrder));
 
   // Auto-scroll
   useEffect(() => {
