@@ -273,25 +273,7 @@ Deno.serve(async (req) => {
         due_date: new Date(startTime).toISOString().split('T')[0],
         auto_generated: true,
       });
-      const coordTemplate = await getTemplate(base44, 'meeting_scheduled_phone');
-      const callerPhone = await getSetting(base44, 'coordinator_phone') || 'מספר המתאמת יישלח בהמשך';
-      const coordMsg = fillTemplate(coordTemplate, {
-        name: contact.full_name || attendee.name,
-        time: formatDateTime(startTime),
-        caller_phone: callerPhone,
-      });
-      const coordSent = await sendWhatsApp(contact.phone || attendee.phone, coordMsg);
-      await base44.asServiceRole.entities.Communication.create({
-        contact_id: contact.id,
-        type: 'whatsapp',
-        direction: 'outbound',
-        content: coordMsg,
-        sent_by: 'system',
-        is_automated: true,
-        template_id: 'meeting_scheduled_phone',
-        status: coordSent ? 'sent' : 'failed',
-      });
-      return Response.json({ success: true, type: 'coordinator_call', meeting_id: meeting.id, whatsapp_sent: coordSent });
+      return Response.json({ success: true, type: 'coordinator_call', meeting_id: meeting.id, status_updated: 'phone_meeting' });
     }
 
     await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, {

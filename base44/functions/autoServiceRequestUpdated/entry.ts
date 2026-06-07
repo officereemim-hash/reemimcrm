@@ -13,6 +13,8 @@ function fillTemplate(template, values) {
   return String(template || '')
     .replaceAll('{name}', values.name || '')
     .replaceAll('{שם}', values.name || '')
+    .replaceAll('{time}', values.time || '')
+    .replaceAll('{caller_phone}', values.caller_phone || '')
     .replaceAll('{link}', values.link || '')
     .replaceAll('{reviews_link}', values.reviews_link || '')
     .replaceAll('{qa_link}', values.qa_link || '');
@@ -66,6 +68,11 @@ Deno.serve(async (req) => {
       return fallbackRecords[0]?.url || '';
     }
 
+    async function getSetting(key) {
+      const records = await base44.asServiceRole.entities.SystemSetting.filter({ key });
+      return records[0]?.value || '';
+    }
+
     async function sendWhatsApp(message) {
       if (!message) return false;
       const response = await fetch(sendMessageUrl, {
@@ -114,6 +121,23 @@ Deno.serve(async (req) => {
         last_bot_interaction_at: new Date().toISOString(),
       });
       return Response.json({ ok: true, action: 'route_a_interested', whatsapp_sent: sent });
+    }
+
+    if (statusChanged && newStatus === 'phone_meeting') {
+      const phoneTemplate = await getContent('meeting_scheduled_phone');
+      const callerPhone = await getSetting('coordinator_phone') || 'מספר המתאמת יישלח בהמשך';
+      const message = fillTemplate(phoneTemplate, {
+        name: contact.full_name || '',
+        time: serviceRequest.last_appointment_time_str || '',
+        caller_phone: callerPhone,
+      });
+      const sent = await sendWhatsApp(message);
+      await logCommunication(message, 'meeting_scheduled_phone', sent);
+      await base44.asServiceRole.entities.Contact.update(contact.id, {
+        bot_status: 'waiting_agent',
+        last_bot_interaction_at: new Date().toISOString(),
+      });
+      return Response.json({ ok: true, action: 'phone_meeting_scheduled', whatsapp_sent: sent });
     }
 
     if (statusChanged && newStatus === 'awaiting_client_decision') {

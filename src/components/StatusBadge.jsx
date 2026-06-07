@@ -27,7 +27,7 @@ const srStatusMap = {
   quote_sent:               { label: 'הצעה נשלחה',       bg: '#F8F0DC', text: '#A87B20' },
   awaiting_client_decision: { label: 'ממתין להחלטה',     bg: '#F5EDD8', text: '#9A6210' },
   followup_active:          { label: 'פולו-אפ פעיל',     bg: '#F8E8DC', text: '#B04020' },
-  phone_meeting:            { label: 'פגישה טלפונית',    bg: '#E3F2FD', text: '#1565C0' },
+  phone_meeting:            { label: 'נקבעה שיחה טלפונית', bg: '#E3F2FD', text: '#1565C0' },
   meeting_scheduled:        { label: 'פגישה נקבעה',      bg: '#D4F0E8', text: '#2A7A5A' },
   completed:                { label: 'הושלם',            bg: '#D8EDD8', text: '#2A6A2A' },
   cancelled:                { label: 'בוטל',             bg: '#EBEBEB', text: '#555555' },
