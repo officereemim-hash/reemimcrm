@@ -52,7 +52,8 @@
         "delivered",
         "read",
         "failed",
-        "retried"
+        "retried",
+        "skipped"
       ]
     },
     "error_detail": {

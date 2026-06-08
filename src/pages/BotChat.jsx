@@ -69,7 +69,7 @@ export default function BotChat() {
   }, []);
 
   const loadStatusMessages = useCallback(async (conv, currentMessages) => {
-    const phone = extractPhoneFromMessages(currentMessages);
+    const phone = conv?.metadata?.phone || extractPhoneFromMessages(currentMessages);
     if (!phone) {
       setStatusMessages([]);
       return;
@@ -95,6 +95,7 @@ export default function BotChat() {
         content: item.content,
         created_date: item.created_date,
         source: 'status_automation',
+        status: item.status,
       }))
       .reverse();
     setStatusMessages(synced);
@@ -102,6 +103,13 @@ export default function BotChat() {
 
   useEffect(() => {
     if (activeConv) loadStatusMessages(activeConv, messages);
+  }, [activeConv, messages, loadStatusMessages]);
+
+  useEffect(() => {
+    if (!activeConv) return;
+    const refresh = () => loadStatusMessages(activeConv, messages);
+    const unsubscribe = base44.entities.Communication.subscribe(refresh);
+    return unsubscribe;
   }, [activeConv, messages, loadStatusMessages]);
 
   const displayMessages = [...messages, ...statusMessages]

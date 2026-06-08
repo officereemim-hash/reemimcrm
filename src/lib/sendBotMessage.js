@@ -62,99 +62,27 @@ async function _handleBotMessageInternal(requestId, skipIfNoTrigger = false) {
       await base44.entities.ServiceRequest.update(requestId, { pending_bot_message: '' }).catch(() => {});
       return null;
     }
-    await base44.entities.ServiceRequest.update(requestId, { pending_bot_message: '' }).catch(() => {});
-
-    const botResult = await base44.functions.invoke('onServiceRequestUpdate', {
+    const botResult = await base44.functions.invoke('autoServiceRequestUpdated', {
       event: { type: 'update', entity_name: 'ServiceRequest', entity_id: requestId },
-      data: { ...req, status: trigger, conversation_id: conversationId },
-      old_data: { ...req, status: 'previous' },
+      data: { ...req, pending_bot_message: trigger, conversation_id: conversationId },
+      old_data: { ...req, pending_bot_message: '' },
     });
-    const result = await sendMessage(botResult?.data, requestId, trigger, conversationId);
-    if (result) _sentTriggers.add(triggerKey);
+    if (!botResult?.data?.action) return null;
+    const result = { trigger, conversationId, action: botResult.data.action };
+    _sentTriggers.add(triggerKey);
     return result;
   }
 
   const currentStatus = req.status;
   if (skipIfNoTrigger) return null;
 
-  const botResult = await base44.functions.invoke('onServiceRequestUpdate', {
+  const botResult = await base44.functions.invoke('autoServiceRequestUpdated', {
     event: { type: 'update', entity_name: 'ServiceRequest', entity_id: requestId },
     data: { ...req, status: currentStatus, conversation_id: conversationId },
     old_data: { ...req, status: 'previous' },
   });
-  const botTrigger = botResult?.data?.botTrigger;
-  if (botTrigger) {
-    const alreadySent = await wasTriggerRecentlySent(requestId, botTrigger);
-    if (alreadySent) return null;
-    const result2 = await sendMessage(botResult?.data, requestId, botTrigger, conversationId);
-    if (result2) _sentTriggers.add(`${requestId}:${botTrigger}`);
-    return result2;
+  if (botResult?.data?.action) {
+    return { trigger: currentStatus, conversationId, action: botResult.data.action };
   }
   return null;
-}
-
-async function isWhatsAppBotEnabled() {
-  try {
-    const settings = await base44.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' });
-    return settings[0]?.value === 'true' || settings[0]?.value === true;
-  } catch { return false; }
-}
-
-async function sendMessage(resultData, requestId, trigger, conversationId) {
-  const botEnabled = await isWhatsAppBotEnabled();
-  if (!botEnabled) {
-    console.log('sendMessage: WhatsApp bot disabled — logging only');
-  }
-
-  const pending = resultData?.pendingBotMessage;
-  if (!pending?.message) {
-    console.log('sendMessage: no message to send');
-    return null;
-  }
-
-  const effectiveConvId = pending?.conversationId || conversationId;
-
-  // Sync message to Agent conversation
-  if (effectiveConvId) {
-    try {
-      const conv = await base44.agents.getConversation(effectiveConvId);
-      await base44.agents.addMessage(conv, { role: 'assistant', content: pending.message });
-    } catch (err) {
-      console.warn('sendMessage: agent message failed:', err.message);
-    }
-  }
-
-  // Send WhatsApp copy if phone available and bot enabled
-  const contactPhone = pending.contactPhone;
-  if (botEnabled && contactPhone) {
-    try {
-      await base44.functions.invoke('sendWhatsAppMessage', { phone: contactPhone, message: pending.message });
-    } catch (waErr) {
-      console.warn('sendMessage: WhatsApp failed:', waErr.message);
-    }
-  }
-
-  // Log to WhatsAppMessageLog
-  if (contactPhone && effectiveConvId) {
-    try {
-      await base44.entities.WhatsAppMessageLog.create({
-        phone: contactPhone,
-        direction: 'outgoing',
-        text: pending.message.substring(0, 500),
-        status: botEnabled ? 'replied' : 'skipped',
-        conversation_id: effectiveConvId,
-      });
-    } catch (logErr) {
-      console.warn('sendMessage: log failed:', logErr.message);
-    }
-  }
-
-  // Log to timeline
-  await base44.entities.ServiceRequestTimeline.create({
-    service_request_id: requestId,
-    event_type: 'message_sent',
-    description: `הודעת ${trigger} נשלחה אוטומטית`,
-  });
-
-  return { trigger, conversationId: effectiveConvId };
 }

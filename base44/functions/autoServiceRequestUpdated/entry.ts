@@ -73,17 +73,27 @@ Deno.serve(async (req) => {
       return records[0]?.value || '';
     }
 
+    const botEnabled = (await getSetting('whatsapp_bot_enabled')) === 'true';
+
     async function sendWhatsApp(message) {
-      if (!message) return false;
+      if (!message) return { status: 'skipped', errorDetail: 'empty_message' };
+      if (!botEnabled) {
+        return { status: 'skipped', errorDetail: 'log_only_whatsapp_bot_disabled' };
+      }
+
       const response = await fetch(sendMessageUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ chatId, message }),
       });
-      return response.ok;
+      const responseText = await response.text();
+      return {
+        status: response.ok ? 'sent' : 'failed',
+        errorDetail: response.ok ? '' : responseText.substring(0, 500),
+      };
     }
 
-    async function logCommunication(content, templateId, sent) {
+    async function logCommunication(content, templateId, result) {
       await base44.asServiceRole.entities.Communication.create({
         contact_id: serviceRequest.contact_id,
         type: 'whatsapp',
@@ -92,7 +102,8 @@ Deno.serve(async (req) => {
         sent_by: 'system',
         is_automated: true,
         template_id: templateId,
-        status: sent ? 'sent' : 'failed',
+        status: result?.status || 'skipped',
+        error_detail: result?.errorDetail || '',
       });
     }
 
@@ -151,7 +162,10 @@ Deno.serve(async (req) => {
         link: quoteUrl,
       });
       const sent = await sendWhatsApp(message);
-      if (quoteUrl && !message.includes(quoteUrl)) await sendWhatsApp(quoteUrl);
+      if (quoteUrl && !message.includes(quoteUrl)) {
+        const linkResult = await sendWhatsApp(quoteUrl);
+        await logCommunication(quoteUrl, 'quote_sent_link', linkResult);
+      }
       await logCommunication(message, 'quote_sent', sent);
       await base44.asServiceRole.entities.Contact.update(contact.id, {
         bot_status: 'waiting_user_reply',
@@ -182,11 +196,13 @@ Deno.serve(async (req) => {
       const sent = await sendWhatsApp(firstMessage);
       if (secondMessage) {
         await new Promise(resolve => setTimeout(resolve, 1200));
-        await sendWhatsApp(secondMessage);
+        const secondResult = await sendWhatsApp(secondMessage);
+        await logCommunication(secondMessage, 'value_proposition', secondResult);
       }
       if (thirdMessage) {
         await new Promise(resolve => setTimeout(resolve, 1200));
-        await sendWhatsApp(thirdMessage);
+        const thirdResult = await sendWhatsApp(thirdMessage);
+        await logCommunication(thirdMessage, 'opt_in_future', thirdResult);
       }
       await logCommunication(firstMessage, 'not_interested_reason', sent);
       await base44.asServiceRole.entities.Contact.update(contact.id, {

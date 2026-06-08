@@ -7,23 +7,11 @@ import { toast } from 'sonner';
 import { handleBotMessage } from '@/lib/sendBotMessage';
 
 const triggerOptions = [
-  { value: 'both_appointments_scheduled', label: 'שני תורים נקבעו' },
-  { value: 'paid_consultation', label: 'שולם — ייעוץ' },
-  { value: 'paid_legal', label: 'שולם — משפטי' },
-  { value: 'ready_to_schedule', label: 'מוכן לזימון תורים' },
-  { value: 'questionnaire_completed_awaiting_payment', label: 'שאלון מולא, ממתין לתשלום' },
-  { value: 'scheduled_consultation', label: 'נקבע תור — ייעוץ' },
-  { value: 'scheduled_legal', label: 'נקבע תור — משפטי' },
-  { value: 'in_progress_notification', label: 'הפנייה בטיפול' },
-  { value: 'quote_sent_notification', label: 'הצעת מחיר נשלחה' },
-  { value: 'meeting_confirmed', label: 'פגישה נקבעה' },
-  { value: 'completed_review_request', label: 'הושלם — בקשת חוות דעת' },
-  { value: 'payment_confirmed', label: 'תשלום אושר' },
-  { value: 'questionnaire_filled', label: 'שאלון מולא' },
+  { value: 'send_basmat_schedule', label: 'שליחת אפשרויות תיאום עם בשמת' },
 ];
 
 export default function TestBotMessageButton({ requestId }) {
-  const [trigger, setTrigger] = useState('both_appointments_scheduled');
+  const [trigger, setTrigger] = useState('send_basmat_schedule');
   const [testing, setTesting] = useState(false);
 
   const handleTest = async () => {
@@ -37,7 +25,7 @@ export default function TestBotMessageButton({ requestId }) {
         try {
           const sent = await handleBotMessage(requestId);
           if (sent) {
-            toast.success(`הודעת ${sent.trigger} נשלחה בהצלחה!`);
+            toast.success(`הודעת ${sent.trigger} נרשמה בלוג בהצלחה!`);
           } else {
             toast.warning('handleBotMessage לא שלח הודעה — בדקי console');
           }
@@ -56,7 +44,7 @@ export default function TestBotMessageButton({ requestId }) {
   return (
     <div className="border border-dashed border-orange-300 rounded-lg p-3 bg-orange-50 space-y-2">
       <p className="text-xs font-medium text-orange-700 flex items-center gap-1">
-        <Bug className="w-3.5 h-3.5" /> בדיקת שליחת הודעה
+        <Bug className="w-3.5 h-3.5" /> בדיקת לוג הודעה
       </p>
       <Select value={trigger} onValueChange={setTrigger}>
         <SelectTrigger className="text-xs h-8">
@@ -75,7 +63,7 @@ export default function TestBotMessageButton({ requestId }) {
         onClick={handleTest}
         disabled={testing}
       >
-        {testing ? 'בודק...' : 'שלח הודעת בדיקה'}
+        {testing ? 'בודק...' : 'רשום הודעת בדיקה בלוג'}
       </Button>
     </div>
   );

@@ -79,8 +79,8 @@ function extractContactDetails(text) {
   return { name, phone, email };
 }
 
-async function sendWhatsApp(chatId, message) {
-  if (!chatId || !message) return null;
+async function sendWhatsApp(chatId, message, botEnabled) {
+  if (!chatId || !message || !botEnabled) return null;
   const response = await fetch(`https://api.green-api.com/waInstance${INSTANCE_ID}/sendMessage/${API_TOKEN}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -90,7 +90,8 @@ async function sendWhatsApp(chatId, message) {
   return await response.json();
 }
 
-async function sendTyping(chatId, seconds = 15) {
+async function sendTyping(chatId, seconds = 15, botEnabled = false) {
+  if (!botEnabled) return;
   fetch(`https://api.green-api.com/waInstance${INSTANCE_ID}/sendTyping/${API_TOKEN}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -120,13 +121,13 @@ async function logIncoming(base44, idMessage, phone, text, chatId, conversationI
   });
 }
 
-async function logOutgoing(base44, idMessage, phone, text, chatId, conversationId) {
+async function logOutgoing(base44, idMessage, phone, text, chatId, conversationId, status = 'replied') {
   return await base44.asServiceRole.entities.WhatsAppMessageLog.create({
     id_message: idMessage || `out_${Date.now()}`,
     phone,
     direction: 'outgoing',
     text: String(text || '').substring(0, 500),
-    status: 'replied',
+    status,
     conversation_id: conversationId,
     chat_id: chatId,
   });
@@ -189,25 +190,16 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, skipped: true, reason: 'blocked' });
     }
 
-    const botEnabled = botEnabledSettings.length === 0 || botEnabledSettings[0].value === 'true';
-    if (!botEnabled) {
-      const testPhoneSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_test_phones' });
-      const testPhones = (testPhoneSettings[0]?.value || '')
-        .split(',')
-        .map(item => normalizeIntlPhone(item.trim()))
-        .filter(Boolean);
-      if (!testPhones.includes(phone)) {
-        return Response.json({ ok: true, skipped: true, reason: 'bot_disabled' });
-      }
-    }
+    const botEnabled = botEnabledSettings[0]?.value === 'true' || botEnabledSettings[0]?.value === true;
+    const outgoingStatus = botEnabled ? 'replied' : 'skipped';
 
     const recentLogs = await base44.asServiceRole.entities.WhatsAppMessageLog.filter({ phone }, '-created_date', 30);
     const recentOutgoing = recentLogs.filter(log => log.direction === 'outgoing' && Date.now() - new Date(log.created_date).getTime() < 60 * 60 * 1000);
-    if (recentOutgoing.length >= 10) {
+    if (botEnabled && recentOutgoing.length >= 10) {
       return Response.json({ ok: true, skipped: true, reason: 'rate_limited' });
     }
 
-    await sendTyping(chatId, 15);
+    await sendTyping(chatId, 15, botEnabled);
 
     let contacts = await base44.asServiceRole.entities.Contact.filter({ phone });
     if (contacts.length === 0) contacts = await base44.asServiceRole.entities.Contact.filter({ phone: localPhone });
@@ -260,9 +252,9 @@ Deno.serve(async (req) => {
     if (!contact && cachedConversationSettings.length === 0) {
       const greetingMessage = await getBotContent(base44, 'greeting');
       if (greetingMessage) {
-        const sent = await sendWhatsApp(chatId, greetingMessage);
+        const sent = await sendWhatsApp(chatId, greetingMessage, botEnabled);
         await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
-        await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp0`, phone, '[fp0_greeting]', chatId, conversationId);
+        await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp0`, phone, greetingMessage, chatId, conversationId, outgoingStatus);
         try {
           await base44.asServiceRole.agents.addMessage(conversation, { role: 'user', content: text });
           await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: greetingMessage });
@@ -284,9 +276,9 @@ Deno.serve(async (req) => {
         }
 
         const confirmMessage = `הפרטים שלך:\n📛 שם: ${details.name}\n📱 טלפון: ${details.phone}\n📧 מייל: ${details.email}\n\nהאם הכל נכון? כתוב/י *כן* לאישור או תקנ/י את הפרט השגוי.`;
-        const sent = await sendWhatsApp(chatId, confirmMessage);
+        const sent = await sendWhatsApp(chatId, confirmMessage, botEnabled);
         await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
-        await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_details`, phone, '[fp_details_confirm]', chatId, conversationId);
+        await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_details`, phone, confirmMessage, chatId, conversationId, outgoingStatus);
         try {
           await base44.asServiceRole.agents.addMessage(conversation, { role: 'user', content: text });
           await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: confirmMessage });
@@ -323,9 +315,9 @@ Deno.serve(async (req) => {
         await base44.asServiceRole.entities.SystemSetting.delete(pendingSettings[0].id);
 
         const welcomeMessage = await getBotContent(base44, 'welcome') || 'ברוך הבא! במה נוכל לעזור?';
-        const sent = await sendWhatsApp(chatId, welcomeMessage);
+        const sent = await sendWhatsApp(chatId, welcomeMessage, botEnabled);
         await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
-        await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_saved`, phone, '[fp_details_saved_welcome]', chatId, conversationId);
+        await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_saved`, phone, welcomeMessage, chatId, conversationId, outgoingStatus);
         try {
           await base44.asServiceRole.agents.addMessage(conversation, { role: 'user', content: text });
           await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: welcomeMessage });
@@ -346,9 +338,9 @@ Deno.serve(async (req) => {
 
       if (waitMessageTemplate && calendarLink) {
         const message = waitMessageTemplate.replace('{calendar_link}', calendarLink);
-        const sent = await sendWhatsApp(chatId, message);
+        const sent = await sendWhatsApp(chatId, message, botEnabled);
         await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
-        await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_service`, phone, `[fp_service_choice_${selectedServiceType}]`, chatId, conversationId);
+        await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_service`, phone, message, chatId, conversationId, outgoingStatus);
         try {
           await base44.asServiceRole.agents.addMessage(conversation, { role: 'user', content: text });
           await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: message });
@@ -360,12 +352,12 @@ Deno.serve(async (req) => {
     const goodbyeAnswers = ['סיום', 'סיום שיחה', 'ביי', 'להתראות', 'תודה סיום', 'סיימנו', 'זהו'];
     if (goodbyeAnswers.includes(normalizeAnswer(text))) {
       const goodbyeMessage = await getBotContent(base44, 'goodbye') || 'שמחנו לשוחח! שיהיה לך יום נפלא 🙏';
-      const sent = await sendWhatsApp(chatId, goodbyeMessage);
+      const sent = await sendWhatsApp(chatId, goodbyeMessage, botEnabled);
       if (serviceRequest) {
         await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { status: 'completed' });
       }
       await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
-      await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_goodbye`, phone, '[fp_goodbye]', chatId, conversationId);
+      await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_goodbye`, phone, goodbyeMessage, chatId, conversationId, outgoingStatus);
       return Response.json({ ok: true, fast_path: 'fp_goodbye' });
     }
 
@@ -384,12 +376,12 @@ Deno.serve(async (req) => {
       if (!sentReassurance && Date.now() - pollStart > 15000) {
         sentReassurance = true;
         const messages = ['עוד קצת סבלנות, כמעט שם 🙏', 'עוד רגע ואחזור אליך 😊', 'ממש בדרך! ✨'];
-        await sendWhatsApp(chatId, messages[Math.floor(Math.random() * messages.length)]);
+        await sendWhatsApp(chatId, messages[Math.floor(Math.random() * messages.length)], botEnabled);
       }
 
       if (Date.now() - lastTypingRefresh > 6000) {
         lastTypingRefresh = Date.now();
-        await sendTyping(chatId, 8);
+        await sendTyping(chatId, 8, botEnabled);
       }
 
       const freshConversation = await base44.asServiceRole.agents.getConversation(conversationId);
@@ -406,9 +398,9 @@ Deno.serve(async (req) => {
     }
 
     if (agentReply) {
-      const sent = await sendWhatsApp(chatId, agentReply);
+      const sent = await sendWhatsApp(chatId, agentReply, botEnabled);
       await base44.asServiceRole.entities.WhatsAppMessageLog.update(incomingLog.id, { status: 'replied' });
-      await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}`, phone, agentReply, chatId, conversationId);
+      await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}`, phone, agentReply, chatId, conversationId, outgoingStatus);
       return Response.json({ ok: true, conversationId, replied: true });
     }
 
