@@ -170,7 +170,20 @@ export default function BotChat() {
     return unsubscribe;
   }, [activeConv, messages, loadStatusMessages]);
 
-  const displayMessages = [...messages, ...statusMessages]
+  const agentMessagesWithContent = messages.filter(message =>
+    (message.role === 'user' || message.role === 'assistant') && String(message.content || '').trim()
+  );
+
+  const agentContentSet = new Set(
+    agentMessagesWithContent.map(message => String(message.content || '').trim())
+  );
+
+  const statusMessagesToShow = statusMessages.filter(message => {
+    const content = String(message.content || '').trim();
+    return content && !agentContentSet.has(content);
+  });
+
+  const displayMessages = [...agentMessagesWithContent, ...statusMessagesToShow]
     .filter((message, index, self) => index === self.findIndex(m => (m.id || m.content) === (message.id || message.content)))
     .map((message, index) => ({
       ...message,
