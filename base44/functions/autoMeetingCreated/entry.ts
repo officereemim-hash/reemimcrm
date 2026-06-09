@@ -16,8 +16,12 @@ function normalizePhone(phone) {
   return cleanPhone;
 }
 
-async function sendWhatsApp(phone, message) {
+async function sendWhatsApp(base44, phone, message) {
   const chatId = `${normalizePhone(phone)}@c.us`;
+  const greenSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'green_api_enabled' });
+  const greenApiEnabled = greenSettings.length > 0 && greenSettings[0].value === 'true';
+  if (!greenApiEnabled) return true;
+
   const response = await fetch(`https://api.green-api.com/waInstance${INSTANCE_ID}/sendMessage/${API_TOKEN}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -47,7 +51,7 @@ Deno.serve(async (req) => {
 
     const scheduleUrl = `${appUrl.replace(/\/$/, '')}/schedule?token=${token}`;
     const message = `שלום ${contact.full_name || ''}! לתיאום הפגישה שלנו לחצי כאן:\n${scheduleUrl}`;
-    const ok = await sendWhatsApp(contact.phone, message);
+    const ok = await sendWhatsApp(base44, contact.phone, message);
 
     await base44.asServiceRole.entities.Communication.create({
       contact_id: contact.id,

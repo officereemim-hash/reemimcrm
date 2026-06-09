@@ -15,6 +15,9 @@ Deno.serve(async (req) => {
       console.log('processWhatsAppReplies: bot disabled — log-only mode');
     }
 
+    const greenSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'green_api_enabled' });
+    const greenApiEnabled = greenSettings.length > 0 && greenSettings[0].value === 'true';
+
     const instanceId = Deno.env.get('GREEN_API_INSTANCE_ID');
     const token = Deno.env.get('GREEN_API_TOKEN');
 
@@ -93,7 +96,9 @@ Deno.serve(async (req) => {
         }
 
         let sentOk = false;
-        if (botEnabled) {
+        if (botEnabled && !greenApiEnabled) {
+          sentOk = true;
+        } else if (botEnabled) {
           const sendUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
           const sendResponse = await fetch(sendUrl, {
             method: 'POST',

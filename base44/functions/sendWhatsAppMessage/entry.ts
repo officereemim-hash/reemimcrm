@@ -27,6 +27,12 @@ Deno.serve(async (req) => {
 
     const chatId = `${normalizedPhone}@c.us`;
 
+    const greenSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'green_api_enabled' });
+    const greenApiEnabled = greenSettings.length > 0 && greenSettings[0].value === 'true';
+    if (!greenApiEnabled) {
+      return Response.json({ ok: true, simulated: true, chatId });
+    }
+
     const url = `https://api.green-api.com/waInstance${INSTANCE_ID}/sendMessage/${API_TOKEN}`;
     const response = await fetch(url, {
       method: 'POST',

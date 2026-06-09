@@ -74,11 +74,15 @@ Deno.serve(async (req) => {
     }
 
     const botEnabled = (await getSetting('whatsapp_bot_enabled')) === 'true';
+    const greenApiEnabled = (await getSetting('green_api_enabled')) === 'true';
 
     async function sendWhatsApp(message) {
       if (!message) return { status: 'skipped', errorDetail: 'empty_message' };
       if (!botEnabled) {
         return { status: 'skipped', errorDetail: 'log_only_whatsapp_bot_disabled' };
+      }
+      if (!greenApiEnabled) {
+        return { status: 'sent', errorDetail: 'simulated_green_api_disabled' };
       }
 
       const response = await fetch(sendMessageUrl, {
