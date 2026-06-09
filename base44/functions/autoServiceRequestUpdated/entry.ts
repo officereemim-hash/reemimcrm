@@ -97,14 +97,38 @@ Deno.serve(async (req) => {
       };
     }
 
-    async function addMessageToConversation(content, result) {
-      if (!serviceRequest.conversation_id || !content || result?.status === 'skipped') return;
+    async function resolveConversationId() {
+      if (serviceRequest.conversation_id) {
+        console.log('conversation_id_found_on_request');
+        return serviceRequest.conversation_id;
+      }
 
-      const conversation = await base44.asServiceRole.agents.getConversation(serviceRequest.conversation_id);
+      const cacheKey = `phone_conv_${phone}`;
+      const cached = await base44.asServiceRole.entities.SystemSetting.filter({ key: cacheKey });
+      const conversationId = cached[0]?.value || '';
+
+      if (conversationId) {
+        console.log('conversation_id_found_in_phone_cache');
+        await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { conversation_id: conversationId });
+        return conversationId;
+      }
+
+      console.log('conversation_id_missing', cacheKey);
+      return '';
+    }
+
+    async function addMessageToConversation(content, result) {
+      if (!content || result?.status === 'skipped') return;
+
+      const conversationId = await resolveConversationId();
+      if (!conversationId) return;
+
+      const conversation = await base44.asServiceRole.agents.getConversation(conversationId);
       await base44.asServiceRole.agents.addMessage(conversation, {
         role: 'assistant',
         content,
       });
+      console.log('message_added_to_conversation');
     }
 
     async function logCommunication(content, templateId, result) {

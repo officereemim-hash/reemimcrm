@@ -76,6 +76,12 @@ export default function BotChat() {
     return match ? match[0].replace(/[\s-]/g, '') : '';
   }, []);
 
+  const normalizeCachePhone = useCallback((phone) => {
+    const raw = String(phone || '').trim().replace(/[\s\-\+\(\)]/g, '');
+    if (!raw) return '';
+    return raw.startsWith('0') ? `972${raw.substring(1)}` : raw;
+  }, []);
+
   const buildPhoneVariants = useCallback((phone) => {
     const raw = String(phone || '').trim().replace(/[\s-]/g, '').replace(/^\+/, '');
     if (!raw) return [];
@@ -199,6 +205,25 @@ export default function BotChat() {
         ...(contact?.id ? { contact_id: contact.id } : {}),
       },
     });
+
+    const cachePhone = normalizeCachePhone(phone || contact?.phone);
+    if (cachePhone) {
+      const key = `phone_conv_${cachePhone}`;
+      const existing = await base44.entities.SystemSetting.filter({ key });
+      const payload = {
+        category: 'flow',
+        key,
+        label: `שיחת בוט לטלפון ${cachePhone}`,
+        value: conv.id,
+        value_type: 'text',
+      };
+      if (existing[0]) {
+        await base44.entities.SystemSetting.update(existing[0].id, payload);
+      } else {
+        await base44.entities.SystemSetting.create(payload);
+      }
+    }
+
     setConversations(prev => [conv, ...prev]);
     setActiveConvId(conv.id);
     setShowNewConvDialog(false);
