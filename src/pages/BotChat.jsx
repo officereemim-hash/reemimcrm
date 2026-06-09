@@ -25,6 +25,7 @@ export default function BotChat() {
   const [isSending, setIsSending] = useState(false);
   const [isLoadingList, setIsLoadingList] = useState(true);
   const messagesEndRef = useRef(null);
+  const contactLookupCacheRef = useRef(new Map());
 
   // Load hidden IDs from user profile
   useEffect(() => {
@@ -87,25 +88,39 @@ export default function BotChat() {
 
   const findContactForConversation = useCallback(async ({ contactId, phone, email }) => {
     const isValidObjectId = (id) => /^[a-f0-9]{24}$/i.test(id || '');
-
-    if (isValidObjectId(contactId)) {
-      const byId = await base44.entities.Contact.filter({ id: contactId });
-      if (byId[0]) return byId[0];
-    }
-
     const phoneVariants = buildPhoneVariants(phone);
-    for (const variant of phoneVariants) {
-      const found = await base44.entities.Contact.filter({ phone: variant });
-      if (found[0]) return found[0];
-    }
-
     const normalizedEmail = String(email || '').trim().toLowerCase();
-    if (normalizedEmail) {
-      const byEmail = await base44.entities.Contact.filter({ email: normalizedEmail });
-      if (byEmail[0]) return byEmail[0];
+    const safeContactId = isValidObjectId(contactId) ? contactId : '';
+    const cacheKey = [safeContactId, phoneVariants.join('|'), normalizedEmail].join('::');
+
+    if (contactLookupCacheRef.current.has(cacheKey)) {
+      return contactLookupCacheRef.current.get(cacheKey);
     }
 
-    return null;
+    let contact = null;
+
+    if (safeContactId) {
+      const byId = await base44.entities.Contact.filter({ id: safeContactId });
+      contact = byId[0] || null;
+    }
+
+    if (!contact) {
+      for (const variant of phoneVariants) {
+        const found = await base44.entities.Contact.filter({ phone: variant });
+        if (found[0]) {
+          contact = found[0];
+          break;
+        }
+      }
+    }
+
+    if (!contact && normalizedEmail) {
+      const byEmail = await base44.entities.Contact.filter({ email: normalizedEmail });
+      contact = byEmail[0] || null;
+    }
+
+    contactLookupCacheRef.current.set(cacheKey, contact);
+    return contact;
   }, [buildPhoneVariants]);
 
   const loadStatusMessages = useCallback(async (conv, currentMessages) => {
