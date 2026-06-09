@@ -132,12 +132,26 @@ export default function BotChat() {
 
   const loadStatusMessages = useCallback(async (conv, currentMessages) => {
     const meta = conv?.metadata || {};
-    const phoneCandidate = meta.phone || extractPhoneFromMessages(currentMessages);
-    const contact = await findContactForConversation({
-      contactId: meta.contact_id,
-      phone: phoneCandidate,
-      email: meta.email,
-    });
+
+    // 1) Deterministic link: ServiceRequest that points to this conversation
+    let contact = null;
+    if (conv?.id) {
+      const linkedRequests = await base44.entities.ServiceRequest.filter({ conversation_id: conv.id });
+      if (linkedRequests[0]?.contact_id) {
+        const byId = await base44.entities.Contact.filter({ id: linkedRequests[0].contact_id });
+        contact = byId[0] || null;
+      }
+    }
+
+    // 2) Fallback: phone/email lookup
+    if (!contact) {
+      const phoneCandidate = meta.phone || extractPhoneFromMessages(currentMessages);
+      contact = await findContactForConversation({
+        contactId: meta.contact_id,
+        phone: phoneCandidate,
+        email: meta.email,
+      });
+    }
 
     if (!contact) {
       setStatusMessages([]);
@@ -168,7 +182,11 @@ export default function BotChat() {
     if (!activeConv) return;
     const refresh = () => loadStatusMessages(activeConv, messages);
     const unsubscribe = base44.entities.Communication.subscribe(refresh);
-    return unsubscribe;
+    const timer = setInterval(refresh, 5000);
+    return () => {
+      unsubscribe();
+      clearInterval(timer);
+    };
   }, [activeConv, messages, loadStatusMessages]);
 
   const agentMessagesWithContent = messages.filter(message =>
