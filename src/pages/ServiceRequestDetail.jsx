@@ -11,7 +11,6 @@ import TimelineView from '@/components/service-request/TimelineView';
 import FilesList from '@/components/service-request/FilesList';
 import TestBotMessageButton from '@/components/service-request/TestBotMessageButton';
 import { toast } from 'sonner';
-import { handleBotMessage } from '@/lib/sendBotMessage';
 
 export default function ServiceRequestDetail() {
   const { id } = useParams();
@@ -57,17 +56,7 @@ export default function ServiceRequestDetail() {
       queryClient.invalidateQueries({ queryKey: ['sr-timeline', id] });
       queryClient.invalidateQueries({ queryKey: ['service-requests'] });
       toast.success('הפנייה עודכנה');
-      if (result?.statusChanged) {
-        try {
-          const sent = await handleBotMessage(id);
-          if (sent) {
-            toast.success(`הודעת ${sent.trigger} נשלחה`);
-            queryClient.invalidateQueries({ queryKey: ['sr-timeline', id] });
-          }
-        } catch (err) {
-          console.warn('Bot message failed:', err.message);
-        }
-      }
+      // הודעת הבוט נשלחת אוטומטית ע"י האוטומציה "ServiceRequest status bot messages" — אין שליחה ידנית מכאן
     },
   });
 
