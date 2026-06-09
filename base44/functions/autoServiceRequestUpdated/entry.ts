@@ -97,43 +97,28 @@ Deno.serve(async (req) => {
       };
     }
 
-    async function resolveConversationId() {
-      if (serviceRequest.conversation_id) {
-        console.log('conversation_id_found_on_request');
-        return serviceRequest.conversation_id;
-      }
-
-      const cacheKey = `phone_conv_${phone}`;
-      const cached = await base44.asServiceRole.entities.SystemSetting.filter({ key: cacheKey });
-      const conversationId = cached[0]?.value || '';
-
-      if (conversationId) {
-        console.log('conversation_id_found_in_phone_cache');
-        await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { conversation_id: conversationId });
-        return conversationId;
-      }
-
-      console.log('conversation_id_missing', cacheKey);
-      return '';
-    }
-
     async function addMessageToConversation(content, result) {
       if (!content || result?.status === 'skipped') return;
 
-      try {
-        const conversationId = await resolveConversationId();
-        if (!conversationId) return;
+      let conversationId = serviceRequest.conversation_id;
 
-        const conversation = await base44.asServiceRole.agents.getConversation(conversationId);
-        await base44.asServiceRole.agents.addMessage(conversation, {
-          role: 'assistant',
-          content,
+      if (!conversationId) {
+        const conversation = await base44.asServiceRole.agents.createConversation({
+          agent_name: 'bot_reemim',
+          metadata: {
+            name: serviceRequest.contact_name || 'לקוח',
+            phone: serviceRequest.contact_phone || '',
+            source: 'automation',
+          },
         });
-        console.log('message_added_to_conversation');
-      } catch (err) {
-        console.warn('conversation_write_failed:', err.message);
-        // Communication record already saved — no data loss
+        conversationId = conversation.id;
+        serviceRequest.conversation_id = conversationId;
+        await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { conversation_id: conversationId });
       }
+
+      const conv = await base44.asServiceRole.agents.getConversation(conversationId);
+      await base44.asServiceRole.agents.addMessage(conv, { role: 'assistant', content });
+      console.log('message_added_to_conversation');
     }
 
     async function logCommunication(content, templateId, result) {
