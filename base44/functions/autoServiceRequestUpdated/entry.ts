@@ -100,25 +100,25 @@ Deno.serve(async (req) => {
     async function addMessageToConversation(content, result) {
       if (!content || result?.status === 'skipped') return;
 
-      let conversationId = serviceRequest.conversation_id;
-
+      const conversationId = serviceRequest.conversation_id;
       if (!conversationId) {
-        const conversation = await base44.asServiceRole.agents.createConversation({
-          agent_name: 'bot_reemim',
-          metadata: {
-            name: serviceRequest.contact_name || 'לקוח',
-            phone: serviceRequest.contact_phone || '',
-            source: 'automation',
-          },
-        });
-        conversationId = conversation.id;
-        serviceRequest.conversation_id = conversationId;
-        await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { conversation_id: conversationId });
+        console.log('conversation_injection_skipped: no_conversation_id');
+        return;
       }
 
-      const conv = await base44.asServiceRole.agents.getConversation(conversationId);
-      await base44.asServiceRole.agents.addMessage(conv, { role: 'assistant', content });
-      console.log('message_added_to_conversation');
+      try {
+        const conv = await base44.asServiceRole.agents.getConversation(conversationId);
+        const hasUserMessage = (conv.messages || []).some((m) => m.role === 'user');
+        if (!hasUserMessage) {
+          console.log('conversation_injection_skipped: no_user_message');
+          return;
+        }
+        await base44.asServiceRole.agents.addMessage(conv, { role: 'assistant', content });
+        console.log('message_added_to_conversation');
+      } catch (err) {
+        // Simulator conversations belong to the app user — injection blocked, Communication record already saved
+        console.warn('conversation_injection_skipped:', err.message);
+      }
     }
 
     async function logCommunication(content, templateId, result) {

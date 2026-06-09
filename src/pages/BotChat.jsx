@@ -125,7 +125,8 @@ export default function BotChat() {
       contact = byEmail[0] || null;
     }
 
-    contactLookupCacheRef.current.set(cacheKey, contact);
+    // Cache only successful lookups — the contact may be created later by the agent
+    if (contact) contactLookupCacheRef.current.set(cacheKey, contact);
     return contact;
   }, [buildPhoneVariants]);
 
