@@ -26,15 +26,11 @@ export default function StatusActions({ request, contact, onUpdate, isUpdating }
   const [status, setStatus] = useState(request.status);
   const [step, setStep] = useState(request.current_step || '');
   const [notes, setNotes] = useState(request.notes || '');
-  const [whatsappDate, setWhatsappDate] = useState(request.scheduled_date_whatsapp || '');
-  const [clinicDate, setClinicDate] = useState(request.scheduled_date_clinic || '');
   const [paymentConfirmed, setPaymentConfirmed] = useState(request.payment_confirmed || false);
   const [documentsReceived, setDocumentsReceived] = useState(request.documents_received || false);
 
   const handleSave = () => {
     const updates = { status, current_step: step, notes, payment_confirmed: paymentConfirmed, documents_received: documentsReceived };
-    if (whatsappDate) updates.scheduled_date_whatsapp = whatsappDate;
-    if (clinicDate) updates.scheduled_date_clinic = clinicDate;
     if (status === 'in_progress' && request.status !== 'in_progress') updates.processing_start_date = new Date().toISOString();
     if (status === 'quote_sent' && request.status !== 'quote_sent') { updates.quote_sent = true; updates.quote_sent_at = new Date().toISOString().split('T')[0]; }
     if (status === 'completed' && request.status !== 'completed') { updates.closed_at = new Date().toISOString().split('T')[0]; updates.closed_reason = 'won'; }
@@ -57,14 +53,6 @@ export default function StatusActions({ request, contact, onUpdate, isUpdating }
         <div>
           <Label>שלב נוכחי</Label>
           <Input value={step} onChange={(e) => setStep(e.target.value)} placeholder="לדוגמה: questionnaire_sent" />
-        </div>
-        <div>
-          <Label>תור וואטסאפ</Label>
-          <Input type="datetime-local" value={whatsappDate} onChange={(e) => setWhatsappDate(e.target.value)} />
-        </div>
-        <div>
-          <Label>תור קליניקה</Label>
-          <Input type="datetime-local" value={clinicDate} onChange={(e) => setClinicDate(e.target.value)} />
         </div>
         <div className="flex flex-wrap items-center gap-4">
           <label className="flex items-center gap-2 text-sm">

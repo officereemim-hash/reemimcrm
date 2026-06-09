@@ -1,7 +1,7 @@
 import React from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { SRStatusBadge, SERVICE_TYPE_LABELS } from '@/components/StatusBadge';
-import { Calendar, Clock, FileCheck, CreditCard, ClipboardList } from 'lucide-react';
+import { Clock, FileCheck, CreditCard, ClipboardList } from 'lucide-react';
 
 const fmtDate = (d) => d ? new Date(d).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : null;
 
@@ -20,8 +20,6 @@ export default function RequestInfo({ request }) {
     { label: 'פולו-אפ', value: FOLLOWUP_LABELS[request.followup_stage] || '-' },
   ];
 
-  if (request.scheduled_date_whatsapp) items.push({ label: 'תור וואטסאפ', value: fmtDate(request.scheduled_date_whatsapp), icon: Calendar });
-  if (request.scheduled_date_clinic) items.push({ label: 'תור קליניקה', value: fmtDate(request.scheduled_date_clinic), icon: Calendar });
   if (request.processing_start_date) items.push({ label: 'תחילת טיפול', value: fmtDate(request.processing_start_date), icon: Clock });
   if (request.quote_sent) items.push({ label: 'הצעת מחיר', value: request.quote_sent_at ? `נשלחה ${request.quote_sent_at}` : '✓ נשלחה' });
 
