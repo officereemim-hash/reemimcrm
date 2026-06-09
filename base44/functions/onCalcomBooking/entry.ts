@@ -300,35 +300,9 @@ Deno.serve(async (req) => {
       metadata: JSON.stringify({ calcom_event_id: calcomId, slug, location: detected.location }),
     });
 
-    const templateKey = chooseTemplateKey(detected.location, finalServiceType);
-    const template = await getTemplate(base44, templateKey);
-    const zoomLink = meetingUrl || await getServiceUrl(base44, 'zoom_personal_room');
-    const wazeLink = detected.location === 'modiin' ? await getServiceUrl(base44, 'waze_modiin') : detected.location === 'petah_tikva_wednesday' ? await getServiceUrl(base44, 'waze_petah_tikva') : '';
-    const address = detected.location === 'modiin' ? 'המעיין 44, קומה 1, מתחם M.dot, מודיעין' : detected.location === 'petah_tikva_wednesday' ? 'השחם 1, פתח תקווה, בניין C, קומה 6' : '';
-    const message = fillTemplate(template, {
-      name: contact.full_name || attendee.name,
-      time: formatDateTime(startTime),
-      location: detected.location,
-      address,
-      waze_link: wazeLink,
-      zoom_link: zoomLink,
-      calendar_link: meetingData.calendar_link,
-      meeting_link: meetingData.calendar_link || zoomLink,
-    });
-
-    const whatsappSent = await sendWhatsApp(contact.phone || attendee.phone, message);
-    await base44.asServiceRole.entities.Communication.create({
-      contact_id: contact.id,
-      type: 'whatsapp',
-      direction: 'outbound',
-      content: message,
-      sent_by: 'system',
-      is_automated: true,
-      template_id: templateKey,
-      status: whatsappSent ? 'sent' : 'failed',
-    });
-
-    return Response.json({ success: true, meeting_id: meeting.id, service_request_id: serviceRequest.id, whatsapp_sent: whatsappSent });
+    // ההודעות נשלחות ע"י אוטומציית שינוי הסטטוס (autoServiceRequestUpdated) —
+    // עדכון הסטטוס ל-meeting_scheduled למעלה מפעיל את רצף ההודעות.
+    return Response.json({ success: true, meeting_id: meeting.id, service_request_id: serviceRequest.id, messages_via: 'status_automation' });
   } catch (error) {
     console.error('onCalcomBooking error:', error.message);
     return Response.json({ error: error.message }, { status: 500 });

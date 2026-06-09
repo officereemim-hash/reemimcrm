@@ -17,7 +17,12 @@ function fillTemplate(template, values) {
     .replaceAll('{caller_phone}', values.caller_phone || '')
     .replaceAll('{link}', values.link || '')
     .replaceAll('{reviews_link}', values.reviews_link || '')
-    .replaceAll('{qa_link}', values.qa_link || '');
+    .replaceAll('{qa_link}', values.qa_link || '')
+    .replaceAll('{zoom_link}', values.zoom_link || '')
+    .replaceAll('{waze_link}', values.waze_link || '')
+    .replaceAll('{meeting_link}', values.meeting_link || '')
+    .replaceAll('{questionnaire_link}', values.questionnaire_link || '')
+    .replaceAll('{quote_link}', values.quote_link || '');
 }
 
 Deno.serve(async (req) => {
@@ -181,6 +186,82 @@ Deno.serve(async (req) => {
         last_bot_interaction_at: new Date().toISOString(),
       });
       return Response.json({ ok: true, action: 'phone_meeting_scheduled', whatsapp_sent: sent });
+    }
+
+    if (statusChanged && newStatus === 'meeting_scheduled') {
+      const apptType = serviceRequest.last_appointment_type || '';
+
+      let templateKey = 'meeting_scheduled_zoom';
+      if (serviceType === 'divorce_split') templateKey = 'meeting_scheduled_divorce_split';
+      else if (serviceType === 'annual_service_call') templateKey = 'meeting_scheduled_annual_service';
+      else if (apptType === 'modiin') templateKey = 'meeting_scheduled_modiin';
+      else if (apptType.includes('petah_tikva')) templateKey = 'meeting_scheduled_petah_tikva';
+      else if (apptType === 'phone') templateKey = 'meeting_scheduled_phone';
+
+      // קישור הפגישה האמיתי (אם נשמר ע"י Cal.com), אחרת חדר הזום הקבוע
+      let meetingLink = '';
+      if (serviceRequest.meeting_id) {
+        const meetings = await base44.asServiceRole.entities.Meeting.filter({ id: serviceRequest.meeting_id });
+        meetingLink = meetings[0]?.calendar_link || '';
+      }
+      const zoomLink = meetingLink || await getUrl('external_link', 'zoom_personal_room');
+      const wazeLink = apptType === 'modiin'
+        ? await getUrl('external_link', 'waze_modiin')
+        : apptType.includes('petah_tikva')
+          ? await getUrl('external_link', 'waze_petah_tikva')
+          : '';
+
+      const values = {
+        name: contact.full_name || '',
+        time: serviceRequest.last_appointment_time_str || '',
+        zoom_link: zoomLink,
+        waze_link: wazeLink,
+        meeting_link: meetingLink || zoomLink,
+        caller_phone: await getSetting('coordinator_phone'),
+      };
+
+      // 1. אישור פגישה
+      const confirmTemplate = await getContent(templateKey);
+      const confirmMessage = fillTemplate(confirmTemplate || '{name}, הפגישה עם בשמת נקבעה בהצלחה במועד: {time}', values);
+      const confirmResult = await sendWhatsApp(confirmMessage);
+      await logCommunication(confirmMessage, templateKey, confirmResult);
+
+      // 2. סיכום פגישה + הצעת מחיר
+      const summaryTemplate = await getContent('meeting_summary_quote');
+      if (summaryTemplate) {
+        const quoteUrl = await getUrl('pdf', 'quote_' + serviceType);
+        await new Promise(resolve => setTimeout(resolve, 1200));
+        const summaryMessage = fillTemplate(summaryTemplate, { ...values, quote_link: quoteUrl });
+        const summaryResult = await sendWhatsApp(summaryMessage);
+        await logCommunication(summaryMessage, 'meeting_summary_quote', summaryResult);
+      }
+
+      // 3. שאלון שורנס
+      const questionnaireTemplate = await getContent('questionnaire_request');
+      if (questionnaireTemplate) {
+        const questionnaireUrl = await getUrl('questionnaire', 'shoranss_questionnaire');
+        await new Promise(resolve => setTimeout(resolve, 1200));
+        const questionnaireMessage = fillTemplate(questionnaireTemplate, { ...values, questionnaire_link: questionnaireUrl });
+        const questionnaireResult = await sendWhatsApp(questionnaireMessage);
+        await logCommunication(questionnaireMessage, 'questionnaire_request', questionnaireResult);
+      }
+
+      // 4. בקשת מסמכים
+      const docsTemplate = await getContent('documents_request');
+      if (docsTemplate) {
+        await new Promise(resolve => setTimeout(resolve, 1200));
+        const docsMessage = fillTemplate(docsTemplate, values);
+        const docsResult = await sendWhatsApp(docsMessage);
+        await logCommunication(docsMessage, 'documents_request', docsResult);
+      }
+
+      await base44.asServiceRole.entities.Contact.update(contact.id, {
+        bot_status: 'closed',
+        shoranss_questionnaire: 'sent',
+        last_bot_interaction_at: new Date().toISOString(),
+      });
+
+      return Response.json({ ok: true, action: 'meeting_scheduled_sequence', template: templateKey });
     }
 
     if (statusChanged && newStatus === 'awaiting_client_decision') {
