@@ -43,6 +43,8 @@
         "followup_active",
         "phone_meeting",
         "meeting_scheduled",
+        "meeting_scheduled_frontal",
+        "meeting_scheduled_zoom",
         "completed",
         "cancelled",
         "followup_closed",

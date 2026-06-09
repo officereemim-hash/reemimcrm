@@ -42,8 +42,9 @@ Deno.serve(async (req) => {
     const oldPending = previousServiceRequest.pending_bot_message;
     const statusChanged = newStatus && newStatus !== oldStatus;
     const pendingChanged = newPending && newPending !== oldPending;
+    const questionnaireFilled = serviceRequest.questionnaire_completed === true && previousServiceRequest.questionnaire_completed !== true;
 
-    if (!statusChanged && !pendingChanged) {
+    if (!statusChanged && !pendingChanged && !questionnaireFilled) {
       return Response.json({ ok: true, skipped: 'no_change' });
     }
 
@@ -188,12 +189,15 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, action: 'phone_meeting_scheduled', whatsapp_sent: sent });
     }
 
-    if (statusChanged && newStatus === 'meeting_scheduled') {
+    const meetingStatuses = ['meeting_scheduled', 'meeting_scheduled_frontal', 'meeting_scheduled_zoom'];
+    if (statusChanged && meetingStatuses.includes(newStatus)) {
       const apptType = serviceRequest.last_appointment_type || '';
 
       let templateKey = 'meeting_scheduled_zoom';
       if (serviceType === 'divorce_split') templateKey = 'meeting_scheduled_divorce_split';
       else if (serviceType === 'annual_service_call') templateKey = 'meeting_scheduled_annual_service';
+      else if (newStatus === 'meeting_scheduled_frontal') templateKey = apptType.includes('petah_tikva') ? 'meeting_scheduled_petah_tikva' : 'meeting_scheduled_modiin';
+      else if (newStatus === 'meeting_scheduled_zoom') templateKey = 'meeting_scheduled_zoom';
       else if (apptType === 'modiin') templateKey = 'meeting_scheduled_modiin';
       else if (apptType.includes('petah_tikva')) templateKey = 'meeting_scheduled_petah_tikva';
       else if (apptType === 'phone') templateKey = 'meeting_scheduled_phone';
@@ -205,9 +209,9 @@ Deno.serve(async (req) => {
         meetingLink = meetings[0]?.calendar_link || '';
       }
       const zoomLink = meetingLink || await getUrl('external_link', 'zoom_personal_room');
-      const wazeLink = apptType === 'modiin'
+      const wazeLink = templateKey === 'meeting_scheduled_modiin'
         ? await getUrl('external_link', 'waze_modiin')
-        : apptType.includes('petah_tikva')
+        : templateKey === 'meeting_scheduled_petah_tikva'
           ? await getUrl('external_link', 'waze_petah_tikva')
           : '';
 
@@ -246,17 +250,10 @@ Deno.serve(async (req) => {
         await logCommunication(questionnaireMessage, 'questionnaire_request', questionnaireResult);
       }
 
-      // 4. בקשת מסמכים
-      const docsTemplate = await getContent('documents_request');
-      if (docsTemplate) {
-        await new Promise(resolve => setTimeout(resolve, 1200));
-        const docsMessage = fillTemplate(docsTemplate, values);
-        const docsResult = await sendWhatsApp(docsMessage);
-        await logCommunication(docsMessage, 'documents_request', docsResult);
-      }
+      // עצירה כאן! בקשת המסמכים תישלח רק לאחר סימון questionnaire_completed=true
 
       await base44.asServiceRole.entities.Contact.update(contact.id, {
-        bot_status: 'closed',
+        bot_status: 'waiting_user_reply',
         shoranss_questionnaire: 'sent',
         last_bot_interaction_at: new Date().toISOString(),
       });
@@ -322,6 +319,35 @@ Deno.serve(async (req) => {
         last_bot_interaction_at: new Date().toISOString(),
       });
       return Response.json({ ok: true, action: 'route_c_not_interested', whatsapp_sent: sent });
+    }
+
+    if (questionnaireFilled) {
+      const values = { name: contact.full_name || '' };
+
+      // 1. תודה על מילוי השאלון
+      const thanksTemplate = await getContent('questionnaire_completed_thanks');
+      if (thanksTemplate) {
+        const thanksMessage = fillTemplate(thanksTemplate, values);
+        const thanksResult = await sendWhatsApp(thanksMessage);
+        await logCommunication(thanksMessage, 'questionnaire_completed_thanks', thanksResult);
+      }
+
+      // 2. בקשת מסמכים + לאן לשלוח
+      const docsTemplate = await getContent('documents_request');
+      if (docsTemplate) {
+        await new Promise(resolve => setTimeout(resolve, 1200));
+        const docsMessage = fillTemplate(docsTemplate, values);
+        const docsResult = await sendWhatsApp(docsMessage);
+        await logCommunication(docsMessage, 'documents_request', docsResult);
+      }
+
+      await base44.asServiceRole.entities.Contact.update(contact.id, {
+        bot_status: 'waiting_user_reply',
+        shoranss_questionnaire: 'filled',
+        last_bot_interaction_at: new Date().toISOString(),
+      });
+
+      return Response.json({ ok: true, action: 'questionnaire_completed_docs' });
     }
 
     return Response.json({ ok: true, skipped: 'no_matching_action' });

@@ -29,6 +29,8 @@ const srStatusMap = {
   followup_active:          { label: 'פולו-אפ פעיל',     bg: '#F8E8DC', text: '#B04020' },
   phone_meeting:            { label: 'נקבעה שיחה טלפונית', bg: '#E3F2FD', text: '#1565C0' },
   meeting_scheduled:        { label: 'פגישה נקבעה',      bg: '#D4F0E8', text: '#2A7A5A' },
+  meeting_scheduled_frontal: { label: 'נקבעה פגישה פרונטאלית', bg: '#D4F0E8', text: '#2A7A5A' },
+  meeting_scheduled_zoom:    { label: 'נקבעה פגישת זום',  bg: '#D4F0E8', text: '#2A7A5A' },
   completed:                { label: 'הושלם',            bg: '#D8EDD8', text: '#2A6A2A' },
   cancelled:                { label: 'בוטל',             bg: '#EBEBEB', text: '#555555' },
   followup_closed:          { label: 'פולו-אפ נסגר',     bg: '#D8D8D8', text: '#444444' },

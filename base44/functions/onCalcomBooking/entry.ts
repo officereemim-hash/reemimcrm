@@ -276,8 +276,12 @@ Deno.serve(async (req) => {
       return Response.json({ success: true, type: 'coordinator_call', meeting_id: meeting.id, status_updated: 'phone_meeting' });
     }
 
+    const meetingStatus = ['modiin', 'petah_tikva_wednesday'].includes(detected.location)
+      ? 'meeting_scheduled_frontal'
+      : 'meeting_scheduled_zoom';
+
     await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, {
-      status: 'meeting_scheduled',
+      status: meetingStatus,
       meeting_id: meeting.id,
       scheduled_date_clinic: ['modiin', 'petah_tikva_wednesday'].includes(detected.location) ? new Date(startTime).toISOString() : serviceRequest.scheduled_date_clinic,
       scheduled_date_whatsapp: detected.location === 'zoom' ? new Date(startTime).toISOString() : serviceRequest.scheduled_date_whatsapp,
@@ -296,7 +300,7 @@ Deno.serve(async (req) => {
       event_type: 'status_change',
       description: `פגישה נקבעה דרך Cal.com ל-${formatDateTime(startTime)}`,
       old_value: serviceRequest.status || '',
-      new_value: 'meeting_scheduled',
+      new_value: meetingStatus,
       metadata: JSON.stringify({ calcom_event_id: calcomId, slug, location: detected.location }),
     });
 
