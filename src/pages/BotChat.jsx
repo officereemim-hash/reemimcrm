@@ -28,6 +28,9 @@ export default function BotChat() {
   const contactLookupCacheRef = useRef(new Map());
   const convContactCacheRef = useRef(new Map());
   const messagesRef = useRef([]);
+  const isLoadingStatusRef = useRef(false);
+
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
 
   // Load hidden IDs from user profile
   useEffect(() => {
@@ -132,63 +135,68 @@ export default function BotChat() {
     return contact;
   }, [buildPhoneVariants]);
 
-  const loadStatusMessages = useCallback(async (conv, currentMessages) => {
-    const meta = conv?.metadata || {};
+  const loadStatusMessages = useCallback(async (conv) => {
+    if (!conv?.id || isLoadingStatusRef.current) return;
+    isLoadingStatusRef.current = true;
+    try {
+      // Resolve contact once per conversation and cache it
+      let contact = convContactCacheRef.current.get(conv.id) || null;
 
-    // 0) Per-conversation cache — avoids repeated lookups (rate limit protection)
-    let contact = convContactCacheRef.current.get(conv?.id) || null;
-
-    // 1) Deterministic link: ServiceRequest that points to this conversation
-    if (!contact && conv?.id) {
-      const linkedRequests = await base44.entities.ServiceRequest.filter({ conversation_id: conv.id });
-      if (linkedRequests[0]?.contact_id) {
-        const byId = await base44.entities.Contact.filter({ id: linkedRequests[0].contact_id });
-        contact = byId[0] || null;
+      if (!contact) {
+        // 1) Deterministic link: ServiceRequest that points to this conversation
+        const linkedRequests = await base44.entities.ServiceRequest.filter({ conversation_id: conv.id });
+        if (linkedRequests[0]?.contact_id) {
+          const byId = await base44.entities.Contact.filter({ id: linkedRequests[0].contact_id });
+          contact = byId[0] || null;
+        }
       }
-    }
 
-    // 2) Fallback: phone/email lookup
-    if (!contact) {
-      const phoneCandidate = meta.phone || extractPhoneFromMessages(currentMessages);
-      contact = await findContactForConversation({
-        contactId: meta.contact_id,
-        phone: phoneCandidate,
-        email: meta.email,
-      });
-    }
+      if (!contact) {
+        // 2) Fallback: phone/email lookup
+        const meta = conv.metadata || {};
+        const phoneCandidate = meta.phone || extractPhoneFromMessages(messagesRef.current);
+        contact = await findContactForConversation({
+          contactId: meta.contact_id,
+          phone: phoneCandidate,
+          email: meta.email,
+        });
+      }
 
-    if (!contact) {
-      setStatusMessages([]);
-      return;
-    }
-    if (conv?.id) convContactCacheRef.current.set(conv.id, contact);
+      if (!contact) {
+        setStatusMessages([]);
+        return;
+      }
+      convContactCacheRef.current.set(conv.id, contact);
 
-    const communications = await base44.entities.Communication.filter({ contact_id: contact.id, type: 'whatsapp', direction: 'outbound' }, '-created_date', 20);
-    const startedAt = conv?.created_date ? new Date(conv.created_date).getTime() : 0;
-    const synced = communications
-      .filter(item => item.is_automated && item.content && new Date(item.created_date).getTime() >= startedAt)
-      .map(item => ({
-        id: `status-${item.id}`,
-        role: 'assistant',
-        content: item.content,
-        created_date: item.created_date,
-        source: 'status_automation',
-        status: item.status,
-      }))
-      .reverse();
-    setStatusMessages(synced);
+      const communications = await base44.entities.Communication.filter({ contact_id: contact.id, type: 'whatsapp', direction: 'outbound' }, '-created_date', 20);
+      const startedAt = conv?.created_date ? new Date(conv.created_date).getTime() : 0;
+      const synced = communications
+        .filter(item => item.is_automated && item.content && new Date(item.created_date).getTime() >= startedAt)
+        .map(item => ({
+          id: `status-${item.id}`,
+          role: 'assistant',
+          content: item.content,
+          created_date: item.created_date,
+          source: 'status_automation',
+          status: item.status,
+        }))
+        .reverse();
+      setStatusMessages(synced);
+    } finally {
+      isLoadingStatusRef.current = false;
+    }
   }, [extractPhoneFromMessages, findContactForConversation]);
 
   useEffect(() => {
-    messagesRef.current = messages;
-  }, [messages]);
-
-  useEffect(() => {
     if (!activeConv) return;
-    const refresh = () => loadStatusMessages(activeConv, messagesRef.current);
-    refresh();
+    loadStatusMessages(activeConv);
+    const refresh = () => loadStatusMessages(activeConv);
+    const unsubscribe = base44.entities.Communication.subscribe(refresh);
     const timer = setInterval(refresh, 10000);
-    return () => clearInterval(timer);
+    return () => {
+      unsubscribe();
+      clearInterval(timer);
+    };
   }, [activeConv, loadStatusMessages]);
 
   const agentMessagesWithContent = messages.filter(message =>
