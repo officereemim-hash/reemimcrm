@@ -147,7 +147,12 @@ export default function BotChat() {
     isLoadingStatusRef.current = true;
     try {
       // All lookup + filtering logic runs server-side with full permissions
-      const res = await base44.functions.invoke('getBotChatStatusMessages', { conversation_id: conv.id });
+      const res = await base44.functions.invoke('getBotChatStatusMessages', {
+        conversation_id: conv.id,
+        phone: conv.metadata?.phone || '',
+        email: conv.metadata?.email || '',
+        started_at: conv.created_date || '',
+      });
       setStatusMessages(res.data?.messages || []);
     } catch (err) {
       console.warn('טעינת הודעות סטטוס נכשלה:', err.message);
