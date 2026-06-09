@@ -337,9 +337,21 @@ export default function BotChat() {
                 בחר שיחה מהרשימה או צור שיחה חדשה 💬
               </div>
             ) : (
-              displayMessages
-                .filter(m => m.role === 'user' || m.role === 'assistant')
-                .map((msg, i) => <MessageBubble key={msg.id || i} message={msg} />)
+              <>
+                {displayMessages
+                  .filter(m => m.role === 'user' || m.role === 'assistant')
+                  .map((msg, i) => <MessageBubble key={msg.id || i} message={msg} />)}
+                {agentMessagesWithContent[agentMessagesWithContent.length - 1]?.role === 'user' && (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground pr-2">
+                    <span className="flex gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:150ms]" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:300ms]" />
+                    </span>
+                    הבוט מקליד...
+                  </div>
+                )}
+              </>
             )}
             <div ref={messagesEndRef} />
           </div>
