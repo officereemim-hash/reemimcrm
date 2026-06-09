@@ -120,15 +120,20 @@ Deno.serve(async (req) => {
     async function addMessageToConversation(content, result) {
       if (!content || result?.status === 'skipped') return;
 
-      const conversationId = await resolveConversationId();
-      if (!conversationId) return;
+      try {
+        const conversationId = await resolveConversationId();
+        if (!conversationId) return;
 
-      const conversation = await base44.asServiceRole.agents.getConversation(conversationId);
-      await base44.asServiceRole.agents.addMessage(conversation, {
-        role: 'assistant',
-        content,
-      });
-      console.log('message_added_to_conversation');
+        const conversation = await base44.asServiceRole.agents.getConversation(conversationId);
+        await base44.asServiceRole.agents.addMessage(conversation, {
+          role: 'assistant',
+          content,
+        });
+        console.log('message_added_to_conversation');
+      } catch (err) {
+        console.warn('conversation_write_failed:', err.message);
+        // Communication record already saved — no data loss
+      }
     }
 
     async function logCommunication(content, templateId, result) {
