@@ -97,6 +97,16 @@ Deno.serve(async (req) => {
       };
     }
 
+    async function addMessageToConversation(content, result) {
+      if (!serviceRequest.conversation_id || !content || result?.status === 'skipped') return;
+
+      const conversation = await base44.asServiceRole.agents.getConversation(serviceRequest.conversation_id);
+      await base44.asServiceRole.agents.addMessage(conversation, {
+        role: 'assistant',
+        content,
+      });
+    }
+
     async function logCommunication(content, templateId, result) {
       await base44.asServiceRole.entities.Communication.create({
         contact_id: serviceRequest.contact_id,
@@ -109,6 +119,7 @@ Deno.serve(async (req) => {
         status: result?.status || 'skipped',
         error_detail: result?.errorDetail || '',
       });
+      await addMessageToConversation(content, result);
     }
 
     if (pendingChanged && newPending === 'send_basmat_schedule') {
