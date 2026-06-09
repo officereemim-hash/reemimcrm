@@ -36,6 +36,7 @@ export default function BotChat() {
   const convContactCacheRef = useRef(new Map());
   const messagesRef = useRef([]);
   const isLoadingStatusRef = useRef(false);
+  const injectedRef = useRef(new Set());
 
   useEffect(() => { messagesRef.current = messages; }, [messages]);
 
@@ -153,7 +154,24 @@ export default function BotChat() {
         email: conv.metadata?.email || '',
         started_at: conv.created_date || '',
       });
-      setStatusMessages(res.data?.messages || []);
+      const incoming = res.data?.messages || [];
+      setStatusMessages(incoming);
+
+      // הזרקת הודעות סטטוס לתוך השיחה עצמה — כך הסדר נשמר והבוט מכיר אותן
+      // (ההזרקה מהשרת נחסמת ב-403 על שיחות שנוצרו ע"י המשתמש, לכן היא מתבצעת כאן)
+      for (const m of incoming) {
+        const content = String(m.content || '').trim();
+        if (!content) continue;
+        const injectKey = `${conv.id}::${content}`;
+        if (injectedRef.current.has(injectKey)) continue;
+        const alreadyInConv = (messagesRef.current || []).some(
+          x => String(x.content || '').trim() === content
+        );
+        injectedRef.current.add(injectKey);
+        if (!alreadyInConv) {
+          await base44.agents.addMessage(conv, { role: 'assistant', content });
+        }
+      }
     } catch (err) {
       console.warn('טעינת הודעות סטטוס נכשלה:', err.message);
     } finally {
@@ -181,18 +199,21 @@ export default function BotChat() {
     agentMessagesWithContent.map(message => String(message.content || '').trim())
   );
 
-  const statusMessagesToShow = statusMessages.filter(message => {
-    const content = String(message.content || '').trim();
-    return content && !agentContentSet.has(content);
-  });
+  // Status messages already injected into the conversation are hidden here
+  // (agentContentSet) — the overlay shows only ones not yet injected, deduped by content.
+  const statusMessagesToShow = statusMessages
+    .filter(message => {
+      const content = String(message.content || '').trim();
+      return content && !agentContentSet.has(content);
+    })
+    .filter((message, index, self) =>
+      index === self.findIndex(m => String(m.content || '').trim() === String(message.content || '').trim())
+    );
 
-  // Agent messages keep their natural order; automation (status) messages are
-  // always appended AFTER them, sorted chronologically among themselves —
-  // timestamps between the two sources are not reliably comparable.
   const displayMessages = [
     ...agentMessagesWithContent,
     ...[...statusMessagesToShow].sort((a, b) => toUtcTime(a.created_date) - toUtcTime(b.created_date)),
-  ].filter((message, index, self) => index === self.findIndex(m => (m.id || m.content) === (message.id || message.content)));
+  ];
 
   // Auto-scroll
   useEffect(() => {
