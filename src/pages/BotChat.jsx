@@ -181,14 +181,13 @@ export default function BotChat() {
     return content && !agentContentSet.has(content);
   });
 
-  const displayMessages = [...agentMessagesWithContent, ...statusMessagesToShow]
-    .filter((message, index, self) => index === self.findIndex(m => (m.id || m.content) === (message.id || message.content)))
-    .map((message, index) => ({
-      ...message,
-      _sortTime: message.created_date ? toUtcTime(message.created_date) : Date.now() + index,
-      _sortOrder: index,
-    }))
-    .sort((a, b) => (a._sortTime - b._sortTime) || (a._sortOrder - b._sortOrder));
+  // Agent messages keep their natural order; automation (status) messages are
+  // always appended AFTER them, sorted chronologically among themselves —
+  // timestamps between the two sources are not reliably comparable.
+  const displayMessages = [
+    ...agentMessagesWithContent,
+    ...[...statusMessagesToShow].sort((a, b) => toUtcTime(a.created_date) - toUtcTime(b.created_date)),
+  ].filter((message, index, self) => index === self.findIndex(m => (m.id || m.content) === (message.id || message.content)));
 
   // Auto-scroll
   useEffect(() => {
