@@ -26,6 +26,8 @@ export default function BotChat() {
   const [isLoadingList, setIsLoadingList] = useState(true);
   const messagesEndRef = useRef(null);
   const contactLookupCacheRef = useRef(new Map());
+  const convContactCacheRef = useRef(new Map());
+  const messagesRef = useRef([]);
 
   // Load hidden IDs from user profile
   useEffect(() => {
@@ -133,9 +135,11 @@ export default function BotChat() {
   const loadStatusMessages = useCallback(async (conv, currentMessages) => {
     const meta = conv?.metadata || {};
 
+    // 0) Per-conversation cache — avoids repeated lookups (rate limit protection)
+    let contact = convContactCacheRef.current.get(conv?.id) || null;
+
     // 1) Deterministic link: ServiceRequest that points to this conversation
-    let contact = null;
-    if (conv?.id) {
+    if (!contact && conv?.id) {
       const linkedRequests = await base44.entities.ServiceRequest.filter({ conversation_id: conv.id });
       if (linkedRequests[0]?.contact_id) {
         const byId = await base44.entities.Contact.filter({ id: linkedRequests[0].contact_id });
@@ -157,6 +161,7 @@ export default function BotChat() {
       setStatusMessages([]);
       return;
     }
+    if (conv?.id) convContactCacheRef.current.set(conv.id, contact);
 
     const communications = await base44.entities.Communication.filter({ contact_id: contact.id, type: 'whatsapp', direction: 'outbound' }, '-created_date', 20);
     const startedAt = conv?.created_date ? new Date(conv.created_date).getTime() : 0;
@@ -175,19 +180,16 @@ export default function BotChat() {
   }, [extractPhoneFromMessages, findContactForConversation]);
 
   useEffect(() => {
-    if (activeConv) loadStatusMessages(activeConv, messages);
-  }, [activeConv, messages, loadStatusMessages]);
+    messagesRef.current = messages;
+  }, [messages]);
 
   useEffect(() => {
     if (!activeConv) return;
-    const refresh = () => loadStatusMessages(activeConv, messages);
-    const unsubscribe = base44.entities.Communication.subscribe(refresh);
-    const timer = setInterval(refresh, 5000);
-    return () => {
-      unsubscribe();
-      clearInterval(timer);
-    };
-  }, [activeConv, messages, loadStatusMessages]);
+    const refresh = () => loadStatusMessages(activeConv, messagesRef.current);
+    refresh();
+    const timer = setInterval(refresh, 10000);
+    return () => clearInterval(timer);
+  }, [activeConv, loadStatusMessages]);
 
   const agentMessagesWithContent = messages.filter(message =>
     (message.role === 'user' || message.role === 'assistant') && String(message.content || '').trim()
