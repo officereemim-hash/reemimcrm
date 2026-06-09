@@ -11,6 +11,13 @@ import { Button } from '@/components/ui/button';
 
 const AGENT_NAME = 'bot_reemim';
 
+// Naive UTC timestamps from the API must not be parsed as local time
+const toUtcTime = (value) => {
+  if (!value) return 0;
+  const s = String(value);
+  return new Date(/[zZ]|[+\-]\d{2}:?\d{2}$/.test(s) ? s : `${s}Z`).getTime();
+};
+
 export default function BotChat() {
   const [conversations, setConversations] = useState([]);
   const [hiddenIds, setHiddenIds] = useState([]);
@@ -139,53 +146,15 @@ export default function BotChat() {
     if (!conv?.id || isLoadingStatusRef.current) return;
     isLoadingStatusRef.current = true;
     try {
-      // Resolve contact once per conversation and cache it
-      let contact = convContactCacheRef.current.get(conv.id) || null;
-
-      if (!contact) {
-        // 1) Deterministic link: ServiceRequest that points to this conversation
-        const linkedRequests = await base44.entities.ServiceRequest.filter({ conversation_id: conv.id });
-        if (linkedRequests[0]?.contact_id) {
-          const byId = await base44.entities.Contact.filter({ id: linkedRequests[0].contact_id });
-          contact = byId[0] || null;
-        }
-      }
-
-      if (!contact) {
-        // 2) Fallback: phone/email lookup
-        const meta = conv.metadata || {};
-        const phoneCandidate = meta.phone || extractPhoneFromMessages(messagesRef.current);
-        contact = await findContactForConversation({
-          contactId: meta.contact_id,
-          phone: phoneCandidate,
-          email: meta.email,
-        });
-      }
-
-      if (!contact) {
-        setStatusMessages([]);
-        return;
-      }
-      convContactCacheRef.current.set(conv.id, contact);
-
-      const communications = await base44.entities.Communication.filter({ contact_id: contact.id, type: 'whatsapp', direction: 'outbound' }, '-created_date', 20);
-      const startedAt = conv?.created_date ? new Date(conv.created_date).getTime() : 0;
-      const synced = communications
-        .filter(item => item.is_automated && item.content && new Date(item.created_date).getTime() >= startedAt)
-        .map(item => ({
-          id: `status-${item.id}`,
-          role: 'assistant',
-          content: item.content,
-          created_date: item.created_date,
-          source: 'status_automation',
-          status: item.status,
-        }))
-        .reverse();
-      setStatusMessages(synced);
+      // All lookup + filtering logic runs server-side with full permissions
+      const res = await base44.functions.invoke('getBotChatStatusMessages', { conversation_id: conv.id });
+      setStatusMessages(res.data?.messages || []);
+    } catch (err) {
+      console.warn('טעינת הודעות סטטוס נכשלה:', err.message);
     } finally {
       isLoadingStatusRef.current = false;
     }
-  }, [extractPhoneFromMessages, findContactForConversation]);
+  }, []);
 
   useEffect(() => {
     if (!activeConv) return;
@@ -216,7 +185,7 @@ export default function BotChat() {
     .filter((message, index, self) => index === self.findIndex(m => (m.id || m.content) === (message.id || message.content)))
     .map((message, index) => ({
       ...message,
-      _sortTime: message.created_date ? new Date(message.created_date).getTime() : Date.now() + index,
+      _sortTime: message.created_date ? toUtcTime(message.created_date) : Date.now() + index,
       _sortOrder: index,
     }))
     .sort((a, b) => (a._sortTime - b._sortTime) || (a._sortOrder - b._sortOrder));
