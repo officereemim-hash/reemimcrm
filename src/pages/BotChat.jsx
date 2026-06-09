@@ -4,6 +4,10 @@ import { Bot } from 'lucide-react';
 import MessageBubble from '@/components/bot-chat/MessageBubble';
 import ChatInput from '@/components/bot-chat/ChatInput';
 import BotConversationsList from '@/components/bot-chat/BotConversationsList';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
 
 const AGENT_NAME = 'bot_reemim';
 
@@ -15,6 +19,9 @@ export default function BotChat() {
   const [activeConv, setActiveConv] = useState(null);
   const [messages, setMessages] = useState([]);
   const [statusMessages, setStatusMessages] = useState([]);
+  const [showNewConvDialog, setShowNewConvDialog] = useState(false);
+  const [newConvPhone, setNewConvPhone] = useState('');
+  const [newConvEmail, setNewConvEmail] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [isLoadingList, setIsLoadingList] = useState(true);
   const messagesEndRef = useRef(null);
@@ -68,18 +75,48 @@ export default function BotChat() {
     return match ? match[0].replace(/[\s-]/g, '') : '';
   }, []);
 
-  const loadStatusMessages = useCallback(async (conv, currentMessages) => {
-    const phone = conv?.metadata?.phone || extractPhoneFromMessages(currentMessages);
-    if (!phone) {
-      setStatusMessages([]);
-      return;
+  const buildPhoneVariants = useCallback((phone) => {
+    const raw = String(phone || '').trim().replace(/[\s-]/g, '').replace(/^\+/, '');
+    if (!raw) return [];
+
+    const normalized = raw.startsWith('0') ? `972${raw.substring(1)}` : raw;
+    const local = normalized.startsWith('972') ? `0${normalized.substring(3)}` : raw;
+
+    return [...new Set([raw, normalized, `+${normalized}`, local].filter(Boolean))];
+  }, []);
+
+  const findContactForConversation = useCallback(async ({ contactId, phone, email }) => {
+    const isValidObjectId = (id) => /^[a-f0-9]{24}$/i.test(id || '');
+
+    if (isValidObjectId(contactId)) {
+      const byId = await base44.entities.Contact.filter({ id: contactId });
+      if (byId[0]) return byId[0];
     }
 
-    const normalizedPhone = phone.startsWith('0') ? `972${phone.substring(1)}` : phone.replace(/^\+/, '');
-    const contactsByOriginal = await base44.entities.Contact.filter({ phone });
-    const contactsByNormalized = contactsByOriginal.length ? [] : await base44.entities.Contact.filter({ phone: normalizedPhone });
-    const contactsByPlus = contactsByOriginal.length || contactsByNormalized.length ? [] : await base44.entities.Contact.filter({ phone: `+${normalizedPhone}` });
-    const contact = contactsByOriginal[0] || contactsByNormalized[0] || contactsByPlus[0];
+    const phoneVariants = buildPhoneVariants(phone);
+    for (const variant of phoneVariants) {
+      const found = await base44.entities.Contact.filter({ phone: variant });
+      if (found[0]) return found[0];
+    }
+
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    if (normalizedEmail) {
+      const byEmail = await base44.entities.Contact.filter({ email: normalizedEmail });
+      if (byEmail[0]) return byEmail[0];
+    }
+
+    return null;
+  }, [buildPhoneVariants]);
+
+  const loadStatusMessages = useCallback(async (conv, currentMessages) => {
+    const meta = conv?.metadata || {};
+    const phoneCandidate = meta.phone || extractPhoneFromMessages(currentMessages);
+    const contact = await findContactForConversation({
+      contactId: meta.contact_id,
+      phone: phoneCandidate,
+      email: meta.email,
+    });
+
     if (!contact) {
       setStatusMessages([]);
       return;
@@ -99,7 +136,7 @@ export default function BotChat() {
       }))
       .reverse();
     setStatusMessages(synced);
-  }, [extractPhoneFromMessages]);
+  }, [extractPhoneFromMessages, findContactForConversation]);
 
   useEffect(() => {
     if (activeConv) loadStatusMessages(activeConv, messages);
@@ -126,16 +163,30 @@ export default function BotChat() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [displayMessages]);
 
-  const handleNewConversation = async () => {
+  const openNewConversation = () => {
+    setNewConvPhone('');
+    setNewConvEmail('');
+    setShowNewConvDialog(true);
+  };
+
+  const confirmNewConversation = async () => {
+    const phone = newConvPhone.trim();
+    const email = newConvEmail.trim().toLowerCase();
+    const contact = await findContactForConversation({ phone, email });
+
     const conv = await base44.agents.createConversation({
       agent_name: AGENT_NAME,
       metadata: {
         name: `בדיקה ${new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}`,
         source: 'test',
+        phone,
+        email,
+        ...(contact?.id ? { contact_id: contact.id } : {}),
       },
     });
     setConversations(prev => [conv, ...prev]);
     setActiveConvId(conv.id);
+    setShowNewConvDialog(false);
   };
 
   const handleHide = async (convId) => {
@@ -181,7 +232,7 @@ export default function BotChat() {
             }))}
             activeId={activeConvId}
             onSelect={setActiveConvId}
-            onNew={handleNewConversation}
+            onNew={openNewConversation}
             onDelete={handleHide}
             loading={isLoadingList}
           />
@@ -199,7 +250,7 @@ export default function BotChat() {
                 {activeConv ? activeConv.metadata?.name || 'בדיקה' : 'בחר שיחה או צור שיחה חדשה'}
               </div>
             </div>
-            <button onClick={handleNewConversation} className="md:hidden text-xs text-primary underline">
+            <button onClick={openNewConversation} className="md:hidden text-xs text-primary underline">
               שיחה חדשה
             </button>
           </div>
@@ -220,6 +271,46 @@ export default function BotChat() {
           <ChatInput onSend={handleSend} disabled={!activeConvId || isSending} />
         </div>
       </div>
+
+      <Dialog open={showNewConvDialog} onOpenChange={setShowNewConvDialog}>
+        <DialogContent dir="rtl">
+          <DialogHeader>
+            <DialogTitle>שיחת בדיקה חדשה</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 mt-2">
+            <p className="text-xs text-muted-foreground">
+              הזיני טלפון או מייל של איש הקשר — אחד מהם מספיק כדי שהודעות הסטטוס יופיעו בצ׳אט.
+            </p>
+            <div className="space-y-1">
+              <Label>טלפון</Label>
+              <Input
+                value={newConvPhone}
+                onChange={(e) => setNewConvPhone(e.target.value)}
+                placeholder="לדוגמה: 0544535688"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>מייל</Label>
+              <Input
+                value={newConvEmail}
+                onChange={(e) => setNewConvEmail(e.target.value)}
+                placeholder="name@example.com"
+              />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setShowNewConvDialog(false)}>
+                ביטול
+              </Button>
+              <Button
+                onClick={confirmNewConversation}
+                disabled={!newConvPhone.trim() && !newConvEmail.trim()}
+              >
+                צור שיחה
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
