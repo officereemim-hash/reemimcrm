@@ -349,6 +349,106 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ===== FP-WaitCoordinator: הלקוח בחר להמתין לנציגה =====
+    const waitAnswers = ['אמתין', 'אמתין לנציגה', 'אחכה לנציגה', 'שתחזרו אליי', 'שתחזרו אלי', 'תחזרו אליי', 'תחזרו אלי', 'נציגה'];
+    if (contact && serviceRequest && waitAnswers.includes(normalizeAnswer(text))) {
+      await base44.asServiceRole.entities.Contact.update(contact.id, { bot_status: 'waiting_agent' });
+      const ackMessage = 'מעולה! נציגה תחזור אלייך בהקדם 🙏';
+      const sent = await sendWhatsApp(chatId, ackMessage, botEnabled);
+      await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
+      await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_wait`, phone, ackMessage, chatId, conversationId, outgoingStatus);
+      try {
+        await base44.asServiceRole.agents.addMessage(conversation, { role: 'user', content: text });
+        await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: ackMessage });
+      } catch (error) {}
+      return Response.json({ ok: true, fast_path: 'fp_wait_coordinator' });
+    }
+
+    // ===== FP-MeetingChoice: בחירת מיקום פגישה אחרי הצעת מחיר (quote_sent) =====
+    if (contact && serviceRequest && serviceRequest.status === 'quote_sent') {
+      const locationMap = {
+        'זום': 'zoom', 'zoom': 'zoom', 'בזום': 'zoom',
+        'מודיעין': 'modiin', 'במודיעין': 'modiin',
+        'פתח תקווה': 'petah_tikva_wednesday', 'פתח-תקווה': 'petah_tikva_wednesday', 'פת': 'petah_tikva_wednesday', 'בפתח תקווה': 'petah_tikva_wednesday',
+        'טלפון': 'phone', 'שיחת טלפון': 'phone', 'בטלפון': 'phone', 'שיחה טלפונית': 'phone',
+      };
+      const chosenLocation = locationMap[normalizeAnswer(text)];
+      if (chosenLocation) {
+        await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { last_appointment_type: chosenLocation });
+
+        let calendarQuery;
+        if (serviceRequest.service_type === 'divorce_split') {
+          calendarQuery = { service_type: 'divorce_split', content_type: 'calendar_link', sub_type: 'divorce_calendar' };
+        } else if (serviceRequest.service_type === 'annual_service_call') {
+          calendarQuery = { service_type: 'annual_service_call', content_type: 'calendar_link', sub_type: 'annual_service_calendar' };
+        } else {
+          const subTypeMap = {
+            zoom: 'zoom_calendar',
+            modiin: 'modiin_calendar',
+            petah_tikva_wednesday: 'petah_tikva_calendar',
+            phone: 'phone_calendar',
+          };
+          calendarQuery = { service_type: 'general', content_type: 'calendar_link', sub_type: subTypeMap[chosenLocation] };
+        }
+
+        const calendarUrl = await getServiceContentUrl(base44, calendarQuery);
+        if (calendarUrl) {
+          const sent = await sendWhatsApp(chatId, calendarUrl, botEnabled);
+          await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
+          await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_meeting`, phone, calendarUrl, chatId, conversationId, outgoingStatus);
+          try {
+            await base44.asServiceRole.agents.addMessage(conversation, { role: 'user', content: text });
+            await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: calendarUrl });
+          } catch (error) {}
+          return Response.json({ ok: true, fast_path: 'fp_meeting_choice', location: chosenLocation });
+        }
+      }
+    }
+
+    // ===== FP-Kavati: "קבעתי" — אישור קצר בלבד (היצירה בפועל דרך Cal.com webhook) =====
+    if (normalizeAnswer(text) === 'קבעתי') {
+      const confirmedMessage = await getBotContent(base44, 'appointment_confirmed');
+      if (confirmedMessage) {
+        const sent = await sendWhatsApp(chatId, confirmedMessage, botEnabled);
+        await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
+        await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_kavati`, phone, confirmedMessage, chatId, conversationId, outgoingStatus);
+        try {
+          await base44.asServiceRole.agents.addMessage(conversation, { role: 'user', content: text });
+          await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: confirmedMessage });
+        } catch (error) {}
+        return Response.json({ ok: true, fast_path: 'fp_appointment_confirmed' });
+      }
+    }
+
+    // ===== FP-DocsSent: "שלחתי" אחרי מילוי שאלון — אישור קבלת מסמכים =====
+    if (serviceRequest && serviceRequest.questionnaire_completed && !serviceRequest.documents_received && normalizeAnswer(text).startsWith('שלחתי')) {
+      const docsAckMessage = 'תודה! המסמכים התקבלו ויועברו לבדיקה 🙏';
+      const sent = await sendWhatsApp(chatId, docsAckMessage, botEnabled);
+      await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { documents_received: true, documents_status: 'complete' });
+      await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
+      await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_docs`, phone, docsAckMessage, chatId, conversationId, outgoingStatus);
+      try {
+        await base44.asServiceRole.agents.addMessage(conversation, { role: 'user', content: text });
+        await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: docsAckMessage });
+      } catch (error) {}
+      return Response.json({ ok: true, fast_path: 'fp_documents_received' });
+    }
+
+    // ===== FP-Polite: תגובת נימוס קצרה במצב המתנה — מענה קצר בלי סוכן =====
+    const politeAnswers = ['תודה', 'תודה רבה', 'מעולה', 'אחלה', 'סבבה', 'יופי', 'מושלם', 'בסדר', 'בסדר גמור', '👍', '🙏', '❤️', '😊'];
+    const waitingStatuses = ['phone_meeting', 'meeting_scheduled', 'meeting_scheduled_frontal', 'meeting_scheduled_zoom'];
+    if (serviceRequest && waitingStatuses.includes(serviceRequest.status) && politeAnswers.includes(normalizeAnswer(text))) {
+      const politeReply = 'בשמחה 🙂';
+      const sent = await sendWhatsApp(chatId, politeReply, botEnabled);
+      await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
+      await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_polite`, phone, politeReply, chatId, conversationId, outgoingStatus);
+      try {
+        await base44.asServiceRole.agents.addMessage(conversation, { role: 'user', content: text });
+        await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: politeReply });
+      } catch (error) {}
+      return Response.json({ ok: true, fast_path: 'fp_polite_ack' });
+    }
+
     const goodbyeAnswers = ['סיום', 'סיום שיחה', 'ביי', 'להתראות', 'תודה סיום', 'סיימנו', 'זהו'];
     if (goodbyeAnswers.includes(normalizeAnswer(text))) {
       const goodbyeMessage = await getBotContent(base44, 'goodbye') || 'שמחנו לשוחח! שיהיה לך יום נפלא 🙏';
