@@ -231,34 +231,14 @@ export default function BotChat() {
     const email = newConvEmail.trim().toLowerCase();
     const contact = await findContactForConversation({ phone, email });
 
-    const conv = await base44.agents.createConversation({
-      agent_name: AGENT_NAME,
-      metadata: {
-        name: `בדיקה ${new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}`,
-        source: 'test',
-        phone,
-        email,
-        ...(contact?.id ? { contact_id: contact.id } : {}),
-      },
+    // השיחה נוצרת בשרת כדי שה-webhook יוכל לשקף אליה הודעות (שיחה מהדפדפן חסומה ב-403)
+    const res = await base44.functions.invoke('createSimConversation', {
+      phone,
+      email,
+      ...(contact?.id ? { contact_id: contact.id } : {}),
     });
-
-    const cachePhone = normalizeCachePhone(phone || contact?.phone);
-    if (cachePhone) {
-      const key = `phone_conv_${cachePhone}`;
-      const existing = await base44.entities.SystemSetting.filter({ key });
-      const payload = {
-        category: 'flow',
-        key,
-        label: `שיחת בוט לטלפון ${cachePhone}`,
-        value: conv.id,
-        value_type: 'text',
-      };
-      if (existing[0]) {
-        await base44.entities.SystemSetting.update(existing[0].id, payload);
-      } else {
-        await base44.entities.SystemSetting.create(payload);
-      }
-    }
+    const conv = res.data?.conversation;
+    if (!conv) return;
 
     setConversations(prev => [conv, ...prev]);
     setActiveConvId(conv.id);

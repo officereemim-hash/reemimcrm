@@ -1,0 +1,106 @@
+{
+  "name": "Campaign",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "\u05e9\u05dd \u05d4\u05e7\u05de\u05e4\u05d9\u05d9\u05df / \u05e0\u05d5\u05e9\u05d0"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "newsletter",
+        "birthday",
+        "google_review",
+        "followup_after_meeting",
+        "annual_reminder",
+        "custom"
+      ],
+      "default": "newsletter",
+      "description": "\u05e1\u05d5\u05d2 \u05d4\u05d3\u05d9\u05d5\u05d5\u05e8"
+    },
+    "channel": {
+      "type": "string",
+      "enum": [
+        "email",
+        "whatsapp",
+        "both"
+      ],
+      "default": "email"
+    },
+    "audience": {
+      "type": "string",
+      "description": "\u05e7\u05d4\u05dc \u05d4\u05d9\u05e2\u05d3 (all_active / completed / in_progress / new_leads / single)"
+    },
+    "subject": {
+      "type": "string",
+      "description": "\u05e0\u05d5\u05e9\u05d0 \u05d4\u05de\u05d9\u05d9\u05dc"
+    },
+    "recipients_count": {
+      "type": "number",
+      "default": 0,
+      "description": "\u05db\u05de\u05d5\u05ea \u05e0\u05de\u05e2\u05e0\u05d9\u05dd \u05d1\u05e7\u05de\u05e4\u05d9\u05d9\u05df"
+    },
+    "email_sent": {
+      "type": "number",
+      "default": 0
+    },
+    "email_failed": {
+      "type": "number",
+      "default": 0
+    },
+    "whatsapp_sent": {
+      "type": "number",
+      "default": 0
+    },
+    "whatsapp_failed": {
+      "type": "number",
+      "default": 0
+    },
+    "opens_count": {
+      "type": "number",
+      "default": 0,
+      "description": "\u05e4\u05ea\u05d9\u05d7\u05d5\u05ea (\u05de-Brevo webhook)"
+    },
+    "clicks_count": {
+      "type": "number",
+      "default": 0,
+      "description": "\u05e7\u05dc\u05d9\u05e7\u05d9\u05dd (\u05de-Brevo webhook)"
+    },
+    "bounces_count": {
+      "type": "number",
+      "default": 0,
+      "description": "\u05de\u05d9\u05d9\u05dc\u05d9\u05dd \u05e9\u05d7\u05d6\u05e8\u05d5 (bounce)"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "in_progress",
+        "completed",
+        "partial",
+        "failed"
+      ],
+      "default": "in_progress"
+    },
+    "error_message": {
+      "type": "string"
+    },
+    "content_snapshot": {
+      "type": "string",
+      "description": "\u05ea\u05d5\u05db\u05df \u05d4\u05d4\u05d5\u05d3\u05e2\u05d4 \u05db\u05e4\u05d9 \u05e9\u05e0\u05e9\u05dc\u05d7 (\u05dc\u05ea\u05d9\u05e2\u05d5\u05d3 \u05d5\u05e9\u05dc\u05d9\u05d7\u05d4 \u05d7\u05d5\u05d6\u05e8\u05ea)"
+    },
+    "sent_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "sent_by": {
+      "type": "string",
+      "description": "\u05de\u05d9 \u05e9\u05dc\u05d7"
+    }
+  },
+  "required": [
+    "name",
+    "type",
+    "channel"
+  ]
+}
