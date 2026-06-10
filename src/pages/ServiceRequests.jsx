@@ -20,7 +20,7 @@ const SR_STATUS_COLUMNS = [
   { key: 'new_inprogress', label: 'פניות חדשות', statuses: ['new', 'in_progress'] },
   { key: 'quote', label: 'הצעות ומעקב', statuses: ['quote_sent', 'awaiting_client_decision'] },
   { key: 'followup', label: 'פולו-אפ', statuses: ['followup_active'] },
-  { key: 'meeting', label: 'הכנה לפגישה', statuses: ['meeting_scheduled'] },
+  { key: 'meeting', label: 'הכנה לפגישה', statuses: ['meeting_scheduled', 'meeting_scheduled_frontal', 'meeting_scheduled_zoom', 'phone_meeting'] },
   { key: 'done', label: 'סגירה וסיום', statuses: ['completed', 'cancelled', 'followup_closed', 'closed_lost'] },
 ];
 
@@ -31,7 +31,10 @@ const STATUS_FILTER_OPTIONS = [
   { value: 'quote_sent', label: 'הצעה נשלחה' },
   { value: 'awaiting_client_decision', label: 'ממתין להחלטה' },
   { value: 'followup_active', label: 'פולו-אפ פעיל' },
+  { value: 'phone_meeting', label: 'נקבעה שיחה טלפונית' },
   { value: 'meeting_scheduled', label: 'פגישה נקבעה' },
+  { value: 'meeting_scheduled_frontal', label: 'נקבעה פגישה פרונטאלית' },
+  { value: 'meeting_scheduled_zoom', label: 'נקבעה פגישת זום' },
   { value: 'completed', label: 'הושלם' },
   { value: 'cancelled', label: 'בוטל' },
   { value: 'followup_closed', label: 'פולו-אפ נסגר' },

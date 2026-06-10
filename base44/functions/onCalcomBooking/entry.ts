@@ -20,7 +20,9 @@ function getEventType(reqBody) {
 
 function getSlug(payload) {
   const raw = payload.eventType?.slug || payload.eventTypeSlug || payload.event_type_slug || payload.slug || payload.eventType?.url || payload.url || '';
-  return decodeURIComponent(String(raw));
+  // Cal.com שולח את שם סוג האירוע גם בשדות type / eventTitle / title
+  const extra = [payload.type, payload.eventTitle, payload.title, payload.eventType?.title].filter(Boolean).join(' ');
+  return decodeURIComponent(String(raw)) + ' ' + String(extra);
 }
 
 function getAttendee(payload) {
