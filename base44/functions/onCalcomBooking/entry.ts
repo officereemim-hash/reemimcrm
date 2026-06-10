@@ -192,12 +192,33 @@ async function createGoogleCalendarEvent(base44, meeting, contact, detected) {
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    const providedSecret = req.headers.get('x-cal-secret') || req.headers.get('x-webhook-secret') || req.headers.get('authorization')?.replace('Bearer ', '');
-    if (WEBHOOK_SECRET && providedSecret !== WEBHOOK_SECRET) {
-      return Response.json({ error: 'Invalid webhook secret' }, { status: 403 });
+    const rawBody = await req.text();
+
+    if (WEBHOOK_SECRET) {
+      const providedSecret = req.headers.get('x-cal-secret') || req.headers.get('x-webhook-secret') || req.headers.get('authorization')?.replace('Bearer ', '');
+      let valid = providedSecret === WEBHOOK_SECRET;
+
+      // Cal.com שולח חתימת HMAC-SHA256 של גוף הבקשה בכותרת x-cal-signature-256
+      const signature = req.headers.get('x-cal-signature-256');
+      if (!valid && signature) {
+        const key = await crypto.subtle.importKey(
+          'raw',
+          new TextEncoder().encode(WEBHOOK_SECRET),
+          { name: 'HMAC', hash: 'SHA-256' },
+          false,
+          ['sign'],
+        );
+        const sigBuffer = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(rawBody));
+        const expected = Array.from(new Uint8Array(sigBuffer)).map((b) => b.toString(16).padStart(2, '0')).join('');
+        valid = signature.toLowerCase() === expected;
+      }
+
+      if (!valid) {
+        return Response.json({ error: 'Invalid webhook secret' }, { status: 403 });
+      }
     }
 
-    const body = await req.json();
+    const body = JSON.parse(rawBody);
     const eventType = getEventType(body);
     if (eventType && eventType !== 'BOOKING_CREATED') {
       return Response.json({ ok: true, skipped: true, eventType });
