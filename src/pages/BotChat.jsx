@@ -277,7 +277,18 @@ export default function BotChat() {
     if (!activeConv) return;
     setIsSending(true);
     try {
-      await base44.agents.addMessage(activeConv, { role: 'user', content: text });
+      const intlPhone = normalizeCachePhone(activeConv.metadata?.phone || '');
+      if (intlPhone) {
+        // מסלול זהה להודעת WhatsApp אמיתית — מפעיל את ה-Fast Path לפני הסוכן
+        await base44.functions.invoke('greenApiWebhook', {
+          typeWebhook: 'incomingMessageReceived',
+          idMessage: `sim_${Date.now()}`,
+          senderData: { chatId: `${intlPhone}@c.us` },
+          messageData: { typeMessage: 'textMessage', textMessageData: { textMessage: text } },
+        });
+      } else {
+        await base44.agents.addMessage(activeConv, { role: 'user', content: text });
+      }
     } catch (err) {
       console.warn('שגיאה בשליחה:', err.message);
     } finally {
