@@ -57,8 +57,9 @@ export default function BotChat() {
 
   const loadConversations = useCallback(async () => {
     setIsLoadingList(true);
-    const list = await base44.agents.listConversations({ agent_name: AGENT_NAME });
-    const all = list || [];
+    // קריאה דרך השרת — שיחות הסימולטור נוצרות ע"י המערכת ולא נגישות ישירות מהדפדפן
+    const res = await base44.functions.invoke('getSimConversation', {});
+    const all = (res.data?.conversations || []).filter(c => c.metadata?.source === 'test');
     setConversations(all.filter(c => !hiddenIds.includes(c.id)));
     setIsLoadingList(false);
   }, [hiddenIds]);
@@ -70,17 +71,18 @@ export default function BotChat() {
       setActiveConv(null);
       return;
     }
-    let unsubscribe;
-    const init = async () => {
-      const conv = await base44.agents.getConversation(activeConvId);
-      setActiveConv(conv);
+    let cancelled = false;
+    const load = async () => {
+      const res = await base44.functions.invoke('getSimConversation', { conversation_id: activeConvId });
+      if (cancelled) return;
+      const conv = res.data?.conversation;
+      if (!conv) return;
+      setActiveConv(prev => (prev?.id === conv.id ? prev : conv));
       setMessages(conv.messages || []);
-      unsubscribe = base44.agents.subscribeToConversation(activeConvId, (data) => {
-        setMessages(data.messages || []);
-      });
     };
-    init();
-    return () => { if (unsubscribe) unsubscribe(); };
+    load();
+    const timer = setInterval(load, 3000);
+    return () => { cancelled = true; clearInterval(timer); };
   }, [activeConvId]);
 
   const extractPhoneFromMessages = useCallback((items) => {
