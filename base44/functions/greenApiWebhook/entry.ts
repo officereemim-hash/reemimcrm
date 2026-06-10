@@ -174,12 +174,22 @@ Deno.serve(async (req) => {
     const phone = chatId.replace('@c.us', '');
     const localPhone = normalizeLocalPhone(phone);
 
-    const [botEnabledSettings, cachedConversationSettings, blockList, duplicateMessages] = await Promise.all([
+    const [botEnabledSettings, cachedConversationSettings, blockList, duplicateMessages, testModeSettings] = await Promise.all([
       base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' }),
       base44.asServiceRole.entities.SystemSetting.filter({ key: 'phone_conv_' + phone }),
       base44.asServiceRole.entities.WhatsAppBlockList.list(),
       idMessage ? base44.asServiceRole.entities.WhatsAppMessageLog.filter({ id_message: idMessage }) : Promise.resolve([]),
+      base44.asServiceRole.entities.SystemSetting.filter({ key: 'test_mode_allowed_numbers' }),
     ]);
+
+    // ===== מצב בדיקה: אם הוגדרה רשימה לבנה — מגיבים רק למספרים שבה =====
+    const allowedRaw = String(testModeSettings[0]?.value || '').trim();
+    if (allowedRaw) {
+      const allowedNumbers = allowedRaw.split(',').map(n => normalizeLocalPhone(n.trim())).filter(Boolean);
+      if (!allowedNumbers.includes(localPhone)) {
+        return Response.json({ ok: true, skipped: true, reason: 'test_mode_not_allowed' });
+      }
+    }
 
     if (duplicateMessages.length > 0) {
       return Response.json({ ok: true, skipped: true, reason: 'duplicate' });
