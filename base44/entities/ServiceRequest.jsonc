@@ -171,6 +171,11 @@
       "type": "boolean",
       "default": false
     },
+    "coordinator_alert_sent": {
+      "type": "boolean",
+      "default": false,
+      "description": "\u05d4\u05d0\u05dd \u05e0\u05e9\u05dc\u05d7\u05d4 \u05d4\u05ea\u05e8\u05d0\u05d4 \u05dc\u05de\u05ea\u05d0\u05de\u05ea"
+    },
     "post_meeting_tasks_done": {
       "type": "boolean",
       "default": false

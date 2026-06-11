@@ -360,8 +360,9 @@ Deno.serve(async (req) => {
     }
 
     // ===== FP-WaitCoordinator: הלקוח בחר להמתין לנציגה =====
-    const waitAnswers = ['אמתין', 'אמתין לנציגה', 'אחכה לנציגה', 'שתחזרו אליי', 'שתחזרו אלי', 'תחזרו אליי', 'תחזרו אלי', 'נציגה'];
-    if (contact && serviceRequest && waitAnswers.includes(normalizeAnswer(text))) {
+    const waitAnswers = ['אמתין', 'אמתין לנציגה', 'אחכה לנציגה', 'שתחזרו אליי', 'שתחזרו אלי', 'תחזרו אליי', 'תחזרו אלי', 'נציגה', 'מחכה לשיחה'];
+    const waitByNumber = normalizeAnswer(text) === '1' && serviceRequest?.service_type;
+    if (contact && serviceRequest && (waitAnswers.includes(normalizeAnswer(text)) || waitByNumber)) {
       await base44.asServiceRole.entities.Contact.update(contact.id, { bot_status: 'waiting_agent' });
       const ackMessage = 'מעולה! נציגה תחזור אלייך בהקדם 🙏';
       const sent = await sendWhatsApp(chatId, ackMessage, botEnabled);
