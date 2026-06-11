@@ -216,6 +216,28 @@ Deno.serve(async (req) => {
     if (contacts.length === 0) contacts = await base44.asServiceRole.entities.Contact.filter({ phone: localPhone });
     if (contacts.length === 0) contacts = await base44.asServiceRole.entities.Contact.filter({ phone: '+' + phone });
     let contact = contacts[0] || null;
+
+    // ===== הסרה מרשימת התפוצה דרך וואטסאפ =====
+    const UNSUBSCRIBE_KEYWORDS = ['הסר', 'הסרה', 'הסירו אותי', 'להסיר אותי', 'תסירו אותי', 'תפסיקו לשלוח', 'stop', 'unsubscribe'];
+    const normalizedForUnsub = normalizeAnswer(text);
+    if (UNSUBSCRIBE_KEYWORDS.includes(normalizedForUnsub)) {
+      const unsubContact = contacts[0] || null;
+      if (unsubContact) {
+        await base44.asServiceRole.entities.Contact.update(unsubContact.id, { mailing_opt_out: true });
+        await base44.asServiceRole.entities.Communication.create({
+          contact_id: unsubContact.id,
+          type: 'whatsapp',
+          direction: 'inbound',
+          content: `הלקוח/ה ביקש/ה הסרה מרשימת התפוצה ("${text}")`,
+          sent_by: 'system',
+          is_automated: true,
+          status: 'sent',
+        });
+      }
+      await sendWhatsApp(chatId, 'הוסרת מרשימת התפוצה שלנו ✅\nלא תקבל/י מאיתנו עוד הודעות שיווקיות.\nהודעות הקשורות לטיפול פעיל ימשיכו להגיע כרגיל.\nאם תרצה/י לחזור לרשימה — פשוט כתבו לנו כאן.', botEnabled);
+      return Response.json({ ok: true, unsubscribed: true });
+    }
+    // ===== סוף הסרה מתפוצה =====
     if (contact && (!contact.full_name || !contact.phone || !contact.email)) contact = null;
 
     let serviceRequest = null;
