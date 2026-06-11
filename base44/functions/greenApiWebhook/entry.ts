@@ -203,13 +203,14 @@ Deno.serve(async (req) => {
     const botEnabled = botEnabledSettings[0]?.value === 'true' || botEnabledSettings[0]?.value === true;
     const outgoingStatus = botEnabled ? 'replied' : 'skipped';
 
+    // שליחת אינדיקטור "מקליד..." מיד — כדי שהפונה יראה שהבוט מגיב
+    await sendTyping(chatId, 15, botEnabled);
+
     const recentLogs = await base44.asServiceRole.entities.WhatsAppMessageLog.filter({ phone }, '-created_date', 30);
     const recentOutgoing = recentLogs.filter(log => log.direction === 'outgoing' && Date.now() - new Date(log.created_date).getTime() < 60 * 60 * 1000);
     if (botEnabled && recentOutgoing.length >= 10) {
       return Response.json({ ok: true, skipped: true, reason: 'rate_limited' });
     }
-
-    await sendTyping(chatId, 15, botEnabled);
 
     let contacts = await base44.asServiceRole.entities.Contact.filter({ phone });
     if (contacts.length === 0) contacts = await base44.asServiceRole.entities.Contact.filter({ phone: localPhone });
