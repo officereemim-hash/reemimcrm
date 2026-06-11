@@ -59,7 +59,8 @@
         "bar_call",
         "excel_import",
         "manual",
-        "webinar"
+        "webinar",
+        "website"
       ]
     },
     "current_step": {

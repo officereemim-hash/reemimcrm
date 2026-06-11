@@ -122,7 +122,7 @@ Deno.serve(async (req) => {
         contact_phone: phone,
         contact_email: email || undefined,
         status: 'new',
-        source: 'manual',
+        source: 'website',
         notes: noteParts.join('\n') || undefined,
       });
 
