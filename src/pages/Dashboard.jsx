@@ -6,6 +6,7 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { format, isToday, parseISO } from 'date-fns';
 import { he } from 'date-fns/locale';
+import SyncLeadsButton from '@/components/dashboard/SyncLeadsButton';
 
 export default function Dashboard() {
   const { isAdmin, filterForUser } = useCurrentUser();
@@ -82,6 +83,7 @@ export default function Dashboard() {
             {format(today, 'EEEE, d בMMMM yyyy', { locale: he })}
           </p>
         </div>
+        {isAdmin && <SyncLeadsButton />}
       </div>
 
       {/* Alerts */}
