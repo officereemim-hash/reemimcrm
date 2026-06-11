@@ -19,10 +19,10 @@ export default function buildEmailHtml(template) {
         <img src="${block.image_url}" alt="תמונה" style="width:100%;border-radius:8px;display:block;" />
       </td></tr>`;
     }
-    if (block.type === 'button' && block.button_text && block.button_url) {
+    if (block.type === 'button' && block.button_text) {
       return `<tr><td style="padding:15px 30px;" align="center">
         <table cellpadding="0" cellspacing="0"><tr><td style="background-color:${ACCENT};border-radius:8px;padding:12px 28px;">
-          <a href="${block.button_url}" style="color:#ffffff;text-decoration:none;font-weight:600;font-size:15px;font-family:Arial,sans-serif;">${block.button_text}</a>
+          <a href="${block.button_url || '#'}" style="color:#ffffff;text-decoration:none;font-weight:600;font-size:15px;font-family:Arial,sans-serif;">${block.button_text}</a>
         </td></tr></table>
       </td></tr>`;
     }

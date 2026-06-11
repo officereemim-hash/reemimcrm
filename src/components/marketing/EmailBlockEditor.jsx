@@ -133,6 +133,9 @@ export default function EmailBlockEditor({ blocks, onChange }) {
                 onChange={e => updateBlock(idx, 'button_url', e.target.value)}
                 dir="ltr"
               />
+              {block.button_text && !block.button_url && (
+                <p className="text-xs text-coral">⚠️ חסר קישור — הכפתור יוצג אך לא יוביל לשום מקום</p>
+              )}
             </div>
           )}
         </div>
