@@ -105,6 +105,13 @@ Deno.serve(async (req) => {
   const summary = { email_sent: 0, email_failed: 0, whatsapp_sent: 0, whatsapp_failed: 0, whatsapp_delayed: false };
   const touchedCampaigns = new Set();
 
+  // אפשרות עקיפת חלון השליחה — לבדיקות ידניות בלבד
+  let forceWindow = false;
+  try {
+    const body = await req.json();
+    forceWindow = body?.force_window === true;
+  } catch (_) {}
+
   try {
     const senderName = await getSetting(base44, 'mailing_sender_name', 'קרנות ראמים');
     const senderEmail = await getSetting(base44, 'mailing_sender_email', '');
@@ -147,7 +154,7 @@ Deno.serve(async (req) => {
     }
 
     // ===== 2. וואטסאפ ממתינים =====
-    if (!isWithinWindow()) {
+    if (!isWithinWindow() && !forceWindow) {
       summary.whatsapp_delayed = true;
       summary.whatsapp_delay_reason = 'מחוץ לחלון השליחה (09:00-20:00)';
     } else {

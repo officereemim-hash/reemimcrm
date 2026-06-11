@@ -29,12 +29,12 @@ export default function buildEmailHtml(template) {
     // text block
     let html = '';
     if (block.title) {
-      html += `<h2 style="color:${PRIMARY};font-size:18px;margin:0 0 8px;font-family:Arial,sans-serif;border-right:3px solid ${ACCENT};padding-right:10px;">${block.title}</h2>`;
+      html += `<h2 dir="rtl" style="color:${PRIMARY};font-size:18px;margin:0 0 8px;font-family:Arial,sans-serif;border-right:3px solid ${ACCENT};padding-right:10px;direction:rtl;text-align:right;">${block.title}</h2>`;
     }
     if (block.content) {
-      html += `<p style="color:${TEXT};font-size:15px;line-height:1.7;margin:0;font-family:Arial,sans-serif;">${block.content.replace(/\n/g, '<br>')}</p>`;
+      html += `<p dir="rtl" style="color:${TEXT};font-size:15px;line-height:1.7;margin:0;font-family:Arial,sans-serif;direction:rtl;text-align:right;">${block.content.replace(/\n/g, '<br>')}</p>`;
     }
-    return html ? `<tr><td style="padding:10px 30px;">${html}</td></tr>` : '';
+    return html ? `<tr><td dir="rtl" style="padding:10px 30px;direction:rtl;text-align:right;">${html}</td></tr>` : '';
   }).join('\n');
 
   const contactParts = [];
@@ -49,10 +49,10 @@ export default function buildEmailHtml(template) {
   return `<!DOCTYPE html>
 <html dir="rtl" lang="he">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background-color:${BG};font-family:Arial,sans-serif;">
-<table width="100%" cellpadding="0" cellspacing="0" style="background-color:${BG};">
+<body dir="rtl" style="margin:0;padding:0;background-color:${BG};font-family:Arial,sans-serif;direction:rtl;">
+<table dir="rtl" width="100%" cellpadding="0" cellspacing="0" style="background-color:${BG};direction:rtl;">
 <tr><td align="center" style="padding:20px 10px;">
-<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(15,23,59,0.08);">
+<table dir="rtl" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(15,23,59,0.08);direction:rtl;">
   <!-- Header — נייבי עם פס זהב -->
   <tr><td style="background-color:${PRIMARY};padding:24px 30px;text-align:center;border-bottom:3px solid ${ACCENT};">
     ${logoUrl ? `<img src="${logoUrl}" alt="קרנות ראמים" style="max-height:60px;margin-bottom:10px;">` : ''}
@@ -60,8 +60,8 @@ export default function buildEmailHtml(template) {
   </td></tr>
   <!-- Greeting -->
   <tr><td style="padding:25px 30px 10px;">
-    <p style="color:${PRIMARY};font-size:17px;font-weight:600;margin:0 0 8px;font-family:Arial,sans-serif;">${greeting}</p>
-    <p style="color:${TEXT};font-size:15px;line-height:1.7;margin:0;font-family:Arial,sans-serif;">${introText}</p>
+    <p dir="rtl" style="color:${PRIMARY};font-size:17px;font-weight:600;margin:0 0 8px;font-family:Arial,sans-serif;direction:rtl;text-align:right;">${greeting}</p>
+    <p dir="rtl" style="color:${TEXT};font-size:15px;line-height:1.7;margin:0;font-family:Arial,sans-serif;direction:rtl;text-align:right;">${introText}</p>
   </td></tr>
   <!-- Content blocks -->
   ${blocksHtml}
