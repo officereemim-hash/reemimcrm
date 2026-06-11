@@ -124,7 +124,8 @@ Deno.serve(async (req) => {
       subject,
       recipients_count: recipients.length,
       status: 'in_progress',
-      content_snapshot: wantsEmail ? email_html : whatsapp_message,
+      content_snapshot: wantsEmail ? email_html : '',
+      whatsapp_snapshot: wantsWhatsApp ? whatsapp_message : '',
       sent_at: new Date().toISOString(),
       sent_by: user.full_name || user.email,
     });

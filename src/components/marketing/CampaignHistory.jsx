@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { Mail, MessageCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { Mail, MessageCircle, ChevronDown, ChevronUp, Eye, Send, Loader2 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
+import CampaignPreviewDialog from './CampaignPreviewDialog';
 
 const STATUS_LABELS = {
   in_progress: { label: 'בתהליך', cls: 'bg-gold/20 text-gold' },
@@ -28,6 +30,44 @@ export default function CampaignHistory() {
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState(null);
   const [queueItems, setQueueItems] = useState({});
+  const [previewCampaign, setPreviewCampaign] = useState(null);
+  const [resendingId, setResendingId] = useState(null);
+
+  const handleResend = async (c) => {
+    if (!confirm(`לשלוח מחדש את "${c.name}" ל-${c.recipients_count || 0} נמענים?`)) return;
+    setResendingId(c.id);
+    try {
+      const legacyWaOnly = c.channel === 'whatsapp' && !c.whatsapp_snapshot;
+      const emailHtml = legacyWaOnly ? '' : (c.content_snapshot || '');
+      const waText = c.whatsapp_snapshot || (legacyWaOnly ? c.content_snapshot : '');
+
+      // לקמפיין לנמען בודד — שולפים את אנשי הקשר מהתור המקורי
+      let contactIds;
+      if (c.audience === 'single') {
+        const items = queueItems[c.id] || await base44.entities.CampaignQueue.filter({ campaign_id: c.id }, '-created_date', 200);
+        contactIds = [...new Set(items.map(q => q.contact_id).filter(Boolean))];
+      }
+
+      const res = await base44.functions.invoke('sendCampaign', {
+        type: c.type,
+        channel: c.channel,
+        audience: c.audience,
+        contact_ids: contactIds,
+        subject: c.subject || '',
+        email_html: emailHtml,
+        whatsapp_message: waText,
+        campaign_name: `${c.name} (שליחה חוזרת)`,
+      });
+      const data = res?.data || res;
+      if (data?.error) throw new Error(data.error);
+      alert('הקמפיין נשלח מחדש בהצלחה ✅');
+      const fresh = await base44.entities.Campaign.list('-created_date', 50);
+      setCampaigns(fresh || []);
+    } catch (err) {
+      alert('שגיאה בשליחה מחדש: ' + (err?.response?.data?.error || err.message));
+    }
+    setResendingId(null);
+  };
 
   useEffect(() => {
     base44.entities.Campaign.list('-created_date', 50).then(data => {
@@ -93,6 +133,17 @@ export default function CampaignHistory() {
                 </div>
               </button>
 
+              <div className="flex gap-2 mt-3 justify-end">
+                <Button size="sm" variant="outline" onClick={() => setPreviewCampaign(c)}>
+                  <Eye size={14} className="ml-1" /> צפייה
+                </Button>
+                <Button size="sm" onClick={() => handleResend(c)} disabled={resendingId === c.id}>
+                  {resendingId === c.id
+                    ? <><Loader2 size={14} className="ml-1 animate-spin" /> שולח...</>
+                    : <><Send size={14} className="ml-1" /> שלח מחדש</>}
+                </Button>
+              </div>
+
               {isOpen && (
                 <div className="mt-3 pt-3 border-t space-y-1">
                   {!queueItems[c.id] ? (
@@ -118,6 +169,9 @@ export default function CampaignHistory() {
           </Card>
         );
       })}
+      {previewCampaign && (
+        <CampaignPreviewDialog campaign={previewCampaign} onClose={() => setPreviewCampaign(null)} />
+      )}
     </div>
   );
 }
