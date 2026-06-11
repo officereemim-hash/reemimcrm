@@ -7,6 +7,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 
 const APP_FUNCTIONS_BASE = 'https://basmat-crm-copy-62c92ace.base44.app/api/apps/69f3c646e222353462c92ace/functions';
 const EMAIL_INLINE_BATCH = 15; // כמה מיילים לשלוח מיידית לפני שהתור ממשיך
+const WA_UNSUB_FOOTER = '\n\nלהסרה מרשימת התפוצה השיבו "הסר"';
 
 const AUDIENCE_FILTERS = {
   all_active: (c) => c.status === 'active_client',
@@ -162,7 +163,7 @@ Deno.serve(async (req) => {
           contact_name: contact.full_name || '',
           channel: 'whatsapp',
           recipient: phone,
-          content: phone ? personalize(whatsapp_message, contact, unsubscribeUrl) : '',
+          content: phone ? personalize(whatsapp_message, contact, unsubscribeUrl) + WA_UNSUB_FOOTER : '',
           status: phone ? (whatsappLive ? 'pending' : 'skipped') : 'skipped',
           error_message: phone ? (whatsappLive ? '' : 'מצב לוג בלבד — לא נשלח בפועל') : 'אין מספר טלפון',
         }));
