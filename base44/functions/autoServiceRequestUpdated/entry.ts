@@ -22,7 +22,8 @@ function fillTemplate(template, values) {
     .replaceAll('{waze_link}', values.waze_link || '')
     .replaceAll('{meeting_link}', values.meeting_link || '')
     .replaceAll('{questionnaire_link}', values.questionnaire_link || '')
-    .replaceAll('{quote_link}', values.quote_link || '');
+    .replaceAll('{quote_link}', values.quote_link || '')
+    .replaceAll('{summary}', values.summary || '');
 }
 
 Deno.serve(async (req) => {
@@ -86,6 +87,18 @@ Deno.serve(async (req) => {
         '-created_date', 1
       );
       return !!(recent[0] && Date.now() - new Date(recent[0].created_date).getTime() < 2 * 60 * 1000);
+    }
+
+    // שליפת הסיכום שמילאה המתאמת בשיחת המכירה הטלפונית — אם אין סיכום, מוחזר ריק ולא נשלח
+    async function getPhoneSummaryBlock() {
+      const meetings = await base44.asServiceRole.entities.Meeting.filter(
+        { contact_id: serviceRequest.contact_id, type: 'intro_sale' },
+        '-scheduled_at', 5
+      );
+      const summary = meetings.find(m => m.summary && m.summary.trim())?.summary?.trim() || '';
+      if (!summary) return '';
+      const blockTemplate = await getContent('phone_call_summary_block');
+      return blockTemplate ? blockTemplate.replaceAll('{summary}', summary) : summary;
     }
 
     const botEnabled = (await getSetting('whatsapp_bot_enabled')) === 'true';
@@ -171,7 +184,8 @@ Deno.serve(async (req) => {
       const intro = await getContent('schedule_intro');
       const message = fillTemplate(intro || 'מעולה, שמחנו לשמוע שתרצה להתקדם. השלב הבא הוא תיאום פגישה עם בשמת.', {
         name: contact.full_name || '',
-      });
+        summary: await getPhoneSummaryBlock(),
+      }).replace(/\n{3,}/g, '\n\n');
       const sent = await sendWhatsApp(message);
       await logCommunication(message, 'schedule_intro', sent);
       await base44.asServiceRole.entities.Contact.update(contact.id, {
@@ -289,7 +303,8 @@ Deno.serve(async (req) => {
       const message = fillTemplate(quoteContent || 'שמחתי לדבר! הנה הצעת המחיר כמובקש 📄 {link}', {
         name: contact.full_name || '',
         link: quoteUrl,
-      });
+        summary: await getPhoneSummaryBlock(),
+      }).replace(/\n{3,}/g, '\n\n');
       const sent = await sendWhatsApp(message);
       if (quoteUrl && !message.includes(quoteUrl)) {
         const linkResult = await sendWhatsApp(quoteUrl);
