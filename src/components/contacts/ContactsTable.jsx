@@ -2,11 +2,11 @@ import { Link } from 'react-router-dom';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ContactStatusBadge, BotStatusBadge, SERVICE_TYPE_LABELS, SOURCE_LABELS } from '@/components/StatusBadge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
 
-export default function ContactsTable({ contacts, selectedIds, onToggleSelect, onToggleAll, onDelete }) {
+export default function ContactsTable({ contacts, selectedIds, onToggleSelect, onToggleAll, onDelete, onEdit }) {
   const allSelected = contacts.length > 0 && selectedIds.length === contacts.length;
   const someSelected = selectedIds.length > 0 && selectedIds.length < contacts.length;
 
@@ -31,7 +31,7 @@ export default function ContactsTable({ contacts, selectedIds, onToggleSelect, o
             <TableHead>מקור</TableHead>
             <TableHead>מטפל/ת</TableHead>
             <TableHead>תאריך</TableHead>
-            <TableHead className="w-10"></TableHead>
+            <TableHead className="w-20"></TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -59,9 +59,14 @@ export default function ContactsTable({ contacts, selectedIds, onToggleSelect, o
               <TableCell className="text-xs">{c.assigned_to || '—'}</TableCell>
               <TableCell className="text-xs text-muted-foreground">{c.created_date ? format(new Date(c.created_date), 'dd/MM/yy') : '—'}</TableCell>
               <TableCell>
-                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => onDelete([c.id])}>
-                  <Trash2 size={14} />
-                </Button>
+                <div className="flex items-center gap-1">
+                  <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" onClick={() => onEdit(c)}>
+                    <Pencil size={14} />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => onDelete([c.id])}>
+                    <Trash2 size={14} />
+                  </Button>
+                </div>
               </TableCell>
             </TableRow>
           ))}

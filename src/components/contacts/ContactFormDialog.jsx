@@ -68,7 +68,7 @@ export default function ContactFormDialog({ contact, onClose, onSave }) {
                 <SelectContent>
                   <SelectItem value="facebook">פייסבוק</SelectItem>
                   <SelectItem value="website">אתר</SelectItem>
-                  <SelectItem value="webinar">וובינר</SelectItem>
+                  <SelectItem value="webinar">קמפיין מטא</SelectItem>
                   <SelectItem value="referral">הפניה</SelectItem>
                   <SelectItem value="manual">ידני</SelectItem>
                   <SelectItem value="excel_import">ייבוא אקסל</SelectItem>

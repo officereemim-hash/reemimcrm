@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Link } from 'react-router-dom';
-import { Plus, Search, Phone, Calendar, Trash2 } from 'lucide-react';
+import { Plus, Search, Phone, Calendar, Trash2, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -22,7 +22,7 @@ const TABS = [
 ];
 
 export default function Contacts() {
-  const { isAdmin, filterForUser } = useCurrentUser();
+  const { isAdmin, filterForUser, loading: userLoading } = useCurrentUser();
   const [contacts, setContacts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('all');
@@ -31,6 +31,7 @@ export default function Contacts() {
   const [viewMode, setViewMode] = useState('cards');
   const [selectedIds, setSelectedIds] = useState([]);
   const [deleteTarget, setDeleteTarget] = useState(null); // array of ids to confirm
+  const [editingContact, setEditingContact] = useState(null);
 
   const load = () => {
     base44.entities.Contact.list('-created_date', 200).then(data => {
@@ -39,7 +40,9 @@ export default function Contacts() {
     });
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    if (!userLoading) load();
+  }, [userLoading]);
 
   const filtered = contacts.filter(c => {
     const matchTab = activeTab === 'all' || c.status === activeTab;
@@ -128,6 +131,7 @@ export default function Contacts() {
           onToggleSelect={toggleSelect}
           onToggleAll={toggleAll}
           onDelete={(ids) => setDeleteTarget(ids)}
+          onEdit={(c) => setEditingContact(c)}
         />
       ) : filtered.length === 0 ? (
         <div className="text-center text-muted-foreground py-16">לא נמצאו אנשי קשר</div>
@@ -180,6 +184,9 @@ export default function Contacts() {
                     </div>
                   )}
                 </Link>
+                <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-muted-foreground hover:text-primary" onClick={() => setEditingContact(contact)}>
+                  <Pencil size={14} />
+                </Button>
                 <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive" onClick={() => setDeleteTarget([contact.id])}>
                   <Trash2 size={14} />
                 </Button>
@@ -189,10 +196,11 @@ export default function Contacts() {
         </div>
       )}
 
-      {showForm && (
+      {(showForm || editingContact) && (
         <ContactFormDialog
-          onClose={() => setShowForm(false)}
-          onSave={() => { setShowForm(false); load(); }}
+          contact={editingContact}
+          onClose={() => { setShowForm(false); setEditingContact(null); }}
+          onSave={() => { setShowForm(false); setEditingContact(null); load(); }}
         />
       )}
 
