@@ -53,7 +53,7 @@ function detectMeeting(slug) {
     result.serviceType = 'annual_service_call';
     result.meetingType = 'annual_service';
   }
-  if (slug.includes('מתאמת') || slug.includes('coordinator') || slug.includes('שיחה-מקדימה')) {
+  if (slug.includes('מתאמת') || slug.includes('coordinator') || slug.includes('שיחה-מקדימה') || slug.includes('שיחה טלפונית') || slug.includes('15min') || slug.includes('15 min') || slug.includes('15-min')) {
     result.location = 'phone';
     result.meetingType = 'intro_sale';
     result.isCoordinatorCall = true;
