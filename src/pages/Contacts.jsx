@@ -174,15 +174,6 @@ export default function Contacts() {
                       </span>
                     </div>
                   </div>
-                  {contact.lead_temperature && (
-                    <div className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      contact.lead_temperature === 'hot' ? 'bg-red-100 text-red-600' :
-                      contact.lead_temperature === 'warm' ? 'bg-orange-100 text-orange-600' :
-                      'bg-blue-100 text-blue-600'
-                    }`}>
-                      {contact.lead_temperature === 'hot' ? '🔥 חם' : contact.lead_temperature === 'warm' ? '☀️ פושר' : '❄️ קר'}
-                    </div>
-                  )}
                 </Link>
                 <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-muted-foreground hover:text-primary" onClick={() => setEditingContact(contact)}>
                   <Pencil size={14} />

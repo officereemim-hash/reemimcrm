@@ -123,15 +123,6 @@
       "type": "string",
       "description": "\u05e4\u05e0\u05d9\u05d9\u05d4 \u05e4\u05e2\u05d9\u05dc\u05d4 \u05e0\u05d5\u05db\u05d7\u05d9\u05ea"
     },
-    "lead_temperature": {
-      "type": "string",
-      "enum": [
-        "hot",
-        "warm",
-        "cold"
-      ],
-      "default": "warm"
-    },
     "tags": {
       "type": "array",
       "items": {
