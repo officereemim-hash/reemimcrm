@@ -7,6 +7,7 @@ import { format } from 'date-fns';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import ComposeDialog from '@/components/marketing/ComposeDialog';
 import TemplateEditor from '@/components/marketing/TemplateEditor';
+import CampaignHistory from '@/components/marketing/CampaignHistory';
 import ViewToggle from '@/components/shared/ViewToggle';
 
 const MESSAGE_TYPES = [
@@ -100,9 +101,19 @@ export default function MarketingHub() {
             תבניות
           </button>
         )}
+        <button
+          onClick={() => setActiveTab('history')}
+          className={`px-4 py-2 rounded-t-lg text-sm font-medium transition-colors ${
+            activeTab === 'history' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
+          }`}
+        >
+          <Clock size={14} className="inline ml-1" />
+          היסטוריית דיוור
+        </button>
       </div>
 
       {activeTab === 'templates' && <TemplateEditor />}
+      {activeTab === 'history' && <CampaignHistory />}
 
       {activeTab === 'overview' && sentResult && (
         <div className="flex items-center gap-3 bg-success/10 border border-success/30 rounded-lg px-4 py-3">

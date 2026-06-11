@@ -26,7 +26,7 @@ const AUDIENCE_OPTIONS = [
 
 // המרת תגיות פרסונליזציה ישנות לפורמט אחיד שהשרת מזהה
 const toServerPlaceholders = (text) =>
-  (text || '').replaceAll('{שם}', '{{name}}').replaceAll('{name}', '{{name}}');
+  (text || '').replace(/\{{1,2}(שם|name)\}{1,2}/g, '{{name}}');
 
 export default function ComposeDialog({ open, onClose, contacts, onDone }) {
   const [form, setForm] = useState({
