@@ -24,6 +24,10 @@ const AUDIENCE_OPTIONS = [
   { key: 'new_leads', label: 'לידים חדשים', filter: c => c.status === 'new_lead' },
 ];
 
+// המרת תגיות פרסונליזציה ישנות לפורמט אחיד שהשרת מזהה
+const toServerPlaceholders = (text) =>
+  (text || '').replaceAll('{שם}', '{{name}}').replaceAll('{name}', '{{name}}');
+
 export default function ComposeDialog({ open, onClose, contacts, onDone }) {
   const [form, setForm] = useState({
     type: 'newsletter',
@@ -36,16 +40,17 @@ export default function ComposeDialog({ open, onClose, contacts, onDone }) {
   });
   const [singleRecipient, setSingleRecipient] = useState(null);
   const [sending, setSending] = useState(false);
-  const [marketingSettings, setMarketingSettings] = useState({ email_live_mode: false, whatsapp_live_mode: false });
+  const [sendError, setSendError] = useState(null);
+  const [liveMode, setLiveMode] = useState({ email: false, whatsapp: false });
   const [messageTemplates, setMessageTemplates] = useState([]);
   const [waRef, setWaRef] = useState(null);
 
   useEffect(() => {
-    base44.auth.me().then(user => {
-      if (user?.marketing_settings) {
-        setMarketingSettings(user.marketing_settings);
-      }
-    });
+    // דגלי שליחה אמיתית — הגדרות מערכת (SystemSetting)
+    base44.entities.SystemSetting.list().then(settings => {
+      const get = (key) => (settings || []).find(s => s.key === key)?.value === 'true';
+      setLiveMode({ email: get('email_live_mode'), whatsapp: get('whatsapp_live_mode') });
+    }).catch(() => {});
     base44.entities.MessageTemplate.list().then(data => {
       setMessageTemplates(data || []);
     });
@@ -64,9 +69,12 @@ export default function ComposeDialog({ open, onClose, contacts, onDone }) {
     }
   }, [form.type, messageTemplates]);
 
+  // מסירים מהקהל את מי שהוסר מהתפוצה
+  const eligible = (contacts || []).filter(c => !c.mailing_opt_out);
+
   const getAudienceCount = (key) => {
     const option = AUDIENCE_OPTIONS.find(o => o.key === key);
-    return option ? contacts.filter(option.filter).length : 0;
+    return option ? eligible.filter(option.filter).length : 0;
   };
 
   const getRecipients = () => {
@@ -74,12 +82,13 @@ export default function ComposeDialog({ open, onClose, contacts, onDone }) {
       return singleRecipient ? [singleRecipient] : [];
     }
     const option = AUDIENCE_OPTIONS.find(o => o.key === form.audience);
-    return option ? contacts.filter(option.filter) : [];
+    return option ? eligible.filter(option.filter) : [];
   };
 
   const handleSend = async () => {
     const recipients = getRecipients();
     if (recipients.length === 0) return;
+    setSendError(null);
 
     // Validation
     if ((form.channel === 'email' || form.channel === 'both') && !form.subject) {
@@ -101,76 +110,55 @@ export default function ComposeDialog({ open, onClose, contacts, onDone }) {
     if (!confirm(confirmMsg)) return;
 
     setSending(true);
-    let successCount = 0;
-
-    for (const contact of recipients) {
-      const personalizedContent = (form.content || '')
-        .replace('{שם}', contact.full_name || '')
-        .replace('{name}', contact.full_name || '');
-      const personalizedWA = (form.whatsappMessage || '')
-        .replace('{שם}', contact.full_name || '')
-        .replace('{name}', contact.full_name || '');
-
-      // WhatsApp
-      if (form.channel === 'whatsapp' || form.channel === 'both') {
-        await base44.entities.Communication.create({
-          contact_id: contact.id,
-          type: 'whatsapp',
-          direction: 'outbound',
-          content: personalizedWA,
-          sent_by: 'basmat',
-          is_automated: false,
-          status: marketingSettings.whatsapp_live_mode ? 'sent' : 'sent',
-        });
-      }
-
-      // Email
+    try {
+      // בניית HTML של המייל עם תגיות {{name}} ו-{{unsubscribe_link}} —
+      // השרת מחליף אותן לכל נמען בנפרד
+      let emailHtml = '';
       if (form.channel === 'email' || form.channel === 'both') {
-        // Build HTML email from template if available
         const tpl = messageTemplates.find(t => t.type === form.type);
-        let emailBody = personalizedContent;
         if (tpl) {
-          const personalizedTpl = {
+          emailHtml = buildEmailHtml({
             ...tpl,
-            greeting: (tpl.greeting || '').replace('{שם}', contact.full_name || '').replace('{name}', contact.full_name || ''),
-            intro_text: (tpl.intro_text || '').replace('{שם}', contact.full_name || '').replace('{name}', contact.full_name || ''),
-          };
-          emailBody = buildEmailHtml(personalizedTpl);
-        }
-
-        if (marketingSettings.email_live_mode && contact.email) {
-          await base44.integrations.Core.SendEmail({
-            to: contact.email,
-            subject: form.subject,
-            body: emailBody,
-            from_name: 'קרנות ראמים',
+            greeting: toServerPlaceholders(tpl.greeting),
+            intro_text: toServerPlaceholders(form.content),
+          });
+        } else {
+          // בלי תבנית — עטיפה מינימלית עם לינק הסרה
+          emailHtml = buildEmailHtml({
+            header_title: 'קרנות ראמים',
+            greeting: 'שלום {{name}},',
+            intro_text: toServerPlaceholders(form.content),
+            blocks: [],
           });
         }
-        await base44.entities.Communication.create({
-          contact_id: contact.id,
-          type: 'email',
-          direction: 'outbound',
-          content: `נושא: ${form.subject}\n${personalizedContent}`,
-          sent_by: 'basmat',
-          is_automated: false,
-          status: marketingSettings.email_live_mode ? 'sent' : 'sent',
-        });
       }
 
-      await base44.entities.Contact.update(contact.id, {
-        last_contact_date: new Date().toISOString().split('T')[0],
+      const res = await base44.functions.invoke('sendCampaign', {
+        type: form.type,
+        channel: form.channel,
+        audience: form.sendMode === 'single' ? 'single' : form.audience,
+        contact_ids: form.sendMode === 'single' ? [singleRecipient.id] : undefined,
+        subject: toServerPlaceholders(form.subject),
+        email_html: emailHtml,
+        whatsapp_message: toServerPlaceholders(form.whatsappMessage),
+        campaign_name: form.subject || MESSAGE_TYPES.find(t => t.key === form.type)?.label,
       });
 
-      successCount++;
-    }
+      const data = res?.data || res;
+      if (data?.error) throw new Error(data.error);
 
-    setSending(false);
-    onDone({
-      count: successCount,
-      type: MESSAGE_TYPES.find(t => t.key === form.type)?.label,
-      channel: form.channel,
-    });
-    onClose();
+      setSending(false);
+      onDone({
+        count: recipients.length,
+        type: MESSAGE_TYPES.find(t => t.key === form.type)?.label,
+        channel: form.channel,
+        queued: (data?.email_queued || 0) + (data?.whatsapp_queued || 0),
+      });
+      onClose();
+    } catch (err) {
+      setSending(false);
+      setSendError(err?.response?.data?.error || err.message || 'שגיאה בשליחה');
+    }
   };
 
   const recipientCount = form.sendMode === 'single' ? (singleRecipient ? 1 : 0) : getAudienceCount(form.audience);
@@ -248,13 +236,15 @@ export default function ComposeDialog({ open, onClose, contacts, onDone }) {
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">יישלח ל-{getAudienceCount(form.audience)} אנשי קשר</p>
+              <p className="text-xs text-muted-foreground">
+                יישלח ל-{getAudienceCount(form.audience)} אנשי קשר (לא כולל מי שהוסרו מהתפוצה)
+              </p>
             </div>
           ) : (
             <div className="space-y-1">
               <Label>בחירת נמען</Label>
               <SingleContactPicker
-                contacts={contacts}
+                contacts={eligible}
                 selected={singleRecipient}
                 onSelect={setSingleRecipient}
               />
@@ -298,8 +288,8 @@ export default function ComposeDialog({ open, onClose, contacts, onDone }) {
               />
               <p className="text-xs text-muted-foreground">
                 השתמש ב-&#123;שם&#125; לשם פרסונלי
-                {marketingSettings.email_live_mode
-                  ? ' • 🟢 מצב שליחה אמיתית'
+                {liveMode.email
+                  ? ' • 🟢 מצב שליחה אמיתית (Brevo)'
                   : ' • 🔵 מצב לוג בלבד'
                 }
               </p>
@@ -334,11 +324,17 @@ export default function ComposeDialog({ open, onClose, contacts, onDone }) {
               />
               <p className="text-xs text-muted-foreground">
                 השתמש ב-&#123;שם&#125; לשם פרסונלי • לחצי 😊 לאימוג׳י
-                {marketingSettings.whatsapp_live_mode
-                  ? ' • 🟢 מצב שליחה אמיתית'
+                {liveMode.whatsapp
+                  ? ' • 🟢 מצב שליחה אמיתית — נשלח בהדרגה דרך התור'
                   : ' • 🔵 מצב לוג בלבד'
                 }
               </p>
+            </div>
+          )}
+
+          {sendError && (
+            <div className="bg-destructive/10 border border-destructive/30 rounded-lg px-3 py-2 text-sm text-destructive">
+              {sendError}
             </div>
           )}
 
