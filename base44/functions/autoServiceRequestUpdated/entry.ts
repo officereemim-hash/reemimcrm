@@ -79,6 +79,15 @@ Deno.serve(async (req) => {
       return records[0]?.value || '';
     }
 
+    // הגנה מכפילות: אם אותה הודעה כבר נשלחה לאיש הקשר ב-2 הדקות האחרונות — מדלגים
+    async function alreadySentRecently(templateId) {
+      const recent = await base44.asServiceRole.entities.Communication.filter(
+        { contact_id: serviceRequest.contact_id, template_id: templateId },
+        '-created_date', 1
+      );
+      return !!(recent[0] && Date.now() - new Date(recent[0].created_date).getTime() < 2 * 60 * 1000);
+    }
+
     const botEnabled = (await getSetting('whatsapp_bot_enabled')) === 'true';
     const greenApiEnabled = (await getSetting('green_api_enabled')) === 'true';
 
@@ -156,6 +165,9 @@ Deno.serve(async (req) => {
     }
 
     if (statusChanged && newStatus === 'quote_sent') {
+      if (await alreadySentRecently('schedule_intro')) {
+        return Response.json({ ok: true, skipped: 'duplicate_event' });
+      }
       const intro = await getContent('schedule_intro');
       const message = fillTemplate(intro || 'מעולה, שמחנו לשמוע שתרצה להתקדם. השלב הבא הוא תיאום פגישה עם בשמת.', {
         name: contact.full_name || '',
@@ -170,6 +182,9 @@ Deno.serve(async (req) => {
     }
 
     if (statusChanged && newStatus === 'phone_meeting') {
+      if (await alreadySentRecently('meeting_scheduled_phone')) {
+        return Response.json({ ok: true, skipped: 'duplicate_event' });
+      }
       const phoneTemplate = await getContent('meeting_scheduled_phone');
       const callerPhone = await getSetting('coordinator_phone') || 'מספר המתאמת יישלח בהמשך';
       let message = fillTemplate(phoneTemplate, {
@@ -201,6 +216,10 @@ Deno.serve(async (req) => {
       else if (apptType === 'modiin') templateKey = 'meeting_scheduled_modiin';
       else if (apptType.includes('petah_tikva')) templateKey = 'meeting_scheduled_petah_tikva';
       else if (apptType === 'phone') templateKey = 'meeting_scheduled_phone';
+
+      if (await alreadySentRecently(templateKey)) {
+        return Response.json({ ok: true, skipped: 'duplicate_event' });
+      }
 
       // קישור הפגישה האמיתי (אם נשמר ע"י Cal.com), אחרת חדר הזום הקבוע
       let meetingLink = '';
@@ -262,6 +281,9 @@ Deno.serve(async (req) => {
     }
 
     if (statusChanged && newStatus === 'awaiting_client_decision') {
+      if (await alreadySentRecently('quote_sent')) {
+        return Response.json({ ok: true, skipped: 'duplicate_event' });
+      }
       const quoteContent = await getContent('quote_sent');
       const quoteUrl = await getUrl('pdf', 'quote_' + serviceType);
       const message = fillTemplate(quoteContent || 'שמחתי לדבר! הנה הצעת המחיר כמובקש 📄 {link}', {
@@ -292,6 +314,9 @@ Deno.serve(async (req) => {
     }
 
     if (statusChanged && (newStatus === 'followup_active' || newStatus === 'closed_lost')) {
+      if (await alreadySentRecently('not_interested_reason')) {
+        return Response.json({ ok: true, skipped: 'duplicate_event' });
+      }
       const reviewsUrl = await getUrl('external_link', 'reviews_page');
       const qaUrl = await getUrl('external_link', 'qa_page');
       const reasonTemplate = await getContent('not_interested_reason');

@@ -362,7 +362,8 @@ Deno.serve(async (req) => {
 
     // ===== FP-WaitCoordinator: הלקוח בחר להמתין לנציגה =====
     const waitAnswers = ['אמתין', 'אמתין לנציגה', 'אחכה לנציגה', 'שתחזרו אליי', 'שתחזרו אלי', 'תחזרו אליי', 'תחזרו אלי', 'נציגה', 'מחכה לשיחה'];
-    const waitByNumber = normalizeAnswer(text) === '1' && serviceRequest?.service_type;
+    // "1" = המתנה לנציגה רק כשעוד לא נשלח תפריט הפגישות (בסטטוס quote_sent "1" = זום)
+    const waitByNumber = normalizeAnswer(text) === '1' && serviceRequest?.service_type && serviceRequest?.status !== 'quote_sent';
     if (contact && serviceRequest && (waitAnswers.includes(normalizeAnswer(text)) || waitByNumber)) {
       await base44.asServiceRole.entities.Contact.update(contact.id, { bot_status: 'waiting_agent' });
       const ackMessage = 'מעולה! נציגה תחזור אלייך בהקדם 🙏';
@@ -379,6 +380,7 @@ Deno.serve(async (req) => {
     // ===== FP-MeetingChoice: בחירת מיקום פגישה אחרי הצעת מחיר (quote_sent) =====
     if (contact && serviceRequest && serviceRequest.status === 'quote_sent') {
       const locationMap = {
+        '1': 'zoom', '2': 'modiin', '3': 'petah_tikva_wednesday', '4': 'phone',
         'זום': 'zoom', 'zoom': 'zoom', 'בזום': 'zoom',
         'מודיעין': 'modiin', 'במודיעין': 'modiin',
         'פתח תקווה': 'petah_tikva_wednesday', 'פתח-תקווה': 'petah_tikva_wednesday', 'פת': 'petah_tikva_wednesday', 'בפתח תקווה': 'petah_tikva_wednesday',
