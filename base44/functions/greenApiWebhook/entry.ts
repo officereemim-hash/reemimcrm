@@ -286,7 +286,11 @@ Deno.serve(async (req) => {
           await base44.asServiceRole.entities.SystemSetting.create({ key: settingKey, value: settingValue, category: 'flow' });
         }
 
-        const confirmMessage = `הפרטים שלך:\n📛 שם: ${details.name}\n📱 טלפון: ${details.phone}\n📧 מייל: ${details.email}\n\nהאם הכל נכון? כתוב/י *כן* לאישור או תקנ/י את הפרט השגוי.`;
+        const confirmTemplate = await getBotContent(base44, 'contact_details_confirm');
+        const confirmMessage = (confirmTemplate || 'הפרטים שלך:\n📛 שם: {name}\n📱 טלפון: {phone}\n📧 מייל: {email}\n\nהאם הכל נכון? כתוב/י *כן* לאישור.')
+          .replaceAll('{name}', details.name)
+          .replaceAll('{phone}', details.phone)
+          .replaceAll('{email}', details.email);
         const sent = await sendWhatsApp(chatId, confirmMessage, botEnabled);
         await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
         await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_details`, phone, confirmMessage, chatId, conversationId, outgoingStatus);
@@ -366,7 +370,7 @@ Deno.serve(async (req) => {
     const waitByNumber = normalizeAnswer(text) === '1' && serviceRequest?.service_type && serviceRequest?.status !== 'quote_sent';
     if (contact && serviceRequest && (waitAnswers.includes(normalizeAnswer(text)) || waitByNumber)) {
       await base44.asServiceRole.entities.Contact.update(contact.id, { bot_status: 'waiting_agent' });
-      const ackMessage = 'מעולה! נציגה תחזור אלייך בהקדם 🙏';
+      const ackMessage = await getBotContent(base44, 'wait_coordinator_ack') || 'מעולה! נציגה תחזור אלייך בהקדם 🙏';
       const sent = await sendWhatsApp(chatId, ackMessage, botEnabled);
       await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
       await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_wait`, phone, ackMessage, chatId, conversationId, outgoingStatus);
@@ -436,7 +440,7 @@ Deno.serve(async (req) => {
 
     // ===== FP-DocsSent: "שלחתי" אחרי מילוי שאלון — אישור קבלת מסמכים =====
     if (serviceRequest && serviceRequest.questionnaire_completed && !serviceRequest.documents_received && normalizeAnswer(text).startsWith('שלחתי')) {
-      const docsAckMessage = 'תודה! המסמכים התקבלו ויועברו לבדיקה 🙏';
+      const docsAckMessage = await getBotContent(base44, 'documents_received_ack') || 'תודה! המסמכים התקבלו ויועברו לבדיקה 🙏';
       const sent = await sendWhatsApp(chatId, docsAckMessage, botEnabled);
       await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { documents_received: true, documents_status: 'complete' });
       await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
@@ -452,7 +456,7 @@ Deno.serve(async (req) => {
     const politeAnswers = ['תודה', 'תודה רבה', 'מעולה', 'אחלה', 'סבבה', 'יופי', 'מושלם', 'בסדר', 'בסדר גמור', '👍', '🙏', '❤️', '😊'];
     const waitingStatuses = ['phone_meeting', 'meeting_scheduled', 'meeting_scheduled_frontal', 'meeting_scheduled_zoom'];
     if (serviceRequest && waitingStatuses.includes(serviceRequest.status) && politeAnswers.includes(normalizeAnswer(text))) {
-      const politeReply = 'בשמחה 🙂';
+      const politeReply = await getBotContent(base44, 'polite_ack') || 'בשמחה 🙂';
       const sent = await sendWhatsApp(chatId, politeReply, botEnabled);
       await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
       await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_polite`, phone, politeReply, chatId, conversationId, outgoingStatus);
@@ -489,8 +493,8 @@ Deno.serve(async (req) => {
 
       if (!sentReassurance && Date.now() - pollStart > 15000) {
         sentReassurance = true;
-        const messages = ['עוד קצת סבלנות, כמעט שם 🙏', 'עוד רגע ואחזור אליך 😊', 'ממש בדרך! ✨'];
-        await sendWhatsApp(chatId, messages[Math.floor(Math.random() * messages.length)], botEnabled);
+        const patienceMessage = await getBotContent(base44, 'patience_message') || 'עוד רגע ואחזור אליך 😊';
+        await sendWhatsApp(chatId, patienceMessage, botEnabled);
       }
 
       if (Date.now() - lastTypingRefresh > 6000) {
