@@ -17,6 +17,16 @@ function extractYear(dateStr) {
   return match ? parseInt(match[0]) : null;
 }
 
+function detectServiceType(reason) {
+  const text = String(reason || '');
+  if (text.includes('פרישה')) return 'retirement';
+  if (text.includes('השקע')) return 'investments';
+  if (text.includes('גירוש') || text.includes('איזון')) return 'divorce_split';
+  if (text.includes('מס')) return 'tax_advisory';
+  if (text.includes('כדאיות') || text.includes('היתכנות')) return 'economic_feasibility';
+  return undefined;
+}
+
 function detectWebinarType(rowText) {
   const text = String(rowText || '');
   if (text.includes('השקע')) return 'investments';
@@ -121,6 +131,7 @@ Deno.serve(async (req) => {
         contact_name: fullName,
         contact_phone: phone,
         contact_email: email || undefined,
+        service_type: detectServiceType(reason),
         status: 'new',
         source: 'website',
         notes: noteParts.join('\n') || undefined,

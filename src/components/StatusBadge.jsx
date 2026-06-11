@@ -113,7 +113,7 @@ export const SERVICE_TYPE_LABELS = {
 export const SOURCE_LABELS = {
   facebook: 'פייסבוק',
   website: 'אתר',
-  webinar: 'וובינר',
+  webinar: 'קמפיין מטא',
   referral: 'הפניה',
   excel_import: 'ייבוא אקסל',
   manual: 'ידני',

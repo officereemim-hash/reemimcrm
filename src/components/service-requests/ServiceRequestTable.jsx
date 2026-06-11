@@ -20,6 +20,11 @@ const SR_STATUS_OPTIONS = [
   { value: 'closed_lost', label: 'נסגר — אבוד' },
 ];
 
+function extractReason(notes) {
+  const match = String(notes || '').match(/סיבת הפניה:\s*(.+)/);
+  return match ? match[1].trim() : null;
+}
+
 export default function ServiceRequestTable({ requests, contacts, onEdit, onDelete, onStatusChange }) {
   const getContact = (id) => contacts.find(c => c.id === id);
 
@@ -53,7 +58,7 @@ export default function ServiceRequestTable({ requests, contacts, onEdit, onDele
                     </Link>
                   </TableCell>
                   <TableCell className="text-right align-middle text-sm text-muted-foreground">{contact?.phone || req.contact_phone || '—'}</TableCell>
-                  <TableCell className="text-right align-middle text-sm">{SERVICE_TYPE_LABELS[req.service_type] || req.service_type || '—'}</TableCell>
+                  <TableCell className="text-right align-middle text-sm">{SERVICE_TYPE_LABELS[req.service_type] || req.service_type || extractReason(req.notes) || '—'}</TableCell>
                   <TableCell className="text-center align-middle">
                     <div className="flex justify-center">
                       <Select value={req.status} onValueChange={v => onStatusChange(req, v)}>
