@@ -49,10 +49,10 @@ Deno.serve(async (req) => {
     const requests = await base44.asServiceRole.entities.ServiceRequest.filter({ contact_id: contact.id }, '-created_date', 10);
     const serviceRequest = requests.find(r => !['completed', 'cancelled', 'closed_lost', 'followup_closed'].includes(r.status)) || requests[0] || null;
 
-    // אם כבר נקבעה שיחה/פגישה — הפונה תיאם בעצמו, אין צורך בהתראת "מבקש שתצרי קשר"
-    const scheduledStatuses = ['phone_meeting', 'meeting_scheduled', 'meeting_scheduled_frontal', 'meeting_scheduled_zoom'];
-    if (serviceRequest && scheduledStatuses.includes(serviceRequest.status)) {
-      return Response.json({ ok: true, skipped: 'already_scheduled' });
+    // חסימת כפילות רק לתיאום שיחה טלפונית (שם ההתראה כבר נשלחת ממסלול הפגישה).
+    // הסלמות אחרי שפגישה נקבעה — כן מודיעים לנציגה.
+    if (serviceRequest && serviceRequest.status === 'phone_meeting') {
+      return Response.json({ ok: true, skipped: 'phone_meeting_already_notified' });
     }
 
     const serviceLabel = SERVICE_LABELS[serviceRequest?.service_type] || serviceRequest?.service_type || 'שירות';
