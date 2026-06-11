@@ -182,10 +182,17 @@ Deno.serve(async (req) => {
         return Response.json({ ok: true, skipped: 'duplicate_event' });
       }
       const intro = await getContent('schedule_intro');
-      const message = fillTemplate(intro || 'מעולה, שמחנו לשמוע שתרצה להתקדם. השלב הבא הוא תיאום פגישה עם בשמת.', {
+      const quoteUrl = await getUrl('pdf', 'quote_' + serviceType);
+      let message = fillTemplate(intro || 'מעולה, שמחנו לשמוע שתרצה להתקדם. השלב הבא הוא תיאום פגישה עם בשמת.', {
         name: contact.full_name || '',
         summary: await getPhoneSummaryBlock(),
-      }).replace(/\n{3,}/g, '\n\n');
+        quote_link: quoteUrl,
+      });
+      if (!quoteUrl) {
+        // אם אין קישור להצעה — מסירים את שורות ההצעה מההודעה
+        message = message.split('\n').filter(line => !line.includes('הצעת המחיר')).join('\n');
+      }
+      message = message.replace(/\n{3,}/g, '\n\n');
       const sent = await sendWhatsApp(message);
       await logCommunication(message, 'schedule_intro', sent);
       await base44.asServiceRole.entities.Contact.update(contact.id, {
