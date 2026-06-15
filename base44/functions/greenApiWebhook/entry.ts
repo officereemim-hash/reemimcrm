@@ -215,15 +215,20 @@ Deno.serve(async (req) => {
     // שליחת אינדיקטור "מקליד..." מיד — כדי שהפונה יראה שהבוט מגיב
     await sendTyping(chatId, 15, botEnabled);
 
-    const recentLogs = await base44.asServiceRole.entities.WhatsAppMessageLog.filter({ phone }, '-created_date', 30);
+    // חיפוש Contact ב-3 פורמטים + בדיקת rate limit — הכל במקביל לחיסכון בזמן
+    const [recentLogs, contactsByIntl, contactsByLocal, contactsByPlus] = await Promise.all([
+      base44.asServiceRole.entities.WhatsAppMessageLog.filter({ phone }, '-created_date', 30),
+      base44.asServiceRole.entities.Contact.filter({ phone }),
+      base44.asServiceRole.entities.Contact.filter({ phone: localPhone }),
+      base44.asServiceRole.entities.Contact.filter({ phone: '+' + phone }),
+    ]);
+
     const recentOutgoing = recentLogs.filter(log => log.direction === 'outgoing' && Date.now() - new Date(log.created_date).getTime() < 60 * 60 * 1000);
     if (botEnabled && recentOutgoing.length >= 10) {
       return Response.json({ ok: true, skipped: true, reason: 'rate_limited' });
     }
 
-    let contacts = await base44.asServiceRole.entities.Contact.filter({ phone });
-    if (contacts.length === 0) contacts = await base44.asServiceRole.entities.Contact.filter({ phone: localPhone });
-    if (contacts.length === 0) contacts = await base44.asServiceRole.entities.Contact.filter({ phone: '+' + phone });
+    const contacts = contactsByIntl.length > 0 ? contactsByIntl : contactsByLocal.length > 0 ? contactsByLocal : contactsByPlus;
     let contact = contacts[0] || null;
 
     // ===== הסרה מרשימת התפוצה דרך וואטסאפ =====
@@ -293,8 +298,7 @@ Deno.serve(async (req) => {
         await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
         await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp0`, phone, greetingMessage, chatId, conversationId, outgoingStatus);
         try {
-          await base44.asServiceRole.agents.addMessage(conversation, { role: 'user', content: text });
-          await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: greetingMessage });
+          await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${greetingMessage}` });
         } catch (error) {}
         return Response.json({ ok: true, fast_path: 'fp0_greeting' });
       }
@@ -322,8 +326,7 @@ Deno.serve(async (req) => {
         await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
         await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_details`, phone, confirmMessage, chatId, conversationId, outgoingStatus);
         try {
-          await base44.asServiceRole.agents.addMessage(conversation, { role: 'user', content: text });
-          await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: confirmMessage });
+          await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${confirmMessage}` });
         } catch (error) {}
         return Response.json({ ok: true, fast_path: 'fp_details_confirm' });
       }
@@ -365,8 +368,7 @@ Deno.serve(async (req) => {
         await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
         await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_saved`, phone, welcomeMessage, chatId, conversationId, outgoingStatus);
         try {
-          await base44.asServiceRole.agents.addMessage(conversation, { role: 'user', content: text });
-          await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: welcomeMessage });
+          await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${welcomeMessage}` });
         } catch (error) {}
         return Response.json({ ok: true, fast_path: 'fp_details_saved' });
       }
@@ -388,8 +390,7 @@ Deno.serve(async (req) => {
         await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
         await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_service`, phone, message, chatId, conversationId, outgoingStatus);
         try {
-          await base44.asServiceRole.agents.addMessage(conversation, { role: 'user', content: text });
-          await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: message });
+          await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${message}` });
         } catch (error) {}
         return Response.json({ ok: true, fast_path: 'fp_service_choice', service_type: selectedServiceType });
       }
@@ -406,8 +407,7 @@ Deno.serve(async (req) => {
       await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
       await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_wait`, phone, ackMessage, chatId, conversationId, outgoingStatus);
       try {
-        await base44.asServiceRole.agents.addMessage(conversation, { role: 'user', content: text });
-        await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: ackMessage });
+        await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${ackMessage}` });
       } catch (error) {}
       return Response.json({ ok: true, fast_path: 'fp_wait_coordinator' });
     }
@@ -446,8 +446,7 @@ Deno.serve(async (req) => {
           await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
           await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_meeting`, phone, calendarUrl, chatId, conversationId, outgoingStatus);
           try {
-            await base44.asServiceRole.agents.addMessage(conversation, { role: 'user', content: text });
-            await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: calendarUrl });
+            await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${calendarUrl}` });
           } catch (error) {}
           return Response.json({ ok: true, fast_path: 'fp_meeting_choice', location: chosenLocation });
         }
@@ -462,8 +461,7 @@ Deno.serve(async (req) => {
         await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
         await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_kavati`, phone, confirmedMessage, chatId, conversationId, outgoingStatus);
         try {
-          await base44.asServiceRole.agents.addMessage(conversation, { role: 'user', content: text });
-          await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: confirmedMessage });
+          await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${confirmedMessage}` });
         } catch (error) {}
         return Response.json({ ok: true, fast_path: 'fp_appointment_confirmed' });
       }
@@ -477,8 +475,7 @@ Deno.serve(async (req) => {
       await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
       await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_docs`, phone, docsAckMessage, chatId, conversationId, outgoingStatus);
       try {
-        await base44.asServiceRole.agents.addMessage(conversation, { role: 'user', content: text });
-        await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: docsAckMessage });
+        await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${docsAckMessage}` });
       } catch (error) {}
       return Response.json({ ok: true, fast_path: 'fp_documents_received' });
     }
@@ -492,8 +489,7 @@ Deno.serve(async (req) => {
       await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
       await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_polite`, phone, politeReply, chatId, conversationId, outgoingStatus);
       try {
-        await base44.asServiceRole.agents.addMessage(conversation, { role: 'user', content: text });
-        await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: politeReply });
+        await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${politeReply}` });
       } catch (error) {}
       return Response.json({ ok: true, fast_path: 'fp_polite_ack' });
     }
