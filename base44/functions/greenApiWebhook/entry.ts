@@ -253,11 +253,6 @@ Deno.serve(async (req) => {
     let conversationId = serviceRequest?.conversation_id || cachedConversationSettings[0]?.value || null;
     let conversation = null;
 
-    if (!conversationId) {
-      const logWithConversation = recentLogs.find(log => log.conversation_id);
-      if (logWithConversation?.conversation_id) conversationId = logWithConversation.conversation_id;
-    }
-
     if (conversationId) {
       try {
         conversation = await base44.asServiceRole.agents.getConversation(conversationId);
