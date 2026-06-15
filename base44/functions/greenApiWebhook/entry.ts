@@ -300,7 +300,8 @@ Deno.serve(async (req) => {
       }
     }
 
-    if (!contact) {
+    // FP-Details: חילוץ פרטים — גם אם הסוכן יצר Contact במקביל, ה-FP צריך לתפוס
+    if (!contact || !serviceRequest) {
       const details = extractContactDetails(text);
       if (details) {
         const settingKey = 'pending_contact_' + phone;
@@ -328,13 +329,17 @@ Deno.serve(async (req) => {
       }
     }
 
+    // FP-Confirm: אישור פרטים ("כן") — בודק pending בלי תלות בקיום Contact (הסוכן עלול ליצור Contact במקביל)
     const positiveAnswers = ['כן', 'נכון', 'הכל נכון', 'בטח', 'כמובן', 'אוקי', 'ok', 'סבבה', '👍', '✅'];
-    if (!contact && positiveAnswers.includes(normalizeAnswer(text))) {
+    if (positiveAnswers.includes(normalizeAnswer(text))) {
       const settingKey = 'pending_contact_' + phone;
       const pendingSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: settingKey });
       if (pendingSettings.length > 0) {
         const details = JSON.parse(pendingSettings[0].value);
-        const existingContacts = await base44.asServiceRole.entities.Contact.filter({ phone: details.phone });
+        // חיפוש בכל הפורמטים — הסוכן עלול לשמור עם +972 או 0
+        let existingContacts = await base44.asServiceRole.entities.Contact.filter({ phone: details.phone });
+        if (existingContacts.length === 0) existingContacts = await base44.asServiceRole.entities.Contact.filter({ phone });
+        if (existingContacts.length === 0) existingContacts = await base44.asServiceRole.entities.Contact.filter({ phone: '+' + phone });
         const createdContact = existingContacts[0] || await base44.asServiceRole.entities.Contact.create({
           full_name: details.name,
           phone: details.phone,
