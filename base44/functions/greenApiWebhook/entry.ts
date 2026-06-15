@@ -203,6 +203,15 @@ Deno.serve(async (req) => {
     const botEnabled = botEnabledSettings[0]?.value === 'true' || botEnabledSettings[0]?.value === true;
     const outgoingStatus = botEnabled ? 'replied' : 'skipped';
 
+    // אישור מיידי בתחילת שיחה חדשה — לפני האינדיקטור — כדי שהפונה (בעיקר מבוגר) יראה תגובה ודאית מיד
+    const isNewConversation = cachedConversationSettings.length === 0;
+    if (isNewConversation) {
+      const instantAck = await getBotContent(base44, 'instant_ack');
+      if (instantAck) {
+        await sendWhatsApp(chatId, instantAck, botEnabled);
+      }
+    }
+
     // שליחת אינדיקטור "מקליד..." מיד — כדי שהפונה יראה שהבוט מגיב
     await sendTyping(chatId, 15, botEnabled);
 
