@@ -270,17 +270,7 @@ Deno.serve(async (req) => {
       const confirmResult = await sendWhatsApp(confirmMessage);
       await logCommunication(confirmMessage, templateKey, confirmResult);
 
-      // 2. סיכום פגישה + הצעת מחיר
-      const summaryTemplate = await getContent('meeting_summary_quote');
-      if (summaryTemplate) {
-        const quoteUrl = await getUrl('pdf', 'quote_' + serviceType);
-        await new Promise(resolve => setTimeout(resolve, 1200));
-        const summaryMessage = fillTemplate(summaryTemplate, { ...values, quote_link: quoteUrl });
-        const summaryResult = await sendWhatsApp(summaryMessage);
-        await logCommunication(summaryMessage, 'meeting_summary_quote', summaryResult);
-      }
-
-      // 3. שאלון שורנס
+      // 2. שאלון שורנס (הסיכום + הצעת המחיר כבר נשלחו בשלב quote_sent — אין כפילות כאן)
       const questionnaireTemplate = await getContent('questionnaire_request');
       if (questionnaireTemplate) {
         const questionnaireUrl = await getUrl('questionnaire', 'shoranss_questionnaire');
