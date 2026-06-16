@@ -374,6 +374,52 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ===== FP-ServiceClarify: מענה על בירור תחום (כשהשאלון לא נשלח כי התחום לא זוהה) =====
+    if (contact && serviceRequest && serviceRequest.pending_service_clarify) {
+      const clarifiedType = detectServiceType(text);
+      const SHORANSS_SUBTYPE = {
+        retirement: 'shoranss_retirement',
+        economic_feasibility: 'shoranss_economic',
+        investments: 'shoranss_investments',
+        divorce_split: 'shoranss_divorce',
+        tax_advisory: 'shoranss_tax',
+      };
+      const clarifySubType = SHORANSS_SUBTYPE[clarifiedType];
+
+      if (clarifiedType && clarifySubType) {
+        // זוהה תחום — שולחים את השאלון הנכון
+        await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, {
+          service_type: clarifiedType,
+          pending_service_clarify: false,
+        });
+        const questionnaireUrl = await getServiceContentUrl(base44, { content_type: 'questionnaire', sub_type: clarifySubType });
+        const questionnaireTemplate = await getBotContent(base44, 'questionnaire_request');
+        const message = (questionnaireTemplate || 'מצורף שאלון קצר למילוי לקראת הפגישה:\n{questionnaire_link}')
+          .replaceAll('{name}', contact.full_name || '')
+          .replaceAll('{questionnaire_link}', questionnaireUrl);
+        const sent = await sendWhatsApp(chatId, message, botEnabled);
+        await base44.asServiceRole.entities.Contact.update(contact.id, { bot_status: 'waiting_user_reply', shoranss_questionnaire: 'sent' });
+        await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
+        await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_clarify`, phone, message, chatId, conversationId, outgoingStatus);
+        try {
+          await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${message}` });
+        } catch (error) {}
+        return Response.json({ ok: true, fast_path: 'fp_service_clarified', service_type: clarifiedType });
+      }
+
+      // עדיין לא זוהה תחום — העברה לנציגה
+      await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { pending_service_clarify: false });
+      await base44.asServiceRole.entities.Contact.update(contact.id, { bot_status: 'waiting_agent', conversation_owner: 'bar' });
+      const escalateMessage = await getBotContent(base44, 'escalate_to_agent') || 'מעבירים את הפנייה לנציגת שירות, נחזור אליך בהקדם 🙏';
+      const sent = await sendWhatsApp(chatId, escalateMessage, botEnabled);
+      await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
+      await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_clarify_esc`, phone, escalateMessage, chatId, conversationId, outgoingStatus);
+      try {
+        await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${escalateMessage}` });
+      } catch (error) {}
+      return Response.json({ ok: true, fast_path: 'fp_service_clarify_escalated' });
+    }
+
     const selectedServiceType = detectServiceType(text);
     if (selectedServiceType && contact && serviceRequest && !serviceRequest.service_type) {
       await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { service_type: selectedServiceType });

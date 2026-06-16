@@ -34,7 +34,16 @@ Deno.serve(async (req) => {
     if (!template) return Response.json({ ok: true, skipped: 'no_template' });
 
     const questionnaires = await base44.asServiceRole.entities.ServiceContent.filter({ content_type: 'questionnaire', is_active: true });
-    const questionnaireUrl = questionnaires[0]?.url || '';
+    const SHORANSS_SUBTYPE = {
+      retirement: 'shoranss_retirement',
+      economic_feasibility: 'shoranss_economic',
+      investments: 'shoranss_investments',
+      divorce_split: 'shoranss_divorce',
+      tax_advisory: 'shoranss_tax',
+      annual_service_call: 'shoranss_retirement',
+    };
+    const urlBySubType = {};
+    for (const q of questionnaires) urlBySubType[q.sub_type] = q.url || '';
 
     let sent = 0;
     let skipped = 0;
@@ -64,6 +73,8 @@ Deno.serve(async (req) => {
         const contacts = await base44.asServiceRole.entities.Contact.filter({ id: requestItem.contact_id });
         const contact = contacts[0];
         if (!contact?.phone) { skipped++; continue; }
+
+        const questionnaireUrl = urlBySubType[SHORANSS_SUBTYPE[requestItem.service_type]] || '';
 
         const message = template
           .replaceAll('{name}', contact.full_name || '')

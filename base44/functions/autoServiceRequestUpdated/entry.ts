@@ -65,6 +65,23 @@ Deno.serve(async (req) => {
       return records[0]?.content || '';
     }
 
+    // מיפוי תחום → sub_type של שאלון שורנס המתאים
+    const SHORANSS_SUBTYPE = {
+      retirement: 'shoranss_retirement',
+      economic_feasibility: 'shoranss_economic',
+      investments: 'shoranss_investments',
+      divorce_split: 'shoranss_divorce',
+      tax_advisory: 'shoranss_tax',
+      annual_service_call: 'shoranss_retirement',
+    };
+
+    async function getQuestionnaireUrl() {
+      const subType = SHORANSS_SUBTYPE[serviceType];
+      if (!subType) return '';
+      const records = await base44.asServiceRole.entities.ServiceContent.filter({ content_type: 'questionnaire', sub_type: subType, is_active: true });
+      return records[0]?.url || '';
+    }
+
     async function getUrl(contentType, subType) {
       if (subType) {
         const records = await base44.asServiceRole.entities.ServiceContent.filter({ content_type: contentType, sub_type: subType, is_active: true });
@@ -271,9 +288,24 @@ Deno.serve(async (req) => {
       await logCommunication(confirmMessage, templateKey, confirmResult);
 
       // 2. שאלון שורנס (הסיכום + הצעת המחיר כבר נשלחו בשלב quote_sent — אין כפילות כאן)
+      // אם התחום לא מזוהה — לא שולחים שאלון אקראי; שולחים בירור תחום ומסמנים pending_service_clarify
+      const questionnaireUrl = await getQuestionnaireUrl();
+      if (!questionnaireUrl) {
+        const clarifyTemplate = await getContent('service_type_clarify');
+        const clarifyMessage = fillTemplate(clarifyTemplate || 'לאיזה תחום הפנייה? 1) ייעוץ פרישה 2) היתכנות כלכלית 3) תכנון השקעות 4) איזון אקטוארי בגירושין 5) זכויות מס', values);
+        await new Promise(resolve => setTimeout(resolve, 1200));
+        const clarifyResult = await sendWhatsApp(clarifyMessage);
+        await logCommunication(clarifyMessage, 'service_type_clarify', clarifyResult);
+        await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { pending_service_clarify: true });
+        await base44.asServiceRole.entities.Contact.update(contact.id, {
+          bot_status: 'waiting_user_reply',
+          last_bot_interaction_at: new Date().toISOString(),
+        });
+        return Response.json({ ok: true, action: 'meeting_scheduled_clarify_service', template: templateKey });
+      }
+
       const questionnaireTemplate = await getContent('questionnaire_request');
       if (questionnaireTemplate) {
-        const questionnaireUrl = await getUrl('questionnaire', 'shoranss_questionnaire');
         await new Promise(resolve => setTimeout(resolve, 1200));
         const questionnaireMessage = fillTemplate(questionnaireTemplate, { ...values, questionnaire_link: questionnaireUrl });
         const questionnaireResult = await sendWhatsApp(questionnaireMessage);
