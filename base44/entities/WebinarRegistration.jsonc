@@ -24,6 +24,16 @@
       "type": "boolean",
       "default": false
     },
+    "reminder_1h_sent": {
+      "type": "boolean",
+      "default": false,
+      "description": "\u05ea\u05d6\u05db\u05d5\u05e8\u05ea \u05e9\u05e2\u05d4 \u05dc\u05e4\u05e0\u05d9 \u05e0\u05e9\u05dc\u05d7\u05d4"
+    },
+    "reminder_start_sent": {
+      "type": "boolean",
+      "default": false,
+      "description": "\u05ea\u05d6\u05db\u05d5\u05e8\u05ea \u05ea\u05d7\u05d9\u05dc\u05ea \u05d5\u05d5\u05d1\u05d9\u05e0\u05e8 \u05e0\u05e9\u05dc\u05d7\u05d4"
+    },
     "coupon_code": {
       "type": "string"
     },
@@ -34,6 +44,11 @@
     "coupon_sent_at": {
       "type": "string",
       "format": "date"
+    },
+    "pending_payment": {
+      "type": "boolean",
+      "default": false,
+      "description": "\u05de\u05d9\u05de\u05e9 \u05e7\u05d5\u05e4\u05d5\u05df \u05d5\u05de\u05de\u05ea\u05d9\u05df \u05dc\u05ea\u05e9\u05dc\u05d5\u05dd"
     },
     "payment_completed": {
       "type": "boolean",

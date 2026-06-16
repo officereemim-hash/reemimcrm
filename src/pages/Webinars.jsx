@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Link } from 'react-router-dom';
-import { Video, Check, X, Plus } from 'lucide-react';
+import { Video, Check, X, Plus, Gift, Loader2 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { format } from 'date-fns';
 import ViewToggle from '@/components/shared/ViewToggle';
@@ -21,6 +22,7 @@ export default function Webinars() {
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [sendingCoupon, setSendingCoupon] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -57,6 +59,27 @@ export default function Webinars() {
     load();
   };
 
+  const handleSendCoupons = async () => {
+    if (filter === 'all') {
+      toast.error('בחרי סוג וובינר ספציפי לפני שליחת קופונים');
+      return;
+    }
+    setSendingCoupon(true);
+    try {
+      const res = await base44.functions.invoke('sendWebinarCoupon', { webinar_type: filter });
+      if (res.data?.ok) {
+        toast.success(`נשלחו ${res.data.sent} קופונים (${res.data.skipped} דולגו)`);
+        load();
+      } else {
+        toast.error('שגיאה בשליחת הקופונים');
+      }
+    } catch {
+      toast.error('שגיאה בשליחת הקופונים');
+    } finally {
+      setSendingCoupon(false);
+    }
+  };
+
   const handleDelete = async () => {
     if (deleteTarget) {
       await base44.entities.WebinarRegistration.delete(deleteTarget.id);
@@ -80,6 +103,12 @@ export default function Webinars() {
         </div>
         <div className="flex gap-2 items-center">
           <ViewToggle view={viewMode} onViewChange={setViewMode} />
+          {filter !== 'all' && (
+            <Button size="sm" variant="outline" className="gap-2" onClick={handleSendCoupons} disabled={sendingCoupon}>
+              {sendingCoupon ? <Loader2 size={16} className="animate-spin" /> : <Gift size={16} />}
+              שלח קופונים
+            </Button>
+          )}
           <Button size="sm" className="gap-2" onClick={() => { setEditItem(null); setShowForm(true); }}>
             <Plus size={16} />רישום חדש
           </Button>

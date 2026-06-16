@@ -374,6 +374,53 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ===== FP-WebinarCoupon: זיהוי קוד קופון וובינר → קישור תשלום (דמו) =====
+    if (contact) {
+      const couponText = String(text || '').trim().toUpperCase();
+      const couponMatch = couponText.match(/\b(INV|DIV|RET|WEB)-[A-Z0-9]{4,6}\b/);
+      if (couponMatch) {
+        const code = couponMatch[0];
+        const regsByContact = await base44.asServiceRole.entities.WebinarRegistration.filter({ contact_id: contact.id }, '-created_date', 20);
+        const reg = regsByContact.find(r => String(r.coupon_code || '').toUpperCase() === code);
+        if (reg) {
+          const PAYMENT_SUBTYPE = {
+            investments: 'payment_webinar_investments',
+            divorce: 'payment_webinar_divorce',
+            retirement: 'payment_webinar_retirement',
+          };
+          const paymentUrl = await getServiceContentUrl(base44, { content_type: 'payment_link', sub_type: PAYMENT_SUBTYPE[reg.webinar_type] });
+          const intro = await getBotContent(base44, 'webinar_payment_intro') || 'מעולה {name}! קישור לתשלום: {payment_link}';
+          const message = intro.replaceAll('{name}', contact.full_name || '').replaceAll('{payment_link}', paymentUrl);
+          const sent = await sendWhatsApp(chatId, message, botEnabled);
+          await base44.asServiceRole.entities.WebinarRegistration.update(reg.id, { pending_payment: true });
+          await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
+          await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_coupon`, phone, message, chatId, conversationId, outgoingStatus);
+          try {
+            await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${message}` });
+          } catch (error) {}
+          return Response.json({ ok: true, fast_path: 'fp_webinar_coupon', webinar_type: reg.webinar_type });
+        }
+      }
+    }
+
+    // ===== FP-WebinarPaid: "שילמתי" אחרי מימוש קופון → בחירת מיקום פגישה =====
+    if (contact && (normalizeAnswer(text).startsWith('שילמתי') || normalizeAnswer(text) === 'שולם')) {
+      const regsByContact = await base44.asServiceRole.entities.WebinarRegistration.filter({ contact_id: contact.id, pending_payment: true }, '-created_date', 5);
+      const reg = regsByContact[0];
+      if (reg) {
+        const locationMessage = await getBotContent(base44, 'webinar_location_choice') || 'איך תרצו לקיים את הפגישה?\n1) זום 2) מודיעין 3) פתח תקווה 4) טלפון';
+        const message = locationMessage.replaceAll('{name}', contact.full_name || '');
+        const sent = await sendWhatsApp(chatId, message, botEnabled);
+        await base44.asServiceRole.entities.WebinarRegistration.update(reg.id, { pending_payment: false, payment_completed: true });
+        await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
+        await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_paid`, phone, message, chatId, conversationId, outgoingStatus);
+        try {
+          await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${message}` });
+        } catch (error) {}
+        return Response.json({ ok: true, fast_path: 'fp_webinar_paid' });
+      }
+    }
+
     // ===== FP-ServiceClarify: מענה על בירור תחום (כשהשאלון לא נשלח כי התחום לא זוהה) =====
     if (contact && serviceRequest && serviceRequest.pending_service_clarify) {
       const clarifiedType = detectServiceType(text);

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users, FileText, Calendar, MessageSquare,
-  Video, Settings, Menu, X, Bell, Mail, Bot
+  Video, Settings, Menu, X, Bell, Mail, Bot, Globe
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -14,6 +14,7 @@ const navItems = [
   { path: '/marketing', label: 'מרכז דיוור', icon: Mail },
 
   { path: '/webinars', label: 'וובינרים', icon: Video },
+  { path: '/landing-pages', label: 'דפי נחיתה', icon: Globe },
   { path: '/excel-imports', label: 'ייבוא אקסלים', icon: FileText },
   { path: '/bot-content', label: 'תוכן הבוט', icon: Bot },
   { path: '/service-content', label: 'ניהול תוכן', icon: FileText },

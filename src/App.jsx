@@ -26,6 +26,8 @@ import BotChat from '@/pages/BotChat';
 import ServiceRequestDetail from '@/pages/ServiceRequestDetail';
 import ScheduleMeeting from '@/pages/ScheduleMeeting';
 import SignDocument from '@/pages/SignDocument';
+import WebinarLanding from '@/pages/WebinarLanding';
+import LandingPagesAdmin from '@/pages/LandingPagesAdmin';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -59,6 +61,7 @@ const AuthenticatedApp = () => {
         <Route path="/meetings" element={<Meetings />} />
 
         <Route path="/webinars" element={<Webinars />} />
+        <Route path="/landing-pages" element={<LandingPagesAdmin />} />
         <Route path="/excel-imports" element={<ExcelImports />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/marketing" element={<MarketingHub />} />
@@ -80,6 +83,7 @@ function App() {
             {/* Public routes — no auth required */}
             <Route path="/schedule" element={<ScheduleMeeting />} />
             <Route path="/sign" element={<SignDocument />} />
+            <Route path="/webinar/:slug" element={<WebinarLanding />} />
             <Route path="*" element={<AuthenticatedApp />} />
           </Routes>
         </Router>
