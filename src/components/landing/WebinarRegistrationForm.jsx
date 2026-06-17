@@ -4,6 +4,7 @@ import { Loader2, CheckCircle } from 'lucide-react';
 
 export default function WebinarRegistrationForm({ slug, page }) {
   const [form, setForm] = useState({ full_name: '', phone: '', email: '' });
+  const [consent, setConsent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [done, setDone] = useState(false);
@@ -15,6 +16,10 @@ export default function WebinarRegistrationForm({ slug, page }) {
     e.preventDefault();
     if (!form.full_name.trim() || !form.phone.trim()) {
       setError('נא למלא שם וטלפון');
+      return;
+    }
+    if (!consent) {
+      setError('יש לאשר את תנאי השימוש ומדיניות הפרטיות');
       return;
     }
     setSubmitting(true);
@@ -39,7 +44,7 @@ export default function WebinarRegistrationForm({ slug, page }) {
         <CheckCircle className="w-14 h-14 mx-auto mb-3" style={{ color: accent }} />
         <h3 className="text-xl font-bold mb-2" style={{ color: primary }}>נרשמת בהצלחה! 🎉</h3>
         <p className="text-gray-600 whitespace-pre-line">
-          {page.success_message || 'שלחנו לך אישור והקישור לוובינר בוואטסאפ ובמייל.'}
+          {page.success_message || 'תודה שנרשמת! הפרטים נקלטו במערכת. תזכורת תישלח אליך בהמשך — שעה לפני ועם תחילת הוובינר.\nשימו לב: לפעמים המייל מגיע לתיבת הספאם, כדאי לבדוק גם שם.'}
         </p>
       </div>
     );
@@ -74,6 +79,24 @@ export default function WebinarRegistrationForm({ slug, page }) {
         className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2"
         dir="ltr"
       />
+      <label className="flex items-start gap-2 text-xs text-gray-600 cursor-pointer leading-relaxed px-1">
+        <input
+          type="checkbox"
+          checked={consent}
+          onChange={e => setConsent(e.target.checked)}
+          className="mt-0.5 w-4 h-4 flex-shrink-0 cursor-pointer"
+          style={{ accentColor: primary }}
+        />
+        <span>
+          {page.consent_text || 'קראתי את תנאי השימוש ומדיניות הפרטיות, ואני מסכים/ה שתיצרו עמי קשר.'}
+          {(page.terms_url || page.privacy_url) && (
+            <span className="block mt-1 space-x-2 space-x-reverse">
+              {page.terms_url && <a href={page.terms_url} target="_blank" rel="noopener noreferrer" className="underline" style={{ color: primary }}>תנאי שימוש</a>}
+              {page.privacy_url && <a href={page.privacy_url} target="_blank" rel="noopener noreferrer" className="underline" style={{ color: primary }}>מדיניות פרטיות</a>}
+            </span>
+          )}
+        </span>
+      </label>
       {error && <p className="text-sm text-red-500 text-center">{error}</p>}
       <button
         type="submit"

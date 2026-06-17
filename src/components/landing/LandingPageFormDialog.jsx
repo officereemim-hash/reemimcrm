@@ -9,6 +9,14 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, Image as ImageIcon } from 'lucide-react';
 import EmailBlockEditor from '@/components/marketing/EmailBlockEditor';
+import FaqEditor from '@/components/landing/FaqEditor';
+
+const DEFAULT_SUCCESS = `תודה שנרשמת לוובינר! הפרטים נקלטו במערכת.
+תזכורת תישלח אליך בהמשך — שעה לפני ועם תחילת הוובינר.
+שימו לב: לפעמים המייל מגיע לתיבת הספאם, אז כדאי לבדוק גם שם.
+מומלץ להוסיף את המועד ליומן כדי לא לפספס.`;
+
+const DEFAULT_CONSENT = `קראתי את תנאי השימוש ומדיניות הפרטיות, ואני מסכים/ה שתיצרו עמי קשר בנוגע לשירותים ולמוצרים של העסק.`;
 
 const TYPE_OPTIONS = [
   { value: 'investments', label: 'השקעות' },
@@ -20,8 +28,9 @@ const EMPTY = {
   slug: '', webinar_type: 'retirement', is_active: true, webinar_date: '',
   hero_title: '', hero_subtitle: '', hero_image_url: '', hero_image_fit: 'cover', hero_image_position: '50%',
   speaker_name: '', speaker_title: '', speaker_image_url: '', speaker_image_fit: 'cover',
-  blocks: [], form_title: 'הרשמה לוובינר', form_button_text: 'הרשמה לוובינר',
-  success_message: '', primary_color: '#4B2E83', accent_color: '#D4A53C',
+  blocks: [], faqs: [], form_title: 'הרשמה לוובינר', form_button_text: 'הרשמה לוובינר',
+  success_message: DEFAULT_SUCCESS, consent_text: DEFAULT_CONSENT, terms_url: '', privacy_url: '', recording_url: '',
+  primary_color: '#4B2E83', accent_color: '#D4A53C',
 };
 
 export default function LandingPageFormDialog({ open, onClose, onSave, editItem }) {
@@ -34,6 +43,7 @@ export default function LandingPageFormDialog({ open, onClose, onSave, editItem 
         ...EMPTY, ...editItem,
         webinar_date: editItem.webinar_date ? editItem.webinar_date.slice(0, 16) : '',
         blocks: editItem.blocks || [],
+        faqs: editItem.faqs || [],
       });
     } else {
       setForm(EMPTY);
@@ -121,6 +131,34 @@ export default function LandingPageFormDialog({ open, onClose, onSave, editItem 
           <div>
             <Label className="mb-2 block">בלוקי תוכן</Label>
             <EmailBlockEditor blocks={form.blocks} onChange={b => set('blocks', b)} />
+          </div>
+
+          <div>
+            <Label className="mb-2 block">שאלות ותשובות (FAQ)</Label>
+            <FaqEditor faqs={form.faqs} onChange={f => set('faqs', f)} />
+          </div>
+
+          <div>
+            <Label>קישור להקלטת הוובינר (יוצג בדף לאחר העלאה)</Label>
+            <Input value={form.recording_url} onChange={e => set('recording_url', e.target.value)} placeholder="https://..." dir="ltr" />
+          </div>
+
+          <div className="border-t pt-4 space-y-3">
+            <Label className="font-semibold">הסכמה ותנאים</Label>
+            <div>
+              <Label className="text-xs text-muted-foreground">טקסט הסכמה (מוצג ליד הצ'קבוקס בטופס)</Label>
+              <Textarea value={form.consent_text} onChange={e => set('consent_text', e.target.value)} rows={2} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs text-muted-foreground">קישור לתנאי שימוש</Label>
+                <Input value={form.terms_url} onChange={e => set('terms_url', e.target.value)} placeholder="https://..." dir="ltr" />
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">קישור למדיניות פרטיות</Label>
+                <Input value={form.privacy_url} onChange={e => set('privacy_url', e.target.value)} placeholder="https://..." dir="ltr" />
+              </div>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">

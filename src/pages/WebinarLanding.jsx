@@ -5,6 +5,7 @@ import { Calendar, AlertCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { he } from 'date-fns/locale';
 import WebinarRegistrationForm from '@/components/landing/WebinarRegistrationForm';
+import FaqSection from '@/components/landing/FaqSection';
 
 export default function WebinarLanding() {
   const { slug } = useParams();
@@ -113,6 +114,17 @@ export default function WebinarLanding() {
           </div>
         </div>
       </div>
+
+      {page.recording_url && (
+        <div className="max-w-3xl mx-auto px-6 pb-8">
+          <h2 className="text-xl md:text-2xl font-bold text-center mb-4" style={{ color: primary }}>צפייה בהקלטת הוובינר</h2>
+          <div className="relative w-full rounded-2xl overflow-hidden shadow-md bg-black" style={{ aspectRatio: '16 / 9' }}>
+            <iframe src={page.recording_url} title="הקלטת הוובינר" className="absolute inset-0 w-full h-full" allow="autoplay; fullscreen; picture-in-picture" allowFullScreen />
+          </div>
+        </div>
+      )}
+
+      <FaqSection faqs={page.faqs} primary={primary} />
 
       <footer className="text-center text-sm text-gray-400 py-8">
         קרנות ראמים — ייעוץ פנסיוני ופרישה
