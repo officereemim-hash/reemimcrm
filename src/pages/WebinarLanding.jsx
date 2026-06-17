@@ -52,12 +52,12 @@ export default function WebinarLanding() {
       {/* Hero */}
       <div className="relative text-white" style={{ backgroundColor: primary }}>
         {page.hero_image_url && page.hero_image_fit === 'contain' ? (
-          /* תמונה מלאה — מוצגת כפי שהיא, ברוחב מלא וללא חיתוך; הגובה מתאים לתמונה */
-          <img src={page.hero_image_url} alt={page.hero_title || ''} className="w-full block" />
+          /* תמונה מלאה — מוצגת במלואה ללא חיתוך, מוגבלת לחצי גובה מסך */
+          <img src={page.hero_image_url} alt={page.hero_title || ''} className="w-full block max-h-[50vh] object-contain mx-auto" />
         ) : page.hero_image_url ? (
-          /* מילוי — חיתוך לרקע בגובה קבוע */
-          <div className="absolute inset-0 opacity-20 bg-center bg-no-repeat bg-cover"
-            style={{ backgroundImage: `url(${page.hero_image_url})` }} />
+          /* מילוי — חיתוך לרקע בגובה קבוע, עם מיקום אנכי נשלט */
+          <div className="absolute inset-0 opacity-20 bg-no-repeat bg-cover"
+            style={{ backgroundImage: `url(${page.hero_image_url})`, backgroundPosition: `center ${page.hero_image_position || 'center'}` }} />
         ) : null}
 
         {/* טקסט הבאנר — שכבת-על על התמונה במצב "מלא", או על רקע הצבע במצב "מילוי"/ללא תמונה */}
