@@ -50,20 +50,28 @@ export default function WebinarLanding() {
   return (
     <div className="min-h-screen bg-stone-50" dir="rtl">
       {/* Hero */}
-      <div className="relative text-white px-6 py-16 md:py-24" style={{ backgroundColor: primary }}>
-        {page.hero_image_url && (
-          <div className="absolute inset-0 opacity-20 bg-center bg-no-repeat"
-            style={{ backgroundImage: `url(${page.hero_image_url})`, backgroundSize: page.hero_image_fit === 'contain' ? 'contain' : 'cover' }} />
-        )}
-        <div className="relative max-w-3xl mx-auto text-center">
-          <h1 className="text-3xl md:text-5xl font-bold mb-4">{page.hero_title || 'וובינר מקצועי'}</h1>
-          {page.hero_subtitle && <p className="text-lg md:text-xl opacity-90">{page.hero_subtitle}</p>}
-          {dateStr && (
-            <div className="inline-flex items-center gap-2 mt-6 px-4 py-2 rounded-full text-sm" style={{ backgroundColor: accent }}>
-              <Calendar className="w-4 h-4" />
-              {dateStr}
-            </div>
-          )}
+      <div className="relative text-white" style={{ backgroundColor: primary }}>
+        {page.hero_image_url && page.hero_image_fit === 'contain' ? (
+          /* תמונה מלאה — מוצגת כפי שהיא, ברוחב מלא וללא חיתוך; הגובה מתאים לתמונה */
+          <img src={page.hero_image_url} alt={page.hero_title || ''} className="w-full block" />
+        ) : page.hero_image_url ? (
+          /* מילוי — חיתוך לרקע בגובה קבוע */
+          <div className="absolute inset-0 opacity-20 bg-center bg-no-repeat bg-cover"
+            style={{ backgroundImage: `url(${page.hero_image_url})` }} />
+        ) : null}
+
+        {/* טקסט הבאנר — שכבת-על על התמונה במצב "מלא", או על רקע הצבע במצב "מילוי"/ללא תמונה */}
+        <div className={`${page.hero_image_url && page.hero_image_fit === 'contain' ? 'absolute inset-0 flex flex-col items-center justify-center bg-black/30' : 'relative py-16 md:py-24'} px-6`}>
+          <div className="max-w-3xl mx-auto text-center">
+            <h1 className="text-3xl md:text-5xl font-bold mb-4 drop-shadow">{page.hero_title || 'וובינר מקצועי'}</h1>
+            {page.hero_subtitle && <p className="text-lg md:text-xl opacity-90 drop-shadow">{page.hero_subtitle}</p>}
+            {dateStr && (
+              <div className="inline-flex items-center gap-2 mt-6 px-4 py-2 rounded-full text-sm" style={{ backgroundColor: accent }}>
+                <Calendar className="w-4 h-4" />
+                {dateStr}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
