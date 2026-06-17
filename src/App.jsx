@@ -28,6 +28,7 @@ import ScheduleMeeting from '@/pages/ScheduleMeeting';
 import SignDocument from '@/pages/SignDocument';
 import WebinarLanding from '@/pages/WebinarLanding';
 import LandingPagesAdmin from '@/pages/LandingPagesAdmin';
+import Testing from '@/pages/Testing';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -68,6 +69,7 @@ const AuthenticatedApp = () => {
         <Route path="/bot-content" element={<BotContentPage />} />
         <Route path="/service-content" element={<ServiceContentPage />} />
         <Route path="/bot-chat" element={<BotChat />} />
+        <Route path="/testing" element={<Testing />} />
         <Route path="*" element={<PageNotFound />} />
       </Route>
     </Routes>
