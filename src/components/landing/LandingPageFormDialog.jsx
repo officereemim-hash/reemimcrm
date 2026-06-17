@@ -18,8 +18,8 @@ const TYPE_OPTIONS = [
 
 const EMPTY = {
   slug: '', webinar_type: 'retirement', is_active: true, webinar_date: '',
-  hero_title: '', hero_subtitle: '', hero_image_url: '',
-  speaker_name: '', speaker_title: '', speaker_image_url: '',
+  hero_title: '', hero_subtitle: '', hero_image_url: '', hero_image_fit: 'cover',
+  speaker_name: '', speaker_title: '', speaker_image_url: '', speaker_image_fit: 'cover',
   blocks: [], form_title: 'הרשמה לוובינר', form_button_text: 'הרשמה לוובינר',
   success_message: '', primary_color: '#4B2E83', accent_color: '#D4A53C',
 };
@@ -104,7 +104,7 @@ export default function LandingPageFormDialog({ open, onClose, onSave, editItem 
             <Textarea value={form.hero_subtitle} onChange={e => set('hero_subtitle', e.target.value)} rows={2} />
           </div>
 
-          <ImageField label="תמונת באנר" field="hero_image_url" form={form} uploading={uploading} onUpload={uploadImage} onClear={set} />
+          <ImageField label="תמונת באנר" field="hero_image_url" fitField="hero_image_fit" form={form} uploading={uploading} onUpload={uploadImage} onClear={set} onSet={set} />
 
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -116,7 +116,7 @@ export default function LandingPageFormDialog({ open, onClose, onSave, editItem 
               <Input value={form.speaker_title} onChange={e => set('speaker_title', e.target.value)} />
             </div>
           </div>
-          <ImageField label="תמונת המרצה" field="speaker_image_url" form={form} uploading={uploading} onUpload={uploadImage} onClear={set} />
+          <ImageField label="תמונת המרצה" field="speaker_image_url" fitField="speaker_image_fit" form={form} uploading={uploading} onUpload={uploadImage} onClear={set} onSet={set} />
 
           <div>
             <Label className="mb-2 block">בלוקי תוכן</Label>
@@ -159,15 +159,25 @@ export default function LandingPageFormDialog({ open, onClose, onSave, editItem 
   );
 }
 
-function ImageField({ label, field, form, uploading, onUpload, onClear }) {
+function ImageField({ label, field, fitField, form, uploading, onUpload, onClear, onSet }) {
+  const fit = form[fitField] || 'cover';
   return (
     <div>
       <Label>{label}</Label>
       {form[field] ? (
-        <div className="relative mt-1">
-          <img src={form[field]} alt={label} className="w-full max-h-32 object-cover rounded-lg" />
-          <button type="button" onClick={() => onClear(field, '')}
-            className="absolute top-1 left-1 bg-destructive text-white rounded-full px-2 py-0.5 text-xs">הסר</button>
+        <div className="mt-1 space-y-2">
+          <div className="relative bg-muted/40 rounded-lg">
+            <img src={form[field]} alt={label} className={`w-full max-h-40 ${fit === 'contain' ? 'object-contain' : 'object-cover'} rounded-lg`} />
+            <button type="button" onClick={() => onClear(field, '')}
+              className="absolute top-1 left-1 bg-destructive text-white rounded-full px-2 py-0.5 text-xs">הסר</button>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="text-xs text-muted-foreground ml-1">תצוגה:</span>
+            <button type="button" onClick={() => onSet(fitField, 'cover')}
+              className={`text-xs px-2 py-1 rounded border ${fit === 'cover' ? 'bg-primary text-white border-primary' : 'border-border hover:bg-muted'}`}>מילוי (חיתוך)</button>
+            <button type="button" onClick={() => onSet(fitField, 'contain')}
+              className={`text-xs px-2 py-1 rounded border ${fit === 'contain' ? 'bg-primary text-white border-primary' : 'border-border hover:bg-muted'}`}>תמונה מלאה</button>
+          </div>
         </div>
       ) : (
         <label className="flex items-center justify-center gap-2 border-2 border-dashed border-border rounded-lg p-4 cursor-pointer hover:bg-muted/50 mt-1">

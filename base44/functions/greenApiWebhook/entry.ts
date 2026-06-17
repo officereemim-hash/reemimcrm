@@ -389,8 +389,14 @@ Deno.serve(async (req) => {
             retirement: 'payment_webinar_retirement',
           };
           const paymentUrl = await getServiceContentUrl(base44, { content_type: 'payment_link', sub_type: PAYMENT_SUBTYPE[reg.webinar_type] });
+          const couponCfgRecords = await base44.asServiceRole.entities.WebinarCouponSetting.filter({ webinar_type: reg.webinar_type });
+          const couponCfg = couponCfgRecords[0] || {};
           const intro = await getBotContent(base44, 'webinar_payment_intro') || 'מעולה {name}! קישור לתשלום: {payment_link}';
-          const message = intro.replaceAll('{name}', contact.full_name || '').replaceAll('{payment_link}', paymentUrl);
+          const message = intro
+            .replaceAll('{name}', contact.full_name || '')
+            .replaceAll('{payment_link}', paymentUrl)
+            .replaceAll('{discount}', couponCfg.discount_percent != null ? String(couponCfg.discount_percent) : '')
+            .replaceAll('{amount}', couponCfg.amount != null ? String(couponCfg.amount) : '');
           const sent = await sendWhatsApp(chatId, message, botEnabled);
           await base44.asServiceRole.entities.WebinarRegistration.update(reg.id, { pending_payment: true });
           await logIncoming(base44, idMessage, phone, text, chatId, conversationId);

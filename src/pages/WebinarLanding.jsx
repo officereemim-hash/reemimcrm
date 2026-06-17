@@ -52,7 +52,8 @@ export default function WebinarLanding() {
       {/* Hero */}
       <div className="relative text-white px-6 py-16 md:py-24" style={{ backgroundColor: primary }}>
         {page.hero_image_url && (
-          <div className="absolute inset-0 opacity-20 bg-cover bg-center" style={{ backgroundImage: `url(${page.hero_image_url})` }} />
+          <div className="absolute inset-0 opacity-20 bg-center bg-no-repeat"
+            style={{ backgroundImage: `url(${page.hero_image_url})`, backgroundSize: page.hero_image_fit === 'contain' ? 'contain' : 'cover' }} />
         )}
         <div className="relative max-w-3xl mx-auto text-center">
           <h1 className="text-3xl md:text-5xl font-bold mb-4">{page.hero_title || 'וובינר מקצועי'}</h1>
@@ -72,7 +73,8 @@ export default function WebinarLanding() {
           {page.speaker_name && (
             <div className="flex items-center gap-4 bg-white rounded-2xl shadow-sm p-4">
               {page.speaker_image_url && (
-                <img src={page.speaker_image_url} alt={page.speaker_name} className="w-16 h-16 rounded-full object-cover" />
+                <img src={page.speaker_image_url} alt={page.speaker_name}
+                  className={`w-16 h-16 rounded-full bg-muted ${page.speaker_image_fit === 'contain' ? 'object-contain' : 'object-cover'}`} />
               )}
               <div>
                 <div className="font-bold" style={{ color: primary }}>{page.speaker_name}</div>

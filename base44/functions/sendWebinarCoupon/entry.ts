@@ -9,8 +9,8 @@ function toChatId(localPhone) {
   return `${clean}@c.us`;
 }
 
-function genCoupon(type) {
-  const prefix = { investments: 'INV', divorce: 'DIV', retirement: 'RET' }[type] || 'WEB';
+function genCoupon(type, customPrefix) {
+  const prefix = customPrefix || { investments: 'INV', divorce: 'DIV', retirement: 'RET' }[type] || 'WEB';
   return `${prefix}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
 }
 
@@ -34,6 +34,10 @@ Deno.serve(async (req) => {
     const couponRecords = await base44.asServiceRole.entities.BotContent.filter({ key: 'webinar_coupon', is_active: true });
     const template = couponRecords[0]?.content || 'תודה {name}! קוד ההטבה שלך: {coupon_code}';
 
+    // הגדרות קופון לפי סוג וובינר — אחוז הטבה / סכום / קידומת קוד
+    const couponSettings = await base44.asServiceRole.entities.WebinarCouponSetting.list();
+    const settingFor = (type) => couponSettings.find(s => s.webinar_type === type) || {};
+
     // Select target registrations
     let regs = [];
     if (Array.isArray(registration_ids) && registration_ids.length > 0) {
@@ -55,8 +59,13 @@ Deno.serve(async (req) => {
       const contact = contacts[0];
       if (!contact?.phone) { skipped++; continue; }
 
-      const couponCode = reg.coupon_code || genCoupon(reg.webinar_type);
-      const message = template.replaceAll('{name}', contact.full_name || '').replaceAll('{coupon_code}', couponCode);
+      const cfg = settingFor(reg.webinar_type);
+      const couponCode = reg.coupon_code || genCoupon(reg.webinar_type, cfg.coupon_prefix);
+      const message = template
+        .replaceAll('{name}', contact.full_name || '')
+        .replaceAll('{coupon_code}', couponCode)
+        .replaceAll('{discount}', cfg.discount_percent != null ? String(cfg.discount_percent) : '')
+        .replaceAll('{amount}', cfg.amount != null ? String(cfg.amount) : '');
 
       let status = 'skipped';
       if (botEnabled && greenEnabled) {

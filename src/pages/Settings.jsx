@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Settings as SettingsIcon, Bot, Zap, Clock, Shield, Mail, Database, MessageSquare } from 'lucide-react';
+import { Settings as SettingsIcon, Bot, Zap, Clock, Shield, Mail, Database, MessageSquare, Ticket } from 'lucide-react';
 import MarketingSettingsTab from '@/components/marketing/MarketingSettingsTab';
 import SystemSettingsTab from '@/components/settings/SystemSettingsTab';
 import CommunicationsTab from '@/components/settings/CommunicationsTab';
+import CouponsSettingsTab from '@/components/settings/CouponsSettingsTab';
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState('general');
@@ -53,6 +54,15 @@ export default function Settings() {
           <Mail size={14} className="inline ml-1" />
           מרכז דיוור
         </button>
+        <button
+          onClick={() => setActiveTab('coupons')}
+          className={`px-4 py-2 rounded-t-lg text-sm font-medium transition-colors ${
+            activeTab === 'coupons' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
+          }`}
+        >
+          <Ticket size={14} className="inline ml-1" />
+          קופונים
+        </button>
       </div>
 
       {activeTab === 'marketing' && <MarketingSettingsTab />}
@@ -60,6 +70,8 @@ export default function Settings() {
       {activeTab === 'system' && <SystemSettingsTab />}
 
       {activeTab === 'communications' && <CommunicationsTab />}
+
+      {activeTab === 'coupons' && <CouponsSettingsTab />}
 
       {activeTab === 'general' && <div className="grid md:grid-cols-2 gap-6">
         <Card>

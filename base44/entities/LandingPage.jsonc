@@ -37,6 +37,15 @@
       "type": "string",
       "description": "\u05ea\u05de\u05d5\u05e0\u05ea \u05e8\u05e7\u05e2 / \u05d1\u05d0\u05e0\u05e8"
     },
+    "hero_image_fit": {
+      "type": "string",
+      "enum": [
+        "cover",
+        "contain"
+      ],
+      "default": "cover",
+      "description": "\u05d0\u05d5\u05e4\u05df \u05d4\u05e6\u05d2\u05ea \u05ea\u05de\u05d5\u05e0\u05ea \u05d4\u05d1\u05d0\u05e0\u05e8: cover=\u05de\u05d9\u05dc\u05d5\u05d9 (\u05d7\u05d9\u05ea\u05d5\u05da), contain=\u05d4\u05ea\u05d0\u05de\u05d4 \u05de\u05dc\u05d0\u05d4"
+    },
     "speaker_name": {
       "type": "string",
       "description": "\u05e9\u05dd \u05d4\u05de\u05e8\u05e6\u05d4"
@@ -48,6 +57,15 @@
     "speaker_image_url": {
       "type": "string",
       "description": "\u05ea\u05de\u05d5\u05e0\u05ea \u05d4\u05de\u05e8\u05e6\u05d4"
+    },
+    "speaker_image_fit": {
+      "type": "string",
+      "enum": [
+        "cover",
+        "contain"
+      ],
+      "default": "cover",
+      "description": "\u05d0\u05d5\u05e4\u05df \u05d4\u05e6\u05d2\u05ea \u05ea\u05de\u05d5\u05e0\u05ea \u05d4\u05de\u05e8\u05e6\u05d4: cover=\u05de\u05d9\u05dc\u05d5\u05d9 (\u05d7\u05d9\u05ea\u05d5\u05da), contain=\u05d4\u05ea\u05d0\u05de\u05d4 \u05de\u05dc\u05d0\u05d4"
     },
     "blocks": {
       "type": "array",
