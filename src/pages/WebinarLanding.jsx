@@ -57,7 +57,7 @@ export default function WebinarLanding() {
         ) : page.hero_image_url ? (
           /* מילוי — חיתוך לרקע בגובה קבוע, עם מיקום אנכי נשלט */
           <div className="absolute inset-0 opacity-20 bg-no-repeat bg-cover"
-            style={{ backgroundImage: `url(${page.hero_image_url})`, backgroundPosition: `center ${page.hero_image_position || 'center'}` }} />
+            style={{ backgroundImage: `url(${page.hero_image_url})`, backgroundPosition: `center ${({ top: '0%', center: '50%', bottom: '100%' })[page.hero_image_position] || page.hero_image_position || '50%'}` }} />
         ) : null}
 
         {/* טקסט הבאנר — שכבת-על על התמונה במצב "מלא", או על רקע הצבע במצב "מילוי"/ללא תמונה */}

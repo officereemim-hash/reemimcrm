@@ -18,7 +18,7 @@ const TYPE_OPTIONS = [
 
 const EMPTY = {
   slug: '', webinar_type: 'retirement', is_active: true, webinar_date: '',
-  hero_title: '', hero_subtitle: '', hero_image_url: '', hero_image_fit: 'cover', hero_image_position: 'center',
+  hero_title: '', hero_subtitle: '', hero_image_url: '', hero_image_fit: 'cover', hero_image_position: '50%',
   speaker_name: '', speaker_title: '', speaker_image_url: '', speaker_image_fit: 'cover',
   blocks: [], form_title: 'הרשמה לוובינר', form_button_text: 'הרשמה לוובינר',
   success_message: '', primary_color: '#4B2E83', accent_color: '#D4A53C',
@@ -161,8 +161,12 @@ export default function LandingPageFormDialog({ open, onClose, onSave, editItem 
 
 function ImageField({ label, field, fitField, positionField, form, uploading, onUpload, onClear, onSet }) {
   const fit = form[fitField] || 'cover';
-  const position = (positionField && form[positionField]) || 'center';
-  const POS_OPTIONS = [{ v: 'top', l: 'חלק עליון' }, { v: 'center', l: 'מרכז' }, { v: 'bottom', l: 'חלק תחתון' }];
+  // ערך מיקום: אחוז (לדוגמה "20%"). תאימות לאחור לערכים ישנים top/center/bottom.
+  const LEGACY = { top: '0%', center: '50%', bottom: '100%' };
+  const rawPos = (positionField && form[positionField]) || '50%';
+  const posValue = LEGACY[rawPos] ?? rawPos;
+  const posNum = parseInt(posValue, 10);
+  const posPercent = isNaN(posNum) ? 50 : posNum;
   return (
     <div>
       <Label>{label}</Label>
@@ -170,7 +174,7 @@ function ImageField({ label, field, fitField, positionField, form, uploading, on
         <div className="mt-1 space-y-2">
           <div className="relative bg-muted/40 rounded-lg overflow-hidden">
             <img src={form[field]} alt={label} className={`w-full h-40 ${fit === 'contain' ? 'object-contain' : 'object-cover'} rounded-lg`}
-              style={fit === 'cover' ? { objectPosition: `center ${position}` } : undefined} />
+              style={fit === 'cover' ? { objectPosition: `center ${posPercent}%` } : undefined} />
             <button type="button" onClick={() => onClear(field, '')}
               className="absolute top-1 left-1 bg-destructive text-white rounded-full px-2 py-0.5 text-xs">הסר</button>
           </div>
@@ -182,12 +186,18 @@ function ImageField({ label, field, fitField, positionField, form, uploading, on
               className={`text-xs px-2 py-1 rounded border ${fit === 'contain' ? 'bg-primary text-white border-primary' : 'border-border hover:bg-muted'}`}>תמונה מלאה</button>
           </div>
           {positionField && fit === 'cover' && (
-            <div className="flex items-center gap-1">
-              <span className="text-xs text-muted-foreground ml-1">מיקום (כדי שהראש לא ייחתך):</span>
-              {POS_OPTIONS.map(o => (
-                <button key={o.v} type="button" onClick={() => onSet(positionField, o.v)}
-                  className={`text-xs px-2 py-1 rounded border ${position === o.v ? 'bg-primary text-white border-primary' : 'border-border hover:bg-muted'}`}>{o.l}</button>
-              ))}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">תזוזה אנכית (כדי שהראש לא ייחתך)</span>
+                <span className="text-xs text-muted-foreground">{posPercent}%</span>
+              </div>
+              <input type="range" min="0" max="100" step="1" value={posPercent}
+                onChange={e => onSet(positionField, `${e.target.value}%`)}
+                className="w-full accent-primary cursor-pointer" />
+              <div className="flex justify-between text-[10px] text-muted-foreground">
+                <span>למעלה</span>
+                <span>למטה</span>
+              </div>
             </div>
           )}
         </div>
