@@ -180,11 +180,14 @@ function ImageField({ label, field, fitField, form, uploading, onUpload, onClear
           </div>
         </div>
       ) : (
-        <label className="flex items-center justify-center gap-2 border-2 border-dashed border-border rounded-lg p-4 cursor-pointer hover:bg-muted/50 mt-1">
-          {uploading === field ? <Loader2 size={16} className="animate-spin" /> : <ImageIcon size={16} className="text-muted-foreground" />}
-          <span className="text-sm text-muted-foreground">העלאת תמונה</span>
-          <input type="file" accept="image/*" className="hidden" onChange={e => onUpload(field, e.target.files[0])} />
-        </label>
+        <div className="flex gap-2 mt-1">
+          <Input value="" onChange={e => onSet(field, e.target.value)} placeholder="הדביקו קישור לתמונה או העלו →" dir="ltr" className="flex-1 text-sm" />
+          <label className="px-3 flex items-center justify-center gap-1.5 bg-primary text-primary-foreground rounded-lg cursor-pointer hover:bg-primary/90 text-sm whitespace-nowrap">
+            {uploading === field ? <Loader2 size={16} className="animate-spin" /> : <ImageIcon size={16} />}
+            העלאה
+            <input type="file" accept="image/*" className="hidden" onChange={e => onUpload(field, e.target.files[0])} />
+          </label>
+        </div>
       )}
     </div>
   );
