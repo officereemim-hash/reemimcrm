@@ -80,6 +80,18 @@ Deno.serve(async (req) => {
       await del('WhatsAppBlockList', relBlocks);
     } catch (_) { /* skip */ }
 
+    // 4b) Remove saved conversation mappings & pending-contact settings so the bot treats it as brand-new
+    try {
+      const phoneKeys = variants.map(v => (v || '').replace(/\D/g, '')).filter(Boolean);
+      const settings = await svc.entities.SystemSetting.list('-created_date', 3000);
+      const relSettings = settings.filter(s => {
+        const k = s.key || '';
+        if (!k.startsWith('phone_conv_') && !k.startsWith('pending_contact_')) return false;
+        return phoneKeys.some(pk => k.endsWith(pk.slice(-9)));
+      });
+      await del('SystemSetting', relSettings);
+    } catch (_) { /* skip */ }
+
     // 5) Finally delete the contacts themselves
     await del('Contact', matchContacts);
 
