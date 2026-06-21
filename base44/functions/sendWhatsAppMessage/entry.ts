@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 
 const INSTANCE_ID = Deno.env.get('GREEN_API_INSTANCE_ID');
 const API_TOKEN = Deno.env.get('GREEN_API_TOKEN');
@@ -11,9 +11,9 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { phone, message } = await req.json();
-    if (!phone || !message) {
-      return Response.json({ error: 'Missing phone or message' }, { status: 400 });
+    const { phone, message, fileUrl, fileName } = await req.json();
+    if (!phone || (!message && !fileUrl)) {
+      return Response.json({ error: 'Missing phone and (message or fileUrl)' }, { status: 400 });
     }
 
     // Normalize phone — remove leading 0, ensure country code
@@ -33,6 +33,26 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, simulated: true, chatId });
     }
 
+    const results = {};
+
+    // שליחת קובץ (PDF / תמונה / וידאו) — אם סופק fileUrl
+    if (fileUrl) {
+      const fileApiUrl = `https://api.green-api.com/waInstance${INSTANCE_ID}/sendFileByUrl/${API_TOKEN}`;
+      const fileResponse = await fetch(fileApiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chatId, urlFile: fileUrl, fileName: fileName || 'file', caption: message || '' }),
+      });
+      const fileResult = await fileResponse.json();
+      if (!fileResponse.ok) {
+        return Response.json({ error: 'Green API file error', details: fileResult }, { status: 500 });
+      }
+      results.fileIdMessage = fileResult.idMessage;
+      // קובץ נשלח עם caption — אין צורך לשלוח שוב את הטקסט בנפרד
+      return Response.json({ ok: true, ...results, chatId });
+    }
+
+    // שליחת הודעת טקסט רגילה
     const url = `https://api.green-api.com/waInstance${INSTANCE_ID}/sendMessage/${API_TOKEN}`;
     const response = await fetch(url, {
       method: 'POST',

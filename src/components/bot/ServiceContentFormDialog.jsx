@@ -6,9 +6,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { Upload, Loader2 } from 'lucide-react';
+import { base44 } from '@/api/base44Client';
 
 const CONTENT_TYPES = [
   { value: 'video', label: 'סרטון' },
+  { value: 'image', label: 'תמונה' },
   { value: 'pdf', label: 'PDF' },
   { value: 'questionnaire', label: 'שאלון' },
   { value: 'payment_link', label: 'קישור תשלום' },
@@ -32,8 +35,24 @@ export { CONTENT_TYPES, SERVICE_TYPES };
 
 const EMPTY = { title: '', content_type: 'external_link', service_type: 'general', url: '', description: '', sub_type: '', is_active: true, sort_order: 0 };
 
+const UPLOADABLE_TYPES = ['pdf', 'image', 'video'];
+
 export default function ServiceContentFormDialog({ open, onClose, item, onSave, saving }) {
   const [form, setForm] = useState(EMPTY);
+  const [uploading, setUploading] = useState(false);
+
+  const handleUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      setForm(f => ({ ...f, url: file_url }));
+    } finally {
+      setUploading(false);
+      e.target.value = '';
+    }
+  };
 
   useEffect(() => {
     if (item) {
@@ -78,6 +97,18 @@ export default function ServiceContentFormDialog({ open, onClose, item, onSave, 
           <div className="space-y-1">
             <Label>קישור / URL</Label>
             <Input value={form.url} onChange={e => setForm({ ...form, url: e.target.value })} placeholder="https://..." dir="ltr" />
+            {UPLOADABLE_TYPES.includes(form.content_type) && (
+              <div className="pt-1">
+                <input type="file" id="sc-file-upload" className="hidden" onChange={handleUpload}
+                  accept={form.content_type === 'pdf' ? '.pdf' : form.content_type === 'image' ? 'image/*' : 'video/*'} />
+                <Button type="button" variant="outline" size="sm" disabled={uploading}
+                  onClick={() => document.getElementById('sc-file-upload').click()}>
+                  {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                  {uploading ? 'מעלה...' : 'העלה קובץ'}
+                </Button>
+                <p className="text-xs text-muted-foreground mt-1">או הדבק/י קישור ידני למעלה</p>
+              </div>
+            )}
           </div>
           <div className="space-y-1">
             <Label>תת-סוג (מפתח)</Label>

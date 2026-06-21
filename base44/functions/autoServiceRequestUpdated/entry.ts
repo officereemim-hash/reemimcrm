@@ -142,6 +142,25 @@ Deno.serve(async (req) => {
       };
     }
 
+    // שליחת קובץ (PDF/תמונה/וידאו) דרך Green API — לפי URL קבוע מ-ServiceContent
+    async function sendWhatsAppFile(fileUrl, fileName) {
+      if (!fileUrl) return { status: 'skipped', errorDetail: 'empty_file' };
+      if (!botEnabled) return { status: 'skipped', errorDetail: 'log_only_whatsapp_bot_disabled' };
+      if (!greenApiEnabled) return { status: 'sent', errorDetail: 'simulated_green_api_disabled' };
+
+      const fileApiUrl = `https://api.green-api.com/waInstance${INSTANCE_ID}/sendFileByUrl/${API_TOKEN}`;
+      const response = await fetch(fileApiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chatId, urlFile: fileUrl, fileName: fileName || 'file', caption: '' }),
+      });
+      const responseText = await response.text();
+      return {
+        status: response.ok ? 'sent' : 'failed',
+        errorDetail: response.ok ? '' : responseText.substring(0, 500),
+      };
+    }
+
     async function addMessageToConversation(content, result) {
       if (!content || result?.status === 'skipped') return;
 
@@ -336,8 +355,16 @@ Deno.serve(async (req) => {
       }).replace(/\n{3,}/g, '\n\n');
       const sent = await sendWhatsApp(message);
       if (quoteUrl && !message.includes(quoteUrl)) {
-        const linkResult = await sendWhatsApp(quoteUrl);
-        await logCommunication(quoteUrl, 'quote_sent_link', linkResult);
+        // אם הצעת המחיר היא קובץ PDF ישיר — שולחים כקובץ מצורף; אחרת כקישור טקסט
+        const isPdfFile = /\.pdf(\?.*)?$/i.test(quoteUrl);
+        if (isPdfFile) {
+          await new Promise(resolve => setTimeout(resolve, 1200));
+          const fileResult = await sendWhatsAppFile(quoteUrl, `הצעת מחיר - ${contact.full_name || ''}.pdf`);
+          await logCommunication(quoteUrl, 'quote_sent_file', fileResult);
+        } else {
+          const linkResult = await sendWhatsApp(quoteUrl);
+          await logCommunication(quoteUrl, 'quote_sent_link', linkResult);
+        }
       }
       await logCommunication(message, 'quote_sent', sent);
       await base44.asServiceRole.entities.Contact.update(contact.id, {

@@ -10,6 +10,7 @@
       "type": "string",
       "enum": [
         "video",
+        "image",
         "pdf",
         "questionnaire",
         "payment_link",
