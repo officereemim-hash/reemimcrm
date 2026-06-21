@@ -21,7 +21,24 @@ function fillTemplate(template, values) {
   return String(template || '')
     .replaceAll('{name}', values.name || '')
     .replaceAll('{date}', values.date || '')
-    .replaceAll('{zoom_link}', values.zoom_link || '');
+    .replaceAll('{zoom_link}', values.zoom_link || '')
+    .replaceAll('{calendar_add_link}', values.calendar_add_link || '');
+}
+
+// בונה קישור "הוסף ליומן Google" אוטומטי מתאריך הוובינר (לא דורש OAuth — עובד לכל אחד)
+function buildCalendarAddLink(webinarDate, title, details) {
+  if (!webinarDate) return '';
+  const start = new Date(webinarDate);
+  if (isNaN(start.getTime())) return '';
+  const end = new Date(start.getTime() + 90 * 60 * 1000); // 90 דקות
+  const fmt = (d) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: title || 'וובינר — קרנות ראמים',
+    dates: `${fmt(start)}/${fmt(end)}`,
+    details: details || '',
+  });
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }
 
 const ZOOM_SUBTYPE = {
@@ -88,7 +105,13 @@ Deno.serve(async (req) => {
       ? new Date(page.webinar_date).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', dateStyle: 'full', timeStyle: 'short' })
       : '';
 
-    const message = fillTemplate(confirmTemplate, { name: full_name, date: dateStr, zoom_link: zoomLink });
+    const calendarAddLink = buildCalendarAddLink(
+      page.webinar_date,
+      page.hero_title || 'וובינר — קרנות ראמים',
+      zoomLink ? `קישור להצטרפות: ${zoomLink}` : ''
+    );
+
+    const message = fillTemplate(confirmTemplate, { name: full_name, date: dateStr, zoom_link: zoomLink, calendar_add_link: calendarAddLink });
 
     // Check bot/green-api enabled
     const botSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' });
@@ -126,6 +149,7 @@ Deno.serve(async (req) => {
         <h2 style="color:#4B2E83">נרשמת בהצלחה לוובינר! 🎓</h2>
         <p>שלום ${full_name},</p>
         <p>${dateStr ? `📅 מועד: ${dateStr}<br/>` : ''}${zoomLink ? `🔗 קישור להצטרפות: <a href="${zoomLink}">${zoomLink}</a>` : ''}</p>
+        ${calendarAddLink ? `<p><a href="${calendarAddLink}" style="display:inline-block;background:#4B2E83;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none">📅 הוסף ליומן Google</a></p>` : ''}
         <p>נתראה! צוות קרנות ראמים</p>
       </div>`;
       await fetch('https://api.brevo.com/v3/smtp/email', {
