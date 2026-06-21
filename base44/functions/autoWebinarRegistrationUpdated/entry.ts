@@ -15,8 +15,15 @@ function fillTemplate(template, values) {
     .replaceAll('{coupon_code}', values.coupon_code || '')
     .replaceAll('{discount}', values.discount || '')
     .replaceAll('{amount}', values.amount || '')
+    .replaceAll('{payment_link}', values.payment_link || '')
     .replaceAll('{recording_link}', values.recording_link || '');
 }
+
+const PAYMENT_SUBTYPE = {
+  investments: 'payment_webinar_investments',
+  divorce: 'payment_webinar_divorce',
+  retirement: 'payment_webinar_retirement',
+};
 
 function genCoupon(type, customPrefix) {
   const prefix = customPrefix || { investments: 'INV', divorce: 'DIV', retirement: 'RET' }[type] || 'WEB';
@@ -64,6 +71,10 @@ Deno.serve(async (req) => {
       const r = await base44.asServiceRole.entities.ServiceContent.filter({ content_type: 'external_link', sub_type: subType, is_active: true });
       return r[0]?.url || '';
     }
+    async function getPaymentUrl(subType) {
+      const r = await base44.asServiceRole.entities.ServiceContent.filter({ content_type: 'payment_link', sub_type: subType, is_active: true });
+      return r[0]?.url || '';
+    }
     async function getSetting(key) {
       const r = await base44.asServiceRole.entities.SystemSetting.filter({ key });
       return r[0]?.value || '';
@@ -104,12 +115,14 @@ Deno.serve(async (req) => {
       const cfg = couponSettings[0] || {};
       const couponCode = reg.coupon_code || genCoupon(reg.webinar_type, cfg.coupon_prefix);
 
+      const paymentLink = await getPaymentUrl(PAYMENT_SUBTYPE[reg.webinar_type]);
       const couponTemplate = await getContent('webinar_coupon');
       const couponMessage = fillTemplate(couponTemplate || 'תודה {name}! קוד ההטבה שלך: {coupon_code}', {
         ...values,
         coupon_code: couponCode,
         discount: cfg.discount_percent != null ? String(cfg.discount_percent) : '',
         amount: cfg.amount != null ? String(cfg.amount) : '',
+        payment_link: paymentLink,
       });
       const couponStatus = await sendWhatsApp(couponMessage);
       await base44.asServiceRole.entities.WebinarRegistration.update(reg.id, {

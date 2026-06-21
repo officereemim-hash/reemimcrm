@@ -409,21 +409,33 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ===== FP-WebinarPaid: "שילמתי" אחרי מימוש קופון → בחירת מיקום פגישה =====
+    // ===== FP-WebinarPaid: "שילמתי" אחרי מימוש קופון =====
+    // אם הצוות כבר אישר תשלום (payment_completed) → שולחים בחירת מיקום פגישה.
+    // אם עדיין לא אושר → שולחים הודעת המתנה. אישור התשלום נעשה ע"י הצוות בלבד.
     if (contact && (normalizeAnswer(text).startsWith('שילמתי') || normalizeAnswer(text) === 'שולם')) {
-      const regsByContact = await base44.asServiceRole.entities.WebinarRegistration.filter({ contact_id: contact.id, pending_payment: true }, '-created_date', 5);
-      const reg = regsByContact[0];
+      const regsByContact = await base44.asServiceRole.entities.WebinarRegistration.filter({ contact_id: contact.id }, '-created_date', 10);
+      const reg = regsByContact.find(r => r.pending_payment === true || r.payment_completed === true);
       if (reg) {
-        const locationMessage = await getBotContent(base44, 'webinar_location_choice') || 'איך תרצו לקיים את הפגישה?\n1) זום 2) מודיעין 3) פתח תקווה 4) טלפון';
-        const message = locationMessage.replaceAll('{name}', contact.full_name || '');
+        let message;
+        let fastPath;
+        if (reg.payment_completed === true) {
+          // הצוות כבר אישר — בחירת מיקום פגישה
+          const locationMessage = await getBotContent(base44, 'webinar_location_choice') || 'איך תרצו לקיים את הפגישה?\n1) זום 2) מודיעין 3) פתח תקווה 4) טלפון';
+          message = locationMessage.replaceAll('{name}', contact.full_name || '');
+          fastPath = 'fp_webinar_paid_confirmed';
+        } else {
+          // עדיין לא אושר ע"י הצוות — הודעת המתנה
+          const ackMessage = await getBotContent(base44, 'webinar_payment_pending_ack') || 'תודה רבה על העדכון! הצוות בודק שהתשלום התקבל ויעדכן אותך בהקדם.';
+          message = ackMessage.replaceAll('{name}', contact.full_name || '');
+          fastPath = 'fp_webinar_paid_pending';
+        }
         const sent = await sendWhatsApp(chatId, message, botEnabled);
-        await base44.asServiceRole.entities.WebinarRegistration.update(reg.id, { pending_payment: false, payment_completed: true });
         await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
         await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_paid`, phone, message, chatId, conversationId, outgoingStatus);
         try {
           await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${message}` });
         } catch (error) {}
-        return Response.json({ ok: true, fast_path: 'fp_webinar_paid' });
+        return Response.json({ ok: true, fast_path: fastPath });
       }
     }
 
