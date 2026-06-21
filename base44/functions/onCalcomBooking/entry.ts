@@ -329,6 +329,16 @@ Deno.serve(async (req) => {
 
     // ההודעות נשלחות ע"י אוטומציית שינוי הסטטוס (autoServiceRequestUpdated) —
     // עדכון הסטטוס ל-meeting_scheduled למעלה מפעיל את רצף ההודעות.
+
+    // אם הפגישה מגיעה ממסלול וובינר — סימון meeting_scheduled על ה-WebinarRegistration
+    const webinarRegs = await base44.asServiceRole.entities.WebinarRegistration.filter({ contact_id: contact.id, service_request_id: serviceRequest.id });
+    if (webinarRegs.length > 0 && !webinarRegs[0].meeting_scheduled) {
+      await base44.asServiceRole.entities.WebinarRegistration.update(webinarRegs[0].id, {
+        meeting_scheduled: true,
+        meeting_id: meeting.id,
+      });
+    }
+
     return Response.json({ success: true, meeting_id: meeting.id, service_request_id: serviceRequest.id, messages_via: 'status_automation' });
   } catch (error) {
     console.error('onCalcomBooking error:', error.message);

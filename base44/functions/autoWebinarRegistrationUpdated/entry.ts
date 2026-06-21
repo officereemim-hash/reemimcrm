@@ -146,14 +146,34 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, action: 'attended_coupon_recording', recording: !!recordingLink });
     }
 
-    // ===== שילם → בחירת מיקום פגישה =====
+    // ===== שילם → בחירת מיקום פגישה + יצירת ServiceRequest =====
     if (paidNow) {
       const locTemplate = await getContent('webinar_location_choice');
       const locMessage = fillTemplate(locTemplate || 'מעולה {name}! איך תרצו לקיים את הפגישה?\n1) זום\n2) מודיעין\n3) פתח תקווה\n4) טלפון', values);
       const status = await sendWhatsApp(locMessage);
       await log(locMessage, 'webinar_location_choice', status);
-      await base44.asServiceRole.entities.Contact.update(contact.id, { last_bot_interaction_at: new Date().toISOString() });
-      return Response.json({ ok: true, action: 'paid_location_choice' });
+
+      // יצירת פניית שירות עם סטטוס interested כדי ש-FP-MeetingChoice ב-greenApiWebhook יתפוס
+      const existingSRs = await base44.asServiceRole.entities.ServiceRequest.filter({ contact_id: contact.id }, '-created_date', 5);
+      const openSR = existingSRs.find(sr => !['completed', 'cancelled', 'closed_lost', 'followup_closed'].includes(sr.status));
+      let sr;
+      if (openSR) {
+        sr = await base44.asServiceRole.entities.ServiceRequest.update(openSR.id, { status: 'interested', source: 'webinar' });
+      } else {
+        sr = await base44.asServiceRole.entities.ServiceRequest.create({
+          contact_id: contact.id,
+          contact_name: contact.full_name || '',
+          contact_phone: contact.phone || '',
+          contact_email: contact.email || '',
+          status: 'interested',
+          source: 'webinar',
+        });
+      }
+      // שמירת קישור ל-WebinarRegistration
+      await base44.asServiceRole.entities.WebinarRegistration.update(reg.id, { service_request_id: sr.id });
+
+      await base44.asServiceRole.entities.Contact.update(contact.id, { last_bot_interaction_at: new Date().toISOString(), current_service_request_id: sr.id });
+      return Response.json({ ok: true, action: 'paid_location_choice', service_request_id: sr.id });
     }
 
     // ===== פגישה נקבעה → אישור =====
