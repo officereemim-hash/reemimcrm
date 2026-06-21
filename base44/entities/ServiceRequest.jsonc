@@ -38,6 +38,7 @@
       "enum": [
         "new",
         "in_progress",
+        "interested",
         "quote_sent",
         "awaiting_client_decision",
         "followup_active",

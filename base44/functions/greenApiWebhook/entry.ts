@@ -497,8 +497,8 @@ Deno.serve(async (req) => {
 
     // ===== FP-WaitCoordinator: הלקוח בחר להמתין לנציגה =====
     const waitAnswers = ['אמתין', 'אמתין לנציגה', 'אחכה לנציגה', 'שתחזרו אליי', 'שתחזרו אלי', 'תחזרו אליי', 'תחזרו אלי', 'נציגה', 'מחכה לשיחה'];
-    // "1" = המתנה לנציגה רק כשעוד לא נשלח תפריט הפגישות (בסטטוס quote_sent "1" = זום)
-    const waitByNumber = normalizeAnswer(text) === '1' && serviceRequest?.service_type && serviceRequest?.status !== 'quote_sent';
+    // "1" = המתנה לנציגה רק כשעוד לא נשלח תפריט הפגישות (בסטטוס interested "1" = זום)
+    const waitByNumber = normalizeAnswer(text) === '1' && serviceRequest?.service_type && serviceRequest?.status !== 'interested';
     if (contact && serviceRequest && (waitAnswers.includes(normalizeAnswer(text)) || waitByNumber)) {
       await base44.asServiceRole.entities.Contact.update(contact.id, { bot_status: 'waiting_agent' });
       const ackMessage = await getBotContent(base44, 'wait_coordinator_ack') || 'מעולה! נציגה תחזור אלייך בהקדם 🙏';
@@ -511,8 +511,8 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, fast_path: 'fp_wait_coordinator' });
     }
 
-    // ===== FP-MeetingChoice: בחירת מיקום פגישה אחרי הצעת מחיר (quote_sent) =====
-    if (contact && serviceRequest && serviceRequest.status === 'quote_sent') {
+    // ===== FP-MeetingChoice: בחירת מיקום פגישה אחרי שהלקוח מעוניין (interested) =====
+    if (contact && serviceRequest && serviceRequest.status === 'interested') {
       const locationMap = {
         '1': 'zoom', '2': 'modiin', '3': 'petah_tikva_wednesday', '4': 'phone',
         'זום': 'zoom', 'zoom': 'zoom', 'בזום': 'zoom',

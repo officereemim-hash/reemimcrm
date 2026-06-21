@@ -194,7 +194,7 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, action: 'send_basmat_schedule' });
     }
 
-    if (statusChanged && newStatus === 'quote_sent') {
+    if (statusChanged && newStatus === 'interested') {
       if (await alreadySentRecently('schedule_intro')) {
         return Response.json({ ok: true, skipped: 'duplicate_event' });
       }
@@ -323,7 +323,7 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, action: 'meeting_scheduled_sequence', template: templateKey });
     }
 
-    if (statusChanged && newStatus === 'awaiting_client_decision') {
+    if (statusChanged && newStatus === 'quote_sent') {
       if (await alreadySentRecently('quote_sent')) {
         return Response.json({ ok: true, skipped: 'duplicate_event' });
       }
