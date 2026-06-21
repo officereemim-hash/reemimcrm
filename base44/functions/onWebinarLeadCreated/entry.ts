@@ -31,7 +31,7 @@ Deno.serve(async (req) => {
 
     // רק לידים שמקורם במטא (סנכרון מגוגל שיטס) — לא למי שמילא דף נחיתה (registerWebinar)
     // מי שנרשם דרך דף הנחיתה כבר קיבל webinar_confirm, אז מדלגים אם כבר נשלח קישור
-    const contacts = await base44.asServiceRole.entities.Contact.filter({ id: reg.contact_id });
+    const contacts = await base44.asServiceRole.entities.Contact.filter({ id: reg.contact_id }).catch(() => []);
     const contact = contacts[0];
     if (!contact?.phone) {
       return Response.json({ ok: true, skipped: 'no_phone' });

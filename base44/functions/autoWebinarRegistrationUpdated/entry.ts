@@ -50,7 +50,7 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, skipped: 'no_relevant_change' });
     }
 
-    const contacts = await base44.asServiceRole.entities.Contact.filter({ id: reg.contact_id });
+    const contacts = await base44.asServiceRole.entities.Contact.filter({ id: reg.contact_id }).catch(() => []);
     const contact = contacts[0];
     if (!contact?.phone) {
       return Response.json({ ok: true, skipped: 'no_phone' });
