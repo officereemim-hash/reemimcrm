@@ -9,13 +9,13 @@ const NAVY = '#0F173B';
 const GOLD = '#998A64';
 const BG = '#F7F5F0';
 const SITE_URL = 'https://www.reemim.co.il';
-const ACTION_URL = 'https://basmat-crm-copy-62c92ace.base44.app/api/apps/69f3c646e222353462c92ace/functions/unsubscribe';
-
 Deno.serve(async (req) => {
   try {
     const url = new URL(req.url);
     const method = req.method.toUpperCase();
     let token = url.searchParams.get('token');
+    // ACTION_URL דינמי — תמיד מצביע על הפונקציה הנוכחית
+    const ACTION_URL = `${url.origin}${url.pathname}`;
 
     if (!token && method === 'POST') {
       try {

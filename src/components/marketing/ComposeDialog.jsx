@@ -322,6 +322,9 @@ export default function ComposeDialog({ open, onClose, contacts, onDone }) {
                 rows={4}
                 placeholder="היי {שם} 👋..."
               />
+              <p className="text-xs text-muted-foreground mt-1">
+                ⚠️ בסוף כל הודעה יתווסף אוטומטית: <em>להסרה מרשימת התפוצה השיבו "הסר"</em>
+              </p>
               <p className="text-xs text-muted-foreground">
                 השתמש ב-&#123;שם&#125; לשם פרסונלי • לחצי 😊 לאימוג׳י
                 {liveMode.whatsapp

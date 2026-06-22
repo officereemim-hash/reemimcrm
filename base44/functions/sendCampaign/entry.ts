@@ -5,7 +5,8 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 // שולח מנה ראשונה של מיילים מיידית, והשאר (כולל כל הוואטסאפ) נשלח בהדרגה
 // ע"י processCampaignQueue שרץ כל 5 דקות.
 
-const APP_FUNCTIONS_BASE = 'https://basmat-crm-copy-62c92ace.base44.app/api/apps/69f3c646e222353462c92ace/functions';
+// כתובת דינמית — נגזרת מה-URL של הפונקציה בזמן ריצה
+let APP_FUNCTIONS_BASE = '';
 const EMAIL_INLINE_BATCH = 15; // כמה מיילים לשלוח מיידית לפני שהתור ממשיך
 const WA_UNSUB_FOOTER = '\n\nלהסרה מרשימת התפוצה השיבו "הסר"';
 
@@ -62,6 +63,10 @@ Deno.serve(async (req) => {
     if (user.role !== 'admin') {
       return Response.json({ error: 'שליחת דיוור מותרת למנהלת בלבד' }, { status: 403 });
     }
+
+    // גזירת כתובת בסיס דינמית מה-URL של הפונקציה הנוכחית
+    const reqUrl = new URL(req.url);
+    APP_FUNCTIONS_BASE = `${reqUrl.origin}${reqUrl.pathname.replace(/\/sendCampaign$/, '')}`;
 
     const payload = await req.json();
     const {
