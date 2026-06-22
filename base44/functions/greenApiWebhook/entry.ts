@@ -248,7 +248,8 @@ Deno.serve(async (req) => {
           status: 'sent',
         });
       }
-      await sendWhatsApp(chatId, 'הוסרת מרשימת התפוצה שלנו ✅\nלא תקבל/י מאיתנו עוד הודעות שיווקיות.\nהודעות הקשורות לטיפול פעיל ימשיכו להגיע כרגיל.\nאם תרצה/י לחזור לרשימה — פשוט כתבו לנו כאן.', botEnabled);
+      const unsubMessage = await getBotContent(base44, 'unsubscribe_confirm') || 'הוסרת מרשימת התפוצה שלנו ✅';
+      await sendWhatsApp(chatId, unsubMessage, botEnabled);
       return Response.json({ ok: true, unsubscribed: true });
     }
     // ===== סוף הסרה מתפוצה =====
