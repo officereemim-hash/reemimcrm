@@ -66,7 +66,7 @@ function extractContactDetails(text) {
   const phone = phoneMatch[0];
   const name = String(text || '')
     .replace(emailMatch[0], '')
-    .replace(/0[5][\d\-\s]{8,12}/g, '')
+    .replace(/0[5]\d[\d\-]{7,11}/g, '')
     .replace(/שמי?\s*/gi, '')
     .replace(/מספרי?\s*/gi, '')
     .replace(/טלפון:?\s*/gi, '')
