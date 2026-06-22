@@ -71,9 +71,9 @@ Deno.serve(async (req) => {
     // שני המקורות: ישירות משורנס, וגם מה שמועבר אוטומטית מהמייל של בשמת
     const q = encodeURIComponent(
       '(from:notifications@app.surense.com OR from:bosmat@oryx-alt.com) ' +
-      `-label:${PROCESSED_LABEL} newer_than:60d`
+      'newer_than:60d'
     );
-    const list = await gmail(token, `messages?q=${q}&maxResults=50`);
+    const list = await gmail(token, `messages?q=${q}&maxResults=1`);
     const ids = (list.messages || []).map((m) => m.id);
 
     const seen = new Set();
