@@ -44,7 +44,8 @@
         "webinar",
         "referral",
         "excel_import",
-        "manual"
+        "manual",
+        "shoranss"
       ]
     },
     "service_type": {
@@ -164,7 +165,6 @@
     }
   },
   "required": [
-    "full_name",
-    "phone"
+    "full_name"
   ]
 }

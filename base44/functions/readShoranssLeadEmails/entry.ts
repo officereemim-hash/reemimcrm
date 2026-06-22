@@ -106,10 +106,25 @@ Deno.serve(async (req) => {
         });
         matched++;
       } else {
+        // אין התאמה — ליד שלא הגיע מהבוט. יוצרים לקוח חדש + משימה להשלמה.
+        const newContact = await base44.asServiceRole.entities.Contact.create({
+          full_name: name,
+          status: 'new_lead',
+          source: 'shoranss',
+          shoranss_questionnaire: 'filled',
+          shoranss_linked: true,
+          ...(leadId ? { shoranss_lead_id: leadId, shoranss_lead_url: `https://app.surense.com/leads?id=${leadId}` } : {}),
+        });
+        await base44.asServiceRole.entities.Communication.create({
+          contact_id: newContact.id, type: 'note', direction: 'inbound', sent_by: 'system',
+          is_automated: true, status: 'sent', template_id: 'shoranss_lead_created',
+          content: `נוצר לקוח חדש מהתראת שורנס (${name}). מקור: שורנס. לצפייה: https://app.surense.com/leads?id=${leadId}`,
+        });
         await base44.asServiceRole.entities.Task.create({
-          title: `שורנס: ליד חדש לא זוהה אוטומטית — ${name}`,
+          title: `שורנס: ליד חדש מ-שורנס — להשלים טלפון/ת"ז — ${name}`,
+          contact_id: newContact.id,
           type: 'followup', status: 'open', priority: 'high', auto_generated: true,
-          notes: `התראת שורנס על ליד "${name}" — ${candidates.length === 0 ? 'לא נמצא לקוח תואם' : 'נמצאו כמה לקוחות תואמים'}. קישור: https://app.surense.com/leads?id=${leadId}`,
+          notes: `נוצר לקוח חדש מהתראת שורנס (${name}). יש להשלים טלפון/ת"ז. קישור: https://app.surense.com/leads?id=${leadId}`,
         });
         flagged++;
       }
