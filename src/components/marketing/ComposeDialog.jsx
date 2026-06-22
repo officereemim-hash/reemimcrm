@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import SingleContactPicker from './SingleContactPicker';
 import EmojiPicker from './EmojiPicker';
 import buildEmailHtml from './buildEmailHtml';
+import { Checkbox } from '@/components/ui/checkbox';
 
 const MESSAGE_TYPES = [
   { key: 'newsletter', label: 'ניוזלטר תקופתי' },
@@ -44,6 +45,7 @@ export default function ComposeDialog({ open, onClose, contacts, onDone }) {
   const [liveMode, setLiveMode] = useState({ email: false, whatsapp: false });
   const [messageTemplates, setMessageTemplates] = useState([]);
   const [waRef, setWaRef] = useState(null);
+  const [addUnsubFooter, setAddUnsubFooter] = useState(true);
 
   useEffect(() => {
     // דגלי שליחה אמיתית — הגדרות מערכת (SystemSetting)
@@ -141,6 +143,7 @@ export default function ComposeDialog({ open, onClose, contacts, onDone }) {
         subject: toServerPlaceholders(form.subject),
         email_html: emailHtml,
         whatsapp_message: toServerPlaceholders(form.whatsappMessage),
+        skip_wa_unsub_footer: !addUnsubFooter,
         campaign_name: form.subject || MESSAGE_TYPES.find(t => t.key === form.type)?.label,
       });
 
@@ -322,9 +325,12 @@ export default function ComposeDialog({ open, onClose, contacts, onDone }) {
                 rows={4}
                 placeholder="היי {שם} 👋..."
               />
-              <p className="text-xs text-muted-foreground mt-1">
-                ⚠️ בסוף כל הודעה יתווסף אוטומטית: <em>להסרה מרשימת התפוצה השיבו "הסר"</em>
-              </p>
+              <div className="flex items-center gap-2 mt-2">
+                <Checkbox id="wa-unsub" checked={addUnsubFooter} onCheckedChange={setAddUnsubFooter} />
+                <label htmlFor="wa-unsub" className="text-xs text-muted-foreground cursor-pointer">
+                  הוסף בסוף ההודעה: <em>"להסרה מרשימת התפוצה השיבו הסר"</em>
+                </label>
+              </div>
               <p className="text-xs text-muted-foreground">
                 השתמש ב-&#123;שם&#125; לשם פרסונלי • לחצי 😊 לאימוג׳י
                 {liveMode.whatsapp

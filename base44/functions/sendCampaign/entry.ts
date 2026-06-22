@@ -77,6 +77,7 @@ Deno.serve(async (req) => {
       subject = '',
       email_html = '',            // HTML מלא עם {{name}} ו-{{unsubscribe_link}}
       whatsapp_message = '',      // טקסט עם {{name}}
+      skip_wa_unsub_footer = false,
       campaign_name = '',
     } = payload;
 
@@ -169,7 +170,7 @@ Deno.serve(async (req) => {
           contact_name: contact.full_name || '',
           channel: 'whatsapp',
           recipient: phone,
-          content: phone ? personalize(whatsapp_message, contact, unsubscribeUrl) + WA_UNSUB_FOOTER : '',
+          content: phone ? personalize(whatsapp_message, contact, unsubscribeUrl) + (skip_wa_unsub_footer ? '' : WA_UNSUB_FOOTER) : '',
           status: phone ? (whatsappLive ? 'pending' : 'skipped') : 'skipped',
           error_message: phone ? (whatsappLive ? '' : 'מצב לוג בלבד — לא נשלח בפועל') : 'אין מספר טלפון',
         }));
