@@ -149,7 +149,7 @@ Deno.serve(async (req) => {
     // ===== שילם → בחירת מיקום פגישה + יצירת ServiceRequest =====
     if (paidNow) {
       const locTemplate = await getContent('webinar_location_choice');
-      const locMessage = fillTemplate(locTemplate || 'מעולה {name}! איך תרצו לקיים את הפגישה?\n1) זום\n2) מודיעין\n3) פתח תקווה\n4) טלפון', values);
+      const locMessage = fillTemplate(locTemplate || 'מעולה {name}! איך תרצו לקיים את הפגישה?\nא) זום\nב) מודיעין\nג) פתח תקווה\nד) שיחת טלפון', values);
       const status = await sendWhatsApp(locMessage);
       await log(locMessage, 'webinar_location_choice', status);
 
