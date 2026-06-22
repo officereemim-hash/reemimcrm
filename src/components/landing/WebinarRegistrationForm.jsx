@@ -89,10 +89,10 @@ export default function WebinarRegistrationForm({ slug, page }) {
         />
         <span>
           {page.consent_text || 'קראתי את תנאי השימוש ומדיניות הפרטיות, ואני מסכים/ה שתיצרו עמי קשר.'}
-          {(page.terms_url || page.privacy_url) && (
+          {(page.privacy_url || page.accessibility_url) && (
             <span className="block mt-1 space-x-2 space-x-reverse">
-              {page.terms_url && <a href={page.terms_url} target="_blank" rel="noopener noreferrer" className="underline" style={{ color: primary }}>תנאי שימוש</a>}
               {page.privacy_url && <a href={page.privacy_url} target="_blank" rel="noopener noreferrer" className="underline" style={{ color: primary }}>מדיניות פרטיות</a>}
+              {page.accessibility_url && <a href={page.accessibility_url} target="_blank" rel="noopener noreferrer" className="underline" style={{ color: primary }}>הצהרת נגישות</a>}
             </span>
           )}
         </span>

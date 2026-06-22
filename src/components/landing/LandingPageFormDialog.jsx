@@ -29,7 +29,7 @@ const EMPTY = {
   hero_title: '', hero_subtitle: '', hero_image_url: '', hero_image_fit: 'cover', hero_image_position: '50%',
   speaker_name: '', speaker_title: '', speaker_image_url: '', speaker_image_fit: 'cover',
   blocks: [], faqs: [], form_title: 'הרשמה לוובינר', form_button_text: 'הרשמה לוובינר',
-  success_message: DEFAULT_SUCCESS, consent_text: DEFAULT_CONSENT, terms_url: '', privacy_url: '', recording_url: '',
+  success_message: DEFAULT_SUCCESS, consent_text: DEFAULT_CONSENT, privacy_url: '', accessibility_url: '', recording_url: '',
   primary_color: '#4B2E83', accent_color: '#D4A53C',
 };
 
@@ -151,12 +151,12 @@ export default function LandingPageFormDialog({ open, onClose, onSave, editItem 
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label className="text-xs text-muted-foreground">קישור לתנאי שימוש</Label>
-                <Input value={form.terms_url} onChange={e => set('terms_url', e.target.value)} placeholder="https://..." dir="ltr" />
-              </div>
-              <div>
                 <Label className="text-xs text-muted-foreground">קישור למדיניות פרטיות</Label>
                 <Input value={form.privacy_url} onChange={e => set('privacy_url', e.target.value)} placeholder="https://..." dir="ltr" />
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">קישור למדיניות נגישות</Label>
+                <Input value={form.accessibility_url} onChange={e => set('accessibility_url', e.target.value)} placeholder="https://..." dir="ltr" />
               </div>
             </div>
           </div>

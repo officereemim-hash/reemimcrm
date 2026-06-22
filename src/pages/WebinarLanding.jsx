@@ -126,8 +126,14 @@ export default function WebinarLanding() {
 
       <FaqSection faqs={page.faqs} primary={primary} />
 
-      <footer className="text-center text-sm text-gray-400 py-8">
-        קרנות ראמים — ייעוץ פנסיוני ופרישה
+      <footer className="text-center text-sm text-gray-400 py-8 space-y-1">
+        <div>קרנות ראמים — ייעוץ פנסיוני ופרישה</div>
+        {(page.privacy_url || page.accessibility_url) && (
+          <div className="flex items-center justify-center gap-3">
+            {page.privacy_url && <a href={page.privacy_url} target="_blank" rel="noopener noreferrer" className="underline hover:text-gray-600">מדיניות פרטיות</a>}
+            {page.accessibility_url && <a href={page.accessibility_url} target="_blank" rel="noopener noreferrer" className="underline hover:text-gray-600">הצהרת נגישות</a>}
+          </div>
+        )}
       </footer>
     </div>
   );
