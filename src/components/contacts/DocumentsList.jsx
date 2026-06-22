@@ -114,13 +114,18 @@ export default function DocumentsList({ contactId, documents, onRefresh, contact
       }
 
       if (contact.email) {
-        await base44.functions.invoke('sendEmailToContact', {
-          contact_id: contactId,
-          subject: `חתימה על מסמך - ${documentName}`,
-          html_body: `שלום ${contact.full_name || ''},<br /><br />לחתימה על המסמך "${documentName}":<br /><a href="${signUrl}">${signUrl}</a>`,
-          template_id: 'document_signature',
-        });
-        sentChannels.push('מייל');
+        try {
+          await base44.functions.invoke('sendSignatureEmail', {
+            contact_id: contactId,
+            contact_name: contact.full_name || '',
+            contact_email: contact.email,
+            document_name: documentName,
+            sign_url: signUrl,
+          });
+          sentChannels.push('מייל');
+        } catch (emailErr) {
+          console.warn('Email signature send failed:', emailErr.message);
+        }
       }
 
       toast.success(sentChannels.length ? `לינק לחתימה נשלח ב-${sentChannels.join(' ו-')}` : 'לא נשלח לינק לחתימה');

@@ -6,8 +6,7 @@ import { Eraser, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 
-// כרטיס "נקה רשומות" — מוחק כל מה שקשור למספר/מייל הבדיקה כדי לדמות משתמש חדש לגמרי.
-export default function ResetTestUser() {
+export default function ResetTestUserCard() {
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
@@ -23,7 +22,7 @@ export default function ResetTestUser() {
       const deleted = res.data?.deleted || {};
       const total = Object.values(deleted).reduce((a, b) => a + b, 0);
       toast.success(total ? `נמחקו ${total} רשומות — אפשר להתחיל נקי` : 'לא נמצאו רשומות למחיקה — כבר נקי');
-    } catch (e) {
+    } catch {
       toast.error('שגיאה בניקוי הרשומות');
     } finally {
       setLoading(false);
@@ -34,11 +33,11 @@ export default function ResetTestUser() {
     <div className="bg-coral/10 border border-coral/30 rounded-xl p-4">
       <div className="flex items-center gap-2 mb-2">
         <Eraser size={18} className="text-coral" />
-        <h3 className="font-bold text-sm">ניקוי לפני בדיקה — התחלה נקייה</h3>
+        <h3 className="font-bold text-sm">ניקוי רשומות בדיקה</h3>
       </div>
       <p className="text-xs text-muted-foreground mb-3">
-        הזיני את מספר הטלפון (ו/או אימייל) שבו תבדקי, ולחצי "נקה". זה מוחק את כל הרשומות של אותו אדם
-        (לקוח, פניות, פגישות, תקשורת, הרשמות, חסימות) — כדי שהבוט יתייחס אליך כמשתמש חדש לגמרי.
+        הזיני את מספר הטלפון (ו/או אימייל) של הבדיקה. הפעולה מוחקת את כל הרשומות של אותו אדם
+        (לקוח, פניות, פגישות, תקשורת, הרשמות, חסימות) — כדי שהבוט יתייחס כמשתמש חדש לגמרי.
       </p>
       <div className="grid sm:grid-cols-2 gap-2 mb-3">
         <Input value={phone} onChange={e => setPhone(e.target.value)} placeholder="מספר טלפון לבדיקה" dir="ltr" />

@@ -16,7 +16,6 @@ import ServiceRequests from '@/pages/ServiceRequests';
 import Meetings from '@/pages/Meetings';
 
 import Webinars from '@/pages/Webinars';
-import ExcelImports from '@/pages/ExcelImports';
 import Settings from '@/pages/Settings';
 import MarketingHub from '@/pages/MarketingHub';
 import BotContentPage from '@/pages/BotContentPage';
@@ -28,7 +27,7 @@ import ScheduleMeeting from '@/pages/ScheduleMeeting';
 import SignDocument from '@/pages/SignDocument';
 import WebinarLanding from '@/pages/WebinarLanding';
 import LandingPagesAdmin from '@/pages/LandingPagesAdmin';
-import Testing from '@/pages/Testing';
+
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -63,13 +62,11 @@ const AuthenticatedApp = () => {
 
         <Route path="/webinars" element={<Webinars />} />
         <Route path="/landing-pages" element={<LandingPagesAdmin />} />
-        <Route path="/excel-imports" element={<ExcelImports />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/marketing" element={<MarketingHub />} />
         <Route path="/bot-content" element={<BotContentPage />} />
         <Route path="/service-content" element={<ServiceContentPage />} />
         <Route path="/bot-chat" element={<BotChat />} />
-        <Route path="/testing" element={<Testing />} />
         <Route path="*" element={<PageNotFound />} />
       </Route>
     </Routes>

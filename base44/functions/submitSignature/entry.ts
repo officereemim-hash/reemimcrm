@@ -1,13 +1,13 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 import { PDFDocument, rgb, StandardFonts } from 'npm:pdf-lib@1.17.1';
 
 Deno.serve(async (req) => {
   try {
     const body = await req.json();
     const base44 = createClientFromRequest(req);
-    const { token, signer_name, signature_data } = body;
+    const { token, signer_name, signature_image_url } = body;
 
-    if (!token || !signer_name || !signature_data) {
+    if (!token || !signer_name || !signature_image_url) {
       return Response.json({ error: 'missing_fields' }, { status: 400 });
     }
 
@@ -29,16 +29,23 @@ Deno.serve(async (req) => {
         const existingPdfBytes = await pdfRes.arrayBuffer();
         const pdfDoc = await PDFDocument.load(existingPdfBytes);
         const pages = pdfDoc.getPages();
-        const lastPage = pages[pages.length - 1];
+        const lastOrigPage = pages[pages.length - 1];
+        const { width: origW, height: origH } = lastOrigPage.getSize();
+
+        // Decide where to place signature: add new page if >=2 pages, else use last page
+        let lastPage;
+        if (pages.length >= 2) {
+          lastPage = pdfDoc.addPage([origW, origH]);
+        } else {
+          lastPage = pages[0];
+        }
         const { width } = lastPage.getSize();
         const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
-        // Decode base64 signature directly in backend — no browser upload needed
-        const base64Data = signature_data.includes(',') ? signature_data.split(',')[1] : signature_data;
-        const binary = atob(base64Data);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-        const sigImage = await pdfDoc.embedPng(bytes);
+        // Fetch signature image from uploaded URL
+        const imgRes = await fetch(signature_image_url);
+        const sigImageBytes = new Uint8Array(await imgRes.arrayBuffer());
+        const sigImage = await pdfDoc.embedPng(sigImageBytes);
 
         const sigW = 160, sigH = 60;
         const sigX = width - sigW - 40;
@@ -80,7 +87,7 @@ Deno.serve(async (req) => {
       signature_status: 'signed',
       signed_at: signedAt,
       signer_name,
-      signature_data,
+      signature_data: signature_image_url,
       file_url: signedPdfUrl,
     });
 
@@ -95,6 +102,32 @@ Deno.serve(async (req) => {
         status: 'sent',
       });
     }
+
+    // Notify admin via Brevo
+    try {
+      const BREVO_API_KEY = Deno.env.get('BREVO_API_KEY');
+      if (BREVO_API_KEY) {
+        const senderSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'brevo_sender_email' });
+        const senderNameSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'brevo_sender_name' });
+        const senderEmail = senderSettings[0]?.value || 'noreply@kranot-reemim.co.il';
+        const senderName = senderNameSettings[0]?.value || 'קרנות ראמים';
+
+        await fetch('https://api.brevo.com/v3/smtp/email', {
+          method: 'POST',
+          headers: { 'api-key': BREVO_API_KEY, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sender: { name: senderName, email: senderEmail },
+            to: [{ email: senderEmail }],
+            subject: `✍️ מסמך נחתם: ${doc.name}`,
+            htmlContent: `<div dir="rtl" style="font-family:Arial,sans-serif;padding:20px;">
+              <h2 style="color:#4A2C78;">מסמך נחתם ✍️</h2>
+              <p><strong>${doc.name}</strong> נחתם על ידי <strong>${signer_name}</strong> ב-${signedAtDisplay}</p>
+              ${signedPdfUrl ? `<p style="margin-top:16px;"><a href="${signedPdfUrl}" style="background:#4A2C78;color:white;padding:10px 20px;text-decoration:none;border-radius:6px;display:inline-block;">צפה במסמך החתום ←</a></p>` : ''}
+            </div>`
+          })
+        });
+      }
+    } catch (_) { /* notification failure should not block */ }
 
     return Response.json({ ok: true, file_url: signedPdfUrl });
   } catch (err) {

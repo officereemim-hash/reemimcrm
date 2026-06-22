@@ -78,13 +78,23 @@ export default function SignDocument() {
     setError('');
     setSubmitting(true);
     try {
-      // Send base64 directly — no browser upload (page is public, no auth)
-      const signatureData = canvasRef.current.toDataURL('image/png');
+      // Convert canvas to blob and upload as image file first
+      const canvas = canvasRef.current;
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+      const file = new File([blob], 'signature.png', { type: 'image/png' });
+      const uploadRes = await base44.integrations.Core.UploadFile({ file });
+      const signatureImageUrl = uploadRes.file_url;
+
+      if (!signatureImageUrl) {
+        setError('שגיאה בהעלאת החתימה. נסה שנית.');
+        setSubmitting(false);
+        return;
+      }
 
       const res = await base44.functions.invoke('submitSignature', {
         token,
         signer_name: signerName.trim(),
-        signature_data: signatureData,
+        signature_image_url: signatureImageUrl,
       });
 
       if (res?.data?.ok) {

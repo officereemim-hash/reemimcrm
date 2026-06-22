@@ -15,6 +15,8 @@ const SR_STATUS_OPTIONS = [
   { value: 'followup_active', label: 'פולו-אפ פעיל' },
   { value: 'phone_meeting', label: 'נקבעה שיחה טלפונית' },
   { value: 'meeting_scheduled', label: 'פגישה נקבעה' },
+  { value: 'meeting_scheduled_frontal', label: 'נקבעה פגישה פרונטאלית' },
+  { value: 'meeting_scheduled_zoom', label: 'נקבעה פגישת זום' },
   { value: 'completed', label: 'הושלם' },
   { value: 'cancelled', label: 'בוטל' },
   { value: 'followup_closed', label: 'פולו-אפ נסגר' },
