@@ -143,7 +143,21 @@ Deno.serve(async (req) => {
       await label();
     }
 
-    return Response.json({ ok: true, matched, skippedDup, flagged });
+    const countQ = async (qq) => {
+      try {
+        const r = await gmail(token, `messages?q=${encodeURIComponent(qq)}&maxResults=1`);
+        return r.resultSizeEstimate ?? 0;
+      } catch (e) { return `ERR:${e.message}`; }
+    };
+    const profile = await gmail(token, 'profile');
+    const diag = {
+      connectedEmail: profile.emailAddress,
+      cFromNotif: await countQ('from:notifications@app.surense.com'),
+      cFromNotifAnywhere: await countQ('from:notifications@app.surense.com in:anywhere'),
+      cLabeled: await countQ('label:Shoranss-Processed'),
+      cMainQuery: await countQ('(from:notifications@app.surense.com OR from:bosmat@oryx-alt.com) -label:Shoranss-Processed newer_than:60d'),
+    };
+    return Response.json({ ok: true, diag, matched, skippedDup, flagged });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
   }
