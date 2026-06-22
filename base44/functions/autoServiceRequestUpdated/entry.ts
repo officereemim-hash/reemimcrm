@@ -291,7 +291,8 @@ Deno.serve(async (req) => {
       else if (newStatus === 'meeting_scheduled_zoom') templateKey = 'meeting_scheduled_zoom';
       else if (apptType === 'modiin') templateKey = 'meeting_scheduled_modiin';
       else if (apptType.includes('petah_tikva')) templateKey = 'meeting_scheduled_petah_tikva';
-      else if (apptType === 'phone') templateKey = 'meeting_scheduled_phone';
+      // מסלול וובינר: פגישת טלפון נחשבת כפגישה רגילה (לא שיחת מתאמת)
+      else if (apptType === 'phone' && !isWebinar) templateKey = 'meeting_scheduled_phone';
 
       if (await alreadySentRecently(templateKey)) {
         return Response.json({ ok: true, skipped: 'duplicate_event' });
