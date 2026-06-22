@@ -1,15 +1,19 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Pencil, Trash2 } from 'lucide-react';
 import { CONTENT_TYPES, SERVICE_TYPES } from '@/components/bot/ServiceContentFormDialog';
 
-export default function ServiceContentTable({ items, onEdit, onDelete }) {
+export default function ServiceContentTable({ items, onEdit, onDelete, selectedIds = [], onToggle, onToggleAll }) {
+  const allSelected = items.length > 0 && selectedIds.length === items.length;
+
   return (
     <div className="border rounded-lg overflow-hidden">
       <Table>
         <TableHeader>
           <TableRow>
+            {onToggle && <TableHead className="w-10"><Checkbox checked={allSelected} onCheckedChange={() => onToggleAll(items)} /></TableHead>}
             <TableHead>שם</TableHead>
             <TableHead>סוג תוכן</TableHead>
             <TableHead>שירות</TableHead>
@@ -20,9 +24,10 @@ export default function ServiceContentTable({ items, onEdit, onDelete }) {
         </TableHeader>
         <TableBody>
           {items.length === 0 ? (
-            <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">אין תוכן</TableCell></TableRow>
+            <TableRow><TableCell colSpan={onToggle ? 7 : 6} className="text-center py-8 text-muted-foreground">אין תוכן</TableCell></TableRow>
           ) : items.map(item => (
             <TableRow key={item.id} className="hover:bg-muted/30">
+              {onToggle && <TableCell><Checkbox checked={selectedIds.includes(item.id)} onCheckedChange={() => onToggle(item.id)} /></TableCell>}
               <TableCell className="text-sm font-medium">{item.title}</TableCell>
               <TableCell><Badge variant="secondary" className="text-xs">{CONTENT_TYPES.find(t => t.value === item.content_type)?.label || item.content_type}</Badge></TableCell>
               <TableCell className="text-xs">{SERVICE_TYPES.find(s => s.value === item.service_type)?.label || item.service_type}</TableCell>

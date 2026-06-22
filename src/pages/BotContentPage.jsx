@@ -9,6 +9,7 @@ import BotContentCard from '@/components/bot/BotContentCard';
 import BotContentTable from '@/components/bot/BotContentTable';
 import BotContentFormDialog from '@/components/bot/BotContentFormDialog';
 import ViewToggle from '@/components/shared/ViewToggle';
+import BulkDeleteBar from '@/components/shared/BulkDeleteBar';
 
 export default function BotContentPage() {
   const [search, setSearch] = useState('');
@@ -18,6 +19,8 @@ export default function BotContentPage() {
   const [editItem, setEditItem] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [viewMode, setViewMode] = useState('cards');
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: contents = [], isLoading } = useQuery({
@@ -34,6 +37,16 @@ export default function BotContentPage() {
     mutationFn: id => base44.entities.BotContent.delete(id),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['bot-content'] }); setDeleteTarget(null); },
   });
+
+  const handleBulkDelete = async () => {
+    setBulkDeleting(true);
+    for (const id of selectedIds) await base44.entities.BotContent.delete(id);
+    setSelectedIds([]); setBulkDeleting(false);
+    queryClient.invalidateQueries({ queryKey: ['bot-content'] });
+  };
+
+  const toggleId = (id) => setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  const toggleAll = (items) => setSelectedIds(prev => prev.length === items.length ? [] : items.map(i => i.id));
 
   const filtered = contents
     .filter(c => category === 'all' || c.category === category)
@@ -67,6 +80,8 @@ export default function BotContentPage() {
 
       <BotContentFilters search={search} onSearchChange={setSearch} category={category} onCategoryChange={setCategory} flow={flow} onFlowChange={setFlow} />
 
+      <BulkDeleteBar count={selectedIds.length} label="הודעות" deleting={bulkDeleting} onDelete={handleBulkDelete} />
+
       {isLoading ? (
         <div className="flex justify-center py-12">
           <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
@@ -74,7 +89,8 @@ export default function BotContentPage() {
       ) : filtered.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">אין הודעות להצגה</div>
       ) : viewMode === 'table' ? (
-        <BotContentTable items={filtered} onEdit={handleEdit} onDelete={setDeleteTarget} />
+        <BotContentTable items={filtered} onEdit={handleEdit} onDelete={setDeleteTarget}
+          selectedIds={selectedIds} onToggle={toggleId} onToggleAll={toggleAll} />
       ) : (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map(item => (
@@ -83,13 +99,8 @@ export default function BotContentPage() {
         </div>
       )}
 
-      <BotContentFormDialog
-        open={showForm}
-        onClose={() => { setShowForm(false); setEditItem(null); }}
-        item={editItem}
-        onSave={data => saveMutation.mutate(data)}
-        saving={saveMutation.isPending}
-      />
+      <BotContentFormDialog open={showForm} onClose={() => { setShowForm(false); setEditItem(null); }}
+        item={editItem} onSave={data => saveMutation.mutate(data)} saving={saveMutation.isPending} />
 
       <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
         <AlertDialogContent dir="rtl">

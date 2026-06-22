@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Mail, Send, Users, Calendar, Star, Bell, Plus, CheckCircle, Clock, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { format } from 'date-fns';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
@@ -9,6 +10,7 @@ import ComposeDialog from '@/components/marketing/ComposeDialog';
 import TemplateEditor from '@/components/marketing/TemplateEditor';
 import CampaignHistory from '@/components/marketing/CampaignHistory';
 import ViewToggle from '@/components/shared/ViewToggle';
+import BulkDeleteBar from '@/components/shared/BulkDeleteBar';
 
 const MESSAGE_TYPES = [
   { key: 'newsletter', label: 'ניוזלטר תקופתי', icon: Mail, desc: 'שליחה לכלל הלקוחות הפעילים' },
@@ -27,6 +29,8 @@ export default function MarketingHub() {
   const [sentResult, setSentResult] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
   const [viewMode, setViewMode] = useState('cards');
+  const [selectedComms, setSelectedComms] = useState([]);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const load = () => {
     Promise.all([
@@ -177,6 +181,12 @@ export default function MarketingHub() {
           <CardTitle className="text-base font-semibold">שליחות אחרונות</CardTitle>
         </CardHeader>
         <CardContent>
+          <BulkDeleteBar count={selectedComms.length} label="שליחות" deleting={bulkDeleting}
+            onDelete={async () => {
+              setBulkDeleting(true);
+              for (const id of selectedComms) await base44.entities.Communication.delete(id);
+              setSelectedComms([]); setBulkDeleting(false); load();
+            }} />
           {communications.length === 0 ? (
             <p className="text-sm text-muted-foreground">אין שליחות עדיין</p>
           ) : (
@@ -185,6 +195,7 @@ export default function MarketingHub() {
                 const contact = contacts.find(c => c.id === comm.contact_id);
                 return (
                   <div key={comm.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 text-sm">
+                    <Checkbox checked={selectedComms.includes(comm.id)} onCheckedChange={() => setSelectedComms(prev => prev.includes(comm.id) ? prev.filter(x => x !== comm.id) : [...prev, comm.id])} />
                     <div className={`w-2 h-2 rounded-full flex-shrink-0 ${comm.status === 'failed' ? 'bg-destructive' : 'bg-success'}`} />
                     <span className="font-medium flex-shrink-0">{contact?.full_name || '—'}</span>
                     <span className="text-muted-foreground flex-1 truncate">{comm.content?.slice(0, 60)}...</span>

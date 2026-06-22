@@ -3,10 +3,12 @@ import { base44 } from '@/api/base44Client';
 import { Globe, Plus, Pencil, Trash2, ExternalLink, Copy } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import LandingPageFormDialog from '@/components/landing/LandingPageFormDialog';
+import BulkDeleteBar from '@/components/shared/BulkDeleteBar';
 
 const TYPE_LABELS = { investments: 'השקעות', divorce: 'גירושין / איזון', retirement: 'פרישה' };
 
@@ -16,6 +18,8 @@ export default function LandingPagesAdmin() {
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -37,6 +41,14 @@ export default function LandingPagesAdmin() {
     }
   };
 
+  const handleBulkDelete = async () => {
+    setBulkDeleting(true);
+    for (const id of selectedIds) await base44.entities.LandingPage.delete(id);
+    setSelectedIds([]); setBulkDeleting(false); load();
+  };
+
+  const toggleId = (id) => setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+
   const pageUrl = (slug) => `${window.location.origin}/webinar/${slug}`;
 
   if (loading) return (
@@ -57,6 +69,8 @@ export default function LandingPagesAdmin() {
         </Button>
       </div>
 
+      <BulkDeleteBar count={selectedIds.length} label="דפי נחיתה" deleting={bulkDeleting} onDelete={handleBulkDelete} />
+
       {pages.length === 0 ? (
         <div className="text-center text-muted-foreground py-16">אין דפי נחיתה עדיין</div>
       ) : (
@@ -65,6 +79,7 @@ export default function LandingPagesAdmin() {
             <Card key={page.id} className="hover:shadow-md transition-all">
               <CardContent className="p-4">
                 <div className="flex items-start gap-3">
+                  <Checkbox checked={selectedIds.includes(page.id)} onCheckedChange={() => toggleId(page.id)} className="mt-1" />
                   <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
                     <Globe size={18} className="text-primary" />
                   </div>

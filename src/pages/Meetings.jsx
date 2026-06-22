@@ -8,6 +8,7 @@ import { MeetingStatusBadge, TaskStatusBadge, PriorityBadge } from '@/components
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { format, isToday, isTomorrow, parseISO } from 'date-fns';
 import ViewToggle from '@/components/shared/ViewToggle';
+import BulkDeleteBar from '@/components/shared/BulkDeleteBar';
 import MeetingsTable from '@/components/meetings/MeetingsTable';
 import TasksTable from '@/components/meetings/TasksTable';
 import MeetingFormDialog from '@/components/meetings/MeetingFormDialog';
@@ -28,6 +29,9 @@ export default function Meetings() {
   const [editTask, setEditTask] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteType, setDeleteType] = useState(null);
+  const [selectedMeetings, setSelectedMeetings] = useState([]);
+  const [selectedTasks, setSelectedTasks] = useState([]);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -36,10 +40,7 @@ export default function Meetings() {
       base44.entities.Task.list('-created_date', 200),
       base44.entities.Contact.list(),
     ]).then(([m, t, c]) => {
-      setMeetings(m);
-      setTasks(t);
-      setContacts(c);
-      setLoading(false);
+      setMeetings(m); setTasks(t); setContacts(c); setLoading(false);
     });
   };
 
@@ -47,28 +48,16 @@ export default function Meetings() {
 
   const getContact = id => contacts.find(c => c.id === id);
 
-  // Meeting CRUD
   const handleSaveMeeting = async (data) => {
-    if (editMeeting) {
-      await base44.entities.Meeting.update(editMeeting.id, data);
-    } else {
-      await base44.entities.Meeting.create(data);
-    }
-    setShowMeetingForm(false);
-    setEditMeeting(null);
-    load();
+    if (editMeeting) await base44.entities.Meeting.update(editMeeting.id, data);
+    else await base44.entities.Meeting.create(data);
+    setShowMeetingForm(false); setEditMeeting(null); load();
   };
 
-  // Task CRUD
   const handleSaveTask = async (data) => {
-    if (editTask) {
-      await base44.entities.Task.update(editTask.id, data);
-    } else {
-      await base44.entities.Task.create(data);
-    }
-    setShowTaskForm(false);
-    setEditTask(null);
-    load();
+    if (editTask) await base44.entities.Task.update(editTask.id, data);
+    else await base44.entities.Task.create(data);
+    setShowTaskForm(false); setEditTask(null); load();
   };
 
   const handleMarkDone = async (task) => {
@@ -80,12 +69,24 @@ export default function Meetings() {
     if (!deleteTarget) return;
     if (deleteType === 'meeting') await base44.entities.Meeting.delete(deleteTarget.id);
     else await base44.entities.Task.delete(deleteTarget.id);
-    setDeleteTarget(null);
-    setDeleteType(null);
+    setDeleteTarget(null); setDeleteType(null); load();
+  };
+
+  const toggleId = (id, selected, setSelected) => {
+    setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+  const toggleAll = (items, selected, setSelected) => {
+    setSelected(selected.length === items.length ? [] : items.map(i => i.id));
+  };
+
+  const handleBulkDelete = async (ids, entity, setSelected) => {
+    setBulkDeleting(true);
+    for (const id of ids) await entity.delete(id);
+    setSelected([]);
+    setBulkDeleting(false);
     load();
   };
 
-  // Grouped meetings for cards view
   const todayMeetings = meetings.filter(m => m.scheduled_at && isToday(parseISO(m.scheduled_at)));
   const tomorrowMeetings = meetings.filter(m => m.scheduled_at && isTomorrow(parseISO(m.scheduled_at)));
   const upcomingMeetings = meetings.filter(m => {
@@ -93,7 +94,6 @@ export default function Meetings() {
     const d = parseISO(m.scheduled_at);
     return !isToday(d) && !isTomorrow(d) && d > new Date() && m.status === 'scheduled';
   });
-
   const openTasks = tasks.filter(t => t.status !== 'done' && t.status !== 'cancelled');
 
   if (loading) return (
@@ -121,55 +121,55 @@ export default function Meetings() {
         </div>
       </div>
 
-      {/* Tabs */}
       <div className="flex gap-2 border-b border-border pb-0">
         {[{ key: 'meetings', label: `פגישות (${meetings.length})` }, { key: 'tasks', label: `משימות (${openTasks.length} פתוחות)` }].map(tab => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
-              activeTab === tab.key ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-            }`}
-          >
-            {tab.label}
-          </button>
+          <button key={tab.key} onClick={() => { setActiveTab(tab.key); setSelectedMeetings([]); setSelectedTasks([]); }}
+            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${activeTab === tab.key ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
+          >{tab.label}</button>
         ))}
       </div>
 
-      {/* Meetings */}
+      {activeTab === 'meetings' && (
+        <BulkDeleteBar count={selectedMeetings.length} label="פגישות" deleting={bulkDeleting}
+          onDelete={() => handleBulkDelete(selectedMeetings, base44.entities.Meeting, setSelectedMeetings)} />
+      )}
+      {activeTab === 'tasks' && (
+        <BulkDeleteBar count={selectedTasks.length} label="משימות" deleting={bulkDeleting}
+          onDelete={() => handleBulkDelete(selectedTasks, base44.entities.Task, setSelectedTasks)} />
+      )}
+
       {activeTab === 'meetings' && viewMode === 'table' && (
         <MeetingsTable meetings={meetings} contacts={contacts}
           onEdit={m => { setEditMeeting(m); setShowMeetingForm(true); }}
           onDelete={m => { setDeleteTarget(m); setDeleteType('meeting'); }}
+          selectedIds={selectedMeetings}
+          onToggle={id => toggleId(id, selectedMeetings, setSelectedMeetings)}
+          onToggleAll={items => toggleAll(items, selectedMeetings, setSelectedMeetings)}
         />
       )}
 
       {activeTab === 'meetings' && viewMode === 'cards' && (
         <div className="space-y-6">
           <MeetingCardGroup title="היום" meetings={todayMeetings} getContact={getContact}
-            onEdit={m => { setEditMeeting(m); setShowMeetingForm(true); }}
-            onDelete={m => { setDeleteTarget(m); setDeleteType('meeting'); }}
-          />
+            onEdit={m => { setEditMeeting(m); setShowMeetingForm(true); }} onDelete={m => { setDeleteTarget(m); setDeleteType('meeting'); }} />
           <MeetingCardGroup title="מחר" meetings={tomorrowMeetings} getContact={getContact}
-            onEdit={m => { setEditMeeting(m); setShowMeetingForm(true); }}
-            onDelete={m => { setDeleteTarget(m); setDeleteType('meeting'); }}
-          />
+            onEdit={m => { setEditMeeting(m); setShowMeetingForm(true); }} onDelete={m => { setDeleteTarget(m); setDeleteType('meeting'); }} />
           <MeetingCardGroup title="קרובות" meetings={upcomingMeetings.slice(0, 20)} getContact={getContact}
-            onEdit={m => { setEditMeeting(m); setShowMeetingForm(true); }}
-            onDelete={m => { setDeleteTarget(m); setDeleteType('meeting'); }}
-          />
+            onEdit={m => { setEditMeeting(m); setShowMeetingForm(true); }} onDelete={m => { setDeleteTarget(m); setDeleteType('meeting'); }} />
           {todayMeetings.length === 0 && tomorrowMeetings.length === 0 && upcomingMeetings.length === 0 && (
             <div className="text-center text-muted-foreground py-16">אין פגישות קרובות</div>
           )}
         </div>
       )}
 
-      {/* Tasks */}
       {activeTab === 'tasks' && viewMode === 'table' && (
         <TasksTable tasks={tasks} contacts={contacts}
           onEdit={t => { setEditTask(t); setShowTaskForm(true); }}
           onDelete={t => { setDeleteTarget(t); setDeleteType('task'); }}
           onMarkDone={handleMarkDone}
+          selectedIds={selectedTasks}
+          onToggle={id => toggleId(id, selectedTasks, setSelectedTasks)}
+          onToggleAll={items => toggleAll(items, selectedTasks, setSelectedTasks)}
         />
       )}
 
@@ -181,13 +181,11 @@ export default function Meetings() {
             <TaskCardItem key={task.id} task={task} getContact={getContact}
               onEdit={() => { setEditTask(task); setShowTaskForm(true); }}
               onDelete={() => { setDeleteTarget(task); setDeleteType('task'); }}
-              onMarkDone={() => handleMarkDone(task)}
-            />
+              onMarkDone={() => handleMarkDone(task)} />
           ))}
         </div>
       )}
 
-      {/* Dialogs */}
       <MeetingFormDialog open={showMeetingForm} onClose={() => { setShowMeetingForm(false); setEditMeeting(null); }}
         onSave={handleSaveMeeting} contacts={contacts} editItem={editMeeting} />
       <TaskFormDialog open={showTaskForm} onClose={() => { setShowTaskForm(false); setEditTask(null); }}
@@ -251,8 +249,7 @@ function TaskCardItem({ task, getContact, onEdit, onDelete, onMarkDone }) {
       <CardContent className="p-3 flex items-start gap-3">
         {task.status !== 'done' && (
           <button onClick={onMarkDone}
-            className="mt-0.5 w-5 h-5 rounded border-2 border-muted-foreground hover:border-primary hover:bg-primary/10 transition-colors flex-shrink-0"
-          />
+            className="mt-0.5 w-5 h-5 rounded border-2 border-muted-foreground hover:border-primary hover:bg-primary/10 transition-colors flex-shrink-0" />
         )}
         <div className="flex-1">
           <div className="flex items-center gap-2 flex-wrap">

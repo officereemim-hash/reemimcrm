@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { TaskStatusBadge, PriorityBadge } from '@/components/StatusBadge';
 import { Pencil, Trash2, CheckCircle2 } from 'lucide-react';
 import { format } from 'date-fns';
@@ -11,14 +12,16 @@ const TYPE_LABELS = {
   sla_followup: 'מעקב SLA', no_response_escalation: 'הסלמה',
 };
 
-export default function TasksTable({ tasks, contacts, onEdit, onDelete, onMarkDone }) {
+export default function TasksTable({ tasks, contacts, onEdit, onDelete, onMarkDone, selectedIds = [], onToggle, onToggleAll }) {
   const getContact = id => contacts.find(c => c.id === id);
+  const allSelected = tasks.length > 0 && selectedIds.length === tasks.length;
 
   return (
     <div className="border rounded-lg overflow-hidden">
       <Table>
         <TableHeader>
           <TableRow>
+            {onToggle && <TableHead className="w-10"><Checkbox checked={allSelected} onCheckedChange={() => onToggleAll(tasks)} /></TableHead>}
             <TableHead className="w-10"></TableHead>
             <TableHead>משימה</TableHead>
             <TableHead>איש קשר</TableHead>
@@ -32,11 +35,12 @@ export default function TasksTable({ tasks, contacts, onEdit, onDelete, onMarkDo
         </TableHeader>
         <TableBody>
           {tasks.length === 0 ? (
-            <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">אין משימות</TableCell></TableRow>
+            <TableRow><TableCell colSpan={onToggle ? 10 : 9} className="text-center py-8 text-muted-foreground">אין משימות</TableCell></TableRow>
           ) : tasks.map(t => {
             const contact = getContact(t.contact_id);
             return (
               <TableRow key={t.id} className={`hover:bg-muted/30 ${t.status === 'done' ? 'opacity-50' : ''}`}>
+                {onToggle && <TableCell><Checkbox checked={selectedIds.includes(t.id)} onCheckedChange={() => onToggle(t.id)} /></TableCell>}
                 <TableCell>
                   {t.status !== 'done' && (
                     <Button variant="ghost" size="icon" className="h-7 w-7 text-success" onClick={() => onMarkDone(t)}>

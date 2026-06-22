@@ -10,6 +10,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import ServiceContentFormDialog, { CONTENT_TYPES, SERVICE_TYPES } from '@/components/bot/ServiceContentFormDialog';
 import ServiceContentTable from '@/components/bot/ServiceContentTable';
 import ViewToggle from '@/components/shared/ViewToggle';
+import BulkDeleteBar from '@/components/shared/BulkDeleteBar';
 import { Pencil, Trash2 } from 'lucide-react';
 
 const ICON_MAP = { video: Video, pdf: FileText, questionnaire: ClipboardList, payment_link: CreditCard, external_link: LinkIcon, agreement: FileCheck, calendar_link: Calendar };
@@ -22,6 +23,8 @@ export default function ServiceContentPage() {
   const [editItem, setEditItem] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [viewMode, setViewMode] = useState('cards');
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: contents = [], isLoading } = useQuery({
@@ -38,6 +41,16 @@ export default function ServiceContentPage() {
     mutationFn: id => base44.entities.ServiceContent.delete(id),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['service-content'] }); setDeleteTarget(null); },
   });
+
+  const handleBulkDelete = async () => {
+    setBulkDeleting(true);
+    for (const id of selectedIds) await base44.entities.ServiceContent.delete(id);
+    setSelectedIds([]); setBulkDeleting(false);
+    queryClient.invalidateQueries({ queryKey: ['service-content'] });
+  };
+
+  const toggleId = (id) => setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  const toggleAll = (items) => setSelectedIds(prev => prev.length === items.length ? [] : items.map(i => i.id));
 
   const filtered = contents
     .filter(c => filterService === 'all' || c.service_type === filterService)
@@ -85,12 +98,15 @@ export default function ServiceContentPage() {
         </div>
       </div>
 
+      <BulkDeleteBar count={selectedIds.length} label="פריטי תוכן" deleting={bulkDeleting} onDelete={handleBulkDelete} />
+
       {isLoading ? (
         <div className="flex justify-center py-12"><div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" /></div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">אין תוכן להצגה</div>
       ) : viewMode === 'table' ? (
-        <ServiceContentTable items={filtered} onEdit={item => { setEditItem(item); setShowForm(true); }} onDelete={setDeleteTarget} />
+        <ServiceContentTable items={filtered} onEdit={item => { setEditItem(item); setShowForm(true); }} onDelete={setDeleteTarget}
+          selectedIds={selectedIds} onToggle={toggleId} onToggleAll={toggleAll} />
       ) : (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map(item => {

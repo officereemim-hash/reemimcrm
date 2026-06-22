@@ -4,8 +4,10 @@ import { Mail, MessageCircle, ChevronDown, ChevronUp, Eye, Send, Loader2 } from 
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { format } from 'date-fns';
 import CampaignPreviewDialog from './CampaignPreviewDialog';
+import BulkDeleteBar from '@/components/shared/BulkDeleteBar';
 
 const STATUS_LABELS = {
   in_progress: { label: 'בתהליך', cls: 'bg-gold/20 text-gold' },
@@ -32,6 +34,8 @@ export default function CampaignHistory() {
   const [queueItems, setQueueItems] = useState({});
   const [previewCampaign, setPreviewCampaign] = useState(null);
   const [resendingId, setResendingId] = useState(null);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const handleResend = async (c) => {
     if (!confirm(`לשלוח מחדש את "${c.name}" ל-${c.recipients_count || 0} נמענים?`)) return;
@@ -98,14 +102,26 @@ export default function CampaignHistory() {
     <p className="text-sm text-muted-foreground py-8 text-center">אין קמפיינים עדיין</p>
   );
 
+  const handleBulkDelete = async () => {
+    setBulkDeleting(true);
+    for (const id of selectedIds) await base44.entities.Campaign.delete(id);
+    setSelectedIds([]); setBulkDeleting(false);
+    const fresh = await base44.entities.Campaign.list('-created_date', 50);
+    setCampaigns(fresh || []);
+  };
+
   return (
     <div className="space-y-3">
+      <BulkDeleteBar count={selectedIds.length} label="קמפיינים" deleting={bulkDeleting} onDelete={handleBulkDelete} />
       {campaigns.map(c => {
         const status = STATUS_LABELS[c.status] || { label: c.status, cls: 'bg-muted' };
         const isOpen = expandedId === c.id;
         return (
           <Card key={c.id} className="shadow-sm">
             <CardContent className="p-4">
+              <div className="flex items-start gap-3">
+              <Checkbox checked={selectedIds.includes(c.id)} onCheckedChange={() => setSelectedIds(prev => prev.includes(c.id) ? prev.filter(x => x !== c.id) : [...prev, c.id])} className="mt-1" />
+              <div className="flex-1">
               <button onClick={() => toggleExpand(c.id)} className="w-full text-right">
                 <div className="flex items-center gap-3 flex-wrap">
                   <span className="font-semibold text-sm flex-1 min-w-[150px]">{c.name}</span>
@@ -165,6 +181,8 @@ export default function CampaignHistory() {
                   )}
                 </div>
               )}
+              </div>
+              </div>
             </CardContent>
           </Card>
         );
