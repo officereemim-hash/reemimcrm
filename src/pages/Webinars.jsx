@@ -171,7 +171,8 @@ export default function Webinars() {
                       <span className="text-xs bg-gold/20 text-gold px-2 py-0.5 rounded-full">{TYPE_LABELS[reg.webinar_type]}</span>
                     </div>
                     <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
-                      {reg.webinar_date && <span>{format(new Date(reg.webinar_date), 'dd/MM/yyyy')}</span>}
+                      {reg.created_date && <span>נוצר: {format(new Date(reg.created_date), 'dd/MM/yyyy')}</span>}
+                      {reg.webinar_date && <span>וובינר: {format(new Date(reg.webinar_date), 'dd/MM/yyyy')}</span>}
                       {contact?.phone && <span>{contact.phone}</span>}
                     </div>
                   </div>

@@ -277,7 +277,10 @@ Deno.serve(async (req) => {
       if (googleEventId) meeting = await base44.asServiceRole.entities.Meeting.update(meeting.id, { google_event_id: googleEventId });
     }
 
-    if (detected.isCoordinatorCall) {
+    // פגישות ממסלול וובינר — לא נחשבות coordinator call גם אם ה-slug מכיל מילים דומות
+    const isWebinarSource = serviceRequest.source === 'webinar';
+
+    if (detected.isCoordinatorCall && !isWebinarSource) {
       await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, {
         status: 'phone_meeting',
         meeting_id: meeting.id,

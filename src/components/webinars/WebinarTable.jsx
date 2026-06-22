@@ -21,7 +21,8 @@ export default function WebinarTable({ registrations, contacts, onEdit, onDelete
             <TableHead>שם</TableHead>
             <TableHead>טלפון</TableHead>
             <TableHead>סוג</TableHead>
-            <TableHead>תאריך</TableHead>
+            <TableHead>תאריך יצירה</TableHead>
+            <TableHead>תאריך וובינר</TableHead>
             <TableHead className="text-center">השתתף</TableHead>
             <TableHead className="text-center">שילם</TableHead>
             <TableHead className="text-center">פגישה</TableHead>
@@ -30,7 +31,7 @@ export default function WebinarTable({ registrations, contacts, onEdit, onDelete
         </TableHeader>
         <TableBody>
           {registrations.length === 0 ? (
-            <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">אין רשומות</TableCell></TableRow>
+            <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">אין רשומות</TableCell></TableRow>
           ) : registrations.map(reg => {
             const contact = getContact(reg.contact_id);
             return (
@@ -44,6 +45,7 @@ export default function WebinarTable({ registrations, contacts, onEdit, onDelete
                 <TableCell>
                   <span className="text-xs bg-gold/20 text-gold px-2 py-0.5 rounded-full">{TYPE_LABELS[reg.webinar_type]}</span>
                 </TableCell>
+                <TableCell className="text-xs text-muted-foreground">{reg.created_date ? format(new Date(reg.created_date), 'dd/MM/yy') : '—'}</TableCell>
                 <TableCell className="text-xs text-muted-foreground">{reg.webinar_date ? format(new Date(reg.webinar_date), 'dd/MM/yy') : '—'}</TableCell>
                 <TableCell className="text-center"><BoolIcon value={reg.attended} /></TableCell>
                 <TableCell className="text-center"><BoolIcon value={reg.payment_completed} /></TableCell>

@@ -217,25 +217,43 @@ Deno.serve(async (req) => {
       if (await alreadySentRecently('schedule_intro')) {
         return Response.json({ ok: true, skipped: 'duplicate_event' });
       }
+
+      // מסלול וובינר — דילוג על הצעת מחיר/סיכום, שולחים רק בחירת מיקום
+      const isWebinar = serviceRequest.source === 'webinar';
+
       const intro = await getContent('schedule_intro');
-      const quoteUrl = await getUrl('pdf', 'quote_' + serviceType);
+      const phoneSummary = isWebinar ? '' : await getPhoneSummaryBlock();
+      const quoteUrl = isWebinar ? '' : await getUrl('pdf', 'quote_' + serviceType);
       let message = fillTemplate(intro || 'מעולה, שמחנו לשמוע שתרצה להתקדם. השלב הבא הוא תיאום פגישה עם בשמת.', {
         name: contact.full_name || '',
-        summary: await getPhoneSummaryBlock(),
+        summary: phoneSummary,
         quote_link: quoteUrl,
       });
       if (!quoteUrl) {
-        // אם אין קישור להצעה — מסירים את שורות ההצעה מההודעה
         message = message.split('\n').filter(line => !line.includes('הצעת המחיר')).join('\n');
+      }
+      if (!phoneSummary) {
+        message = message.split('\n').filter(line => !line.includes('סיכום') && !line.includes('{summary}')).join('\n');
       }
       message = message.replace(/\n{3,}/g, '\n\n');
       const sent = await sendWhatsApp(message);
       await logCommunication(message, 'schedule_intro', sent);
+
+      // שליחת הצעת מחיר כקובץ (מסלול רגיל בלבד)
+      if (!isWebinar && quoteUrl) {
+        const isPdfFile = /\.pdf(\?.*)?$/i.test(quoteUrl);
+        if (isPdfFile) {
+          await new Promise(resolve => setTimeout(resolve, 1200));
+          const fileResult = await sendWhatsAppFile(quoteUrl, `הצעת מחיר - ${contact.full_name || ''}.pdf`);
+          await logCommunication(quoteUrl, 'interested_quote_file', fileResult);
+        }
+      }
+
       await base44.asServiceRole.entities.Contact.update(contact.id, {
         bot_status: 'waiting_user_reply',
         last_bot_interaction_at: new Date().toISOString(),
       });
-      return Response.json({ ok: true, action: 'route_a_interested', whatsapp_sent: sent });
+      return Response.json({ ok: true, action: 'route_a_interested', whatsapp_sent: sent, webinar: isWebinar });
     }
 
     if (statusChanged && newStatus === 'phone_meeting') {
@@ -264,6 +282,7 @@ Deno.serve(async (req) => {
     const meetingStatuses = ['meeting_scheduled', 'meeting_scheduled_frontal', 'meeting_scheduled_zoom'];
     if (statusChanged && meetingStatuses.includes(newStatus)) {
       const apptType = serviceRequest.last_appointment_type || '';
+      const isWebinar = serviceRequest.source === 'webinar';
 
       let templateKey = 'meeting_scheduled_zoom';
       if (serviceType === 'divorce_split') templateKey = 'meeting_scheduled_divorce_split';
@@ -300,14 +319,28 @@ Deno.serve(async (req) => {
         caller_phone: await getSetting('coordinator_phone'),
       };
 
-      // 1. אישור פגישה
+      // 1. אישור פגישה + הנחיות הגעה
       const confirmTemplate = await getContent(templateKey);
       const confirmMessage = fillTemplate(confirmTemplate || '{name}, הפגישה עם בשמת נקבעה בהצלחה במועד: {time}', values);
       const confirmResult = await sendWhatsApp(confirmMessage);
       await logCommunication(confirmMessage, templateKey, confirmResult);
 
-      // 2. שאלון שורנס (הסיכום + הצעת המחיר כבר נשלחו בשלב quote_sent — אין כפילות כאן)
-      // אם התחום לא מזוהה — לא שולחים שאלון אקראי; שולחים בירור תחום ומסמנים pending_service_clarify
+      // === מסלול וובינר: דילוג על שאלון שורנס, שליחת הודעת סיום ===
+      if (isWebinar) {
+        await new Promise(resolve => setTimeout(resolve, 1200));
+        const closingTemplate = await getContent('conversation_closing');
+        const closingMessage = fillTemplate(closingTemplate || 'תודה רבה {name}, שיהיה לך יום נפלא! 🙏', values);
+        const closingResult = await sendWhatsApp(closingMessage);
+        await logCommunication(closingMessage, 'conversation_closing', closingResult);
+
+        await base44.asServiceRole.entities.Contact.update(contact.id, {
+          bot_status: 'closed',
+          last_bot_interaction_at: new Date().toISOString(),
+        });
+        return Response.json({ ok: true, action: 'webinar_meeting_scheduled', template: templateKey });
+      }
+
+      // === מסלול רגיל: שאלון שורנס + הודעת סיום ===
       const questionnaireUrl = await getQuestionnaireUrl();
       if (!questionnaireUrl) {
         const clarifyTemplate = await getContent('service_type_clarify');
@@ -331,7 +364,12 @@ Deno.serve(async (req) => {
         await logCommunication(questionnaireMessage, 'questionnaire_request', questionnaireResult);
       }
 
-      // עצירה כאן! בקשת המסמכים תישלח רק לאחר סימון questionnaire_completed=true
+      // הודעת סיום גם במסלול רגיל
+      await new Promise(resolve => setTimeout(resolve, 1200));
+      const closingTemplate = await getContent('conversation_closing');
+      const closingMessage = fillTemplate(closingTemplate || 'תודה רבה {name}, שיהיה לך יום נפלא! 🙏', values);
+      const closingResult = await sendWhatsApp(closingMessage);
+      await logCommunication(closingMessage, 'conversation_closing', closingResult);
 
       await base44.asServiceRole.entities.Contact.update(contact.id, {
         bot_status: 'waiting_user_reply',

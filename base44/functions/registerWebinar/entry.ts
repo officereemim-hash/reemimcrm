@@ -83,12 +83,22 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Create webinar registration
-    await base44.asServiceRole.entities.WebinarRegistration.create({
+    // Create or update webinar registration (avoid duplicates)
+    const existingRegs = await base44.asServiceRole.entities.WebinarRegistration.filter({
       contact_id: contact.id,
       webinar_type: page.webinar_type,
-      webinar_date: page.webinar_date || new Date().toISOString(),
     });
+    if (existingRegs.length > 0) {
+      await base44.asServiceRole.entities.WebinarRegistration.update(existingRegs[0].id, {
+        webinar_date: page.webinar_date || new Date().toISOString(),
+      });
+    } else {
+      await base44.asServiceRole.entities.WebinarRegistration.create({
+        contact_id: contact.id,
+        webinar_type: page.webinar_type,
+        webinar_date: page.webinar_date || new Date().toISOString(),
+      });
+    }
 
     // Resolve content
     const zoomRecords = await base44.asServiceRole.entities.ServiceContent.filter({
@@ -98,8 +108,17 @@ Deno.serve(async (req) => {
     });
     const zoomLink = zoomRecords[0]?.url || '';
 
-    const confirmRecords = await base44.asServiceRole.entities.BotContent.filter({ key: 'webinar_confirm', is_active: true });
-    const confirmTemplate = confirmRecords[0]?.content || 'שלום {name}, נרשמת בהצלחה לוובינר! קישור: {zoom_link}';
+    // אם יש קישור הקלטה — שולחים אותו במקום קישור הזום
+    const hasRecording = !!page.recording_url;
+
+    const confirmKey = hasRecording ? 'webinar_confirm_recording' : 'webinar_confirm';
+    const confirmRecords = await base44.asServiceRole.entities.BotContent.filter({ key: confirmKey, is_active: true });
+    const fallbackRecords = confirmRecords.length === 0 && hasRecording
+      ? await base44.asServiceRole.entities.BotContent.filter({ key: 'webinar_confirm', is_active: true })
+      : confirmRecords;
+    const confirmTemplate = fallbackRecords[0]?.content || (hasRecording
+      ? 'שלום {name}, נרשמת בהצלחה! צפה בהקלטת הוובינר: {zoom_link}'
+      : 'שלום {name}, נרשמת בהצלחה לוובינר! קישור: {zoom_link}');
 
     const dateStr = page.webinar_date
       ? new Date(page.webinar_date).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', dateStyle: 'full', timeStyle: 'short' })
@@ -111,7 +130,8 @@ Deno.serve(async (req) => {
       zoomLink ? `קישור להצטרפות: ${zoomLink}` : ''
     );
 
-    const message = fillTemplate(confirmTemplate, { name: full_name, date: dateStr, zoom_link: zoomLink, calendar_add_link: calendarAddLink });
+    const effectiveLink = hasRecording ? page.recording_url : zoomLink;
+    const message = fillTemplate(confirmTemplate, { name: full_name, date: dateStr, zoom_link: effectiveLink, calendar_add_link: calendarAddLink });
 
     // Check bot/green-api enabled
     const botSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' });
