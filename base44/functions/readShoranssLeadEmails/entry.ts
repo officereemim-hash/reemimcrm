@@ -22,15 +22,28 @@ function decodeRfc2047(s) {
   });
 }
 
+function decodeQuotedPrintable(str) {
+  return str
+    .replace(/=\r?\n/g, '')
+    .replace(/=([0-9A-Fa-f]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
+}
+
+function bytesToUtf8(s) {
+  try { return decodeURIComponent(escape(s)); } catch { return s; }
+}
+
 function extractText(payload) {
-  let out = '';
+  let raw = '';
   const walk = (p) => {
     if (!p) return;
-    if (p.mimeType === 'text/plain' && p.body?.data) out += b64urlDecode(p.body.data) + '\n';
+    if ((p.mimeType === 'text/plain' || p.mimeType === 'text/html') && p.body?.data) {
+      const b64 = String(p.body.data).replace(/-/g, '+').replace(/_/g, '/');
+      try { raw += atob(b64) + '\n'; } catch (e) {}
+    }
     if (p.parts) p.parts.forEach(walk);
   };
   walk(payload);
-  return out;
+  return bytesToUtf8(decodeQuotedPrintable(raw));
 }
 
 async function ensureLabel(token) {
@@ -57,9 +70,8 @@ Deno.serve(async (req) => {
 
     // שני המקורות: ישירות משורנס, וגם מה שמועבר אוטומטית מהמייל של בשמת
     const q = encodeURIComponent(
-      '("app.surense.com/leads" OR "נוצר ליד חדש") ' +
       '(from:notifications@app.surense.com OR from:bosmat@oryx-alt.com) ' +
-      `-label:${PROCESSED_LABEL} newer_than:30d`
+      `-label:${PROCESSED_LABEL} newer_than:60d`
     );
     const list = await gmail(token, `messages?q=${q}&maxResults=50`);
     const ids = (list.messages || []).map((m) => m.id);
