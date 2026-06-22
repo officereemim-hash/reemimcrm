@@ -24,6 +24,7 @@ const botStatusMap = {
 const srStatusMap = {
   new:                      { label: 'חדש',              bg: '#EDE8F5', text: '#4A2C78' },
   in_progress:              { label: 'בטיפול',           bg: '#E8EEF8', text: '#2952A3' },
+  interested:               { label: 'תיאום פגישה (וובינר)', bg: '#F0E8F8', text: '#7B2DA0' },
   quote_sent:               { label: 'הצעה נשלחה',       bg: '#F8F0DC', text: '#A87B20' },
   awaiting_client_decision: { label: 'ממתין להחלטה',     bg: '#F5EDD8', text: '#9A6210' },
   followup_active:          { label: 'פולו-אפ פעיל',     bg: '#F8E8DC', text: '#B04020' },
