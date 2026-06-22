@@ -24,7 +24,7 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json().catch(() => ({}));
-    const { webinar_type, registration_ids } = body;
+    const { webinar_type, webinar_date, registration_ids } = body;
 
     const botSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' });
     const greenSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'green_api_enabled' });
@@ -46,8 +46,15 @@ Deno.serve(async (req) => {
         if (r[0]) regs.push(r[0]);
       }
     } else if (webinar_type) {
-      const all = await base44.asServiceRole.entities.WebinarRegistration.filter({ webinar_type });
-      regs = all.filter(r => !r.coupon_sent);
+      const filterQuery = { webinar_type };
+      const all = await base44.asServiceRole.entities.WebinarRegistration.filter(filterQuery);
+      // If webinar_date provided, filter to matching date (same day)
+      let filtered = all;
+      if (webinar_date) {
+        const targetDay = webinar_date.substring(0, 10);
+        filtered = all.filter(r => r.webinar_date && r.webinar_date.substring(0, 10) === targetDay);
+      }
+      regs = filtered.filter(r => !r.coupon_sent);
     } else {
       return Response.json({ error: 'missing_target' }, { status: 400 });
     }

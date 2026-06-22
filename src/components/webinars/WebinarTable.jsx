@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Pencil, Trash2, Check, X } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -10,14 +11,34 @@ function BoolIcon({ value }) {
   return value ? <Check size={14} className="text-success" /> : <X size={14} className="text-muted-foreground" />;
 }
 
-export default function WebinarTable({ registrations, contacts, onEdit, onDelete }) {
+export default function WebinarTable({ registrations, contacts, onEdit, onDelete, selectedIds, onSelectionChange }) {
   const getContact = id => contacts.find(c => c.id === id);
+
+  const allSelected = registrations.length > 0 && registrations.every(r => selectedIds.has(r.id));
+  const someSelected = registrations.some(r => selectedIds.has(r.id)) && !allSelected;
+
+  const toggleAll = () => {
+    if (allSelected) {
+      onSelectionChange(new Set());
+    } else {
+      onSelectionChange(new Set(registrations.map(r => r.id)));
+    }
+  };
+
+  const toggleOne = (id) => {
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    onSelectionChange(next);
+  };
 
   return (
     <div className="border rounded-lg overflow-hidden">
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-10 text-center">
+              <Checkbox checked={allSelected} indeterminate={someSelected} onCheckedChange={toggleAll} />
+            </TableHead>
             <TableHead>שם</TableHead>
             <TableHead>טלפון</TableHead>
             <TableHead>סוג</TableHead>
@@ -31,11 +52,14 @@ export default function WebinarTable({ registrations, contacts, onEdit, onDelete
         </TableHeader>
         <TableBody>
           {registrations.length === 0 ? (
-            <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">אין רשומות</TableCell></TableRow>
+            <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">אין רשומות</TableCell></TableRow>
           ) : registrations.map(reg => {
             const contact = getContact(reg.contact_id);
             return (
-              <TableRow key={reg.id} className="hover:bg-muted/30">
+              <TableRow key={reg.id} className={`hover:bg-muted/30 ${selectedIds.has(reg.id) ? 'bg-primary/5' : ''}`}>
+                <TableCell className="text-center">
+                  <Checkbox checked={selectedIds.has(reg.id)} onCheckedChange={() => toggleOne(reg.id)} />
+                </TableCell>
                 <TableCell>
                   <Link to={`/contacts/${reg.contact_id}`} className="text-sm font-medium hover:text-primary hover:underline">
                     {contact?.full_name || '—'}
