@@ -99,6 +99,14 @@
       ],
       "default": "not_sent"
     },
+    "shoranss_lead_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05d4\u05dc\u05d9\u05d3 \u05d1\u05e9\u05d5\u05e8\u05e0\u05e1"
+    },
+    "shoranss_lead_url": {
+      "type": "string",
+      "description": "\u05e7\u05d9\u05e9\u05d5\u05e8 \u05dc\u05dc\u05d9\u05d3 \u05d1\u05e9\u05d5\u05e8\u05e0\u05e1"
+    },
     "opt_in_future": {
       "type": "boolean",
       "default": false
