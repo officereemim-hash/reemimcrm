@@ -72,6 +72,7 @@ export default function ContactFormDialog({ contact, onClose, onSave }) {
                   <SelectItem value="referral">הפניה</SelectItem>
                   <SelectItem value="manual">ידני</SelectItem>
                   <SelectItem value="excel_import">ייבוא אקסל</SelectItem>
+                  <SelectItem value="shoranss">שורנס</SelectItem>
                 </SelectContent>
               </Select>
             </div>
