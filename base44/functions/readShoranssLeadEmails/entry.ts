@@ -45,6 +45,10 @@ Deno.serve(async (req) => {
     const list = await gmail(token, `messages?q=${q}&maxResults=25`);
     const ids = (list.messages || []).map((m) => m.id);
 
+    // Load ignored lead IDs (from test cleanup) so we don't re-create deleted test contacts
+    const ignoredSetting = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'ignored_shoranss_lead_ids' });
+    const ignoredIds = new Set((ignoredSetting[0]?.value || '').split(',').filter(Boolean));
+
     const seen = new Set();
     let matched = 0, skippedDup = 0, flagged = 0;
     const created = [];
@@ -63,7 +67,7 @@ Deno.serve(async (req) => {
       if (!name) continue;
 
       if (leadId) {
-        if (seen.has(leadId)) { skippedDup++; continue; }
+        if (seen.has(leadId) || ignoredIds.has(leadId)) { skippedDup++; continue; }
         seen.add(leadId);
         const existing = await base44.asServiceRole.entities.Contact.filter({ shoranss_lead_id: leadId });
         if (existing.length > 0) { skippedDup++; continue; }

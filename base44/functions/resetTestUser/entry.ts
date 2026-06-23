@@ -92,10 +92,23 @@ Deno.serve(async (req) => {
       await del('SystemSetting', relSettings);
     } catch (_) { /* skip */ }
 
-    // 5) Finally delete the contacts themselves
+    // 5) Remember shoranss_lead_ids so readShoranssLeadEmails won't re-create them
+    const leadIds = matchContacts.map(c => c.shoranss_lead_id).filter(Boolean);
+    if (leadIds.length > 0) {
+      const existing = await svc.entities.SystemSetting.filter({ key: 'ignored_shoranss_lead_ids' });
+      const current = existing[0]?.value ? existing[0].value.split(',').filter(Boolean) : [];
+      const merged = [...new Set([...current, ...leadIds])].join(',');
+      if (existing[0]) {
+        await svc.entities.SystemSetting.update(existing[0].id, { value: merged });
+      } else {
+        await svc.entities.SystemSetting.create({ category: 'flow', key: 'ignored_shoranss_lead_ids', label: 'Ignored Shoranss Lead IDs (test cleanup)', value: merged, value_type: 'text' });
+      }
+    }
+
+    // 6) Finally delete the contacts themselves
     await del('Contact', matchContacts);
 
-    return Response.json({ ok: true, deleted });
+    return Response.json({ ok: true, deleted, ignoredLeadIds: leadIds });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
   }
