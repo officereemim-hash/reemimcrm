@@ -16,9 +16,12 @@ export default function SendSignatureDialog({ open, onClose, contact, contactId,
     try {
       // Generate token and sign URL
       const token = Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b => b.toString(16).padStart(2, '0')).join('');
+      console.log('SendSig: updating doc', documentId, 'with token', token);
       await base44.entities.Document.update(documentId, { signature_token: token, signature_status: 'pending' });
+      console.log('SendSig: doc updated OK');
       const appUrl = import.meta.env.VITE_BASE44_APP_BASE_URL || window.location.origin;
       const signUrl = `${appUrl}/sign?token=${token}`;
+      console.log('SendSig: signUrl =', signUrl, '| channel =', channel);
       const sentChannels = [];
 
       // Send WhatsApp
@@ -66,6 +69,7 @@ export default function SendSignatureDialog({ open, onClose, contact, contactId,
       onClose();
     } catch (err) {
       console.error('Signature send outer error:', err);
+      alert('שגיאה בשליחה: ' + (err?.message || JSON.stringify(err)));
       toast.error('שגיאה בשליחת המסמך: ' + err.message);
     } finally {
       setSending(false);
