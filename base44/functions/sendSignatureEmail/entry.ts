@@ -14,9 +14,9 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'BREVO_API_KEY not configured' }, { status: 500 });
     }
 
-    const senderSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'brevo_sender_email' });
-    const senderNameSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'brevo_sender_name' });
-    const senderEmail = senderSettings[0]?.value || 'noreply@kranot-reemim.co.il';
+    const senderSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'mailing_sender_email' });
+    const senderNameSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'mailing_sender_name' });
+    const senderEmail = senderSettings[0]?.value || 'office.reemim@gmail.com';
     const senderName = senderNameSettings[0]?.value || 'קרנות ראמים';
 
     const htmlBody = `

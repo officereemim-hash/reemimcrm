@@ -128,9 +128,9 @@ Deno.serve(async (req) => {
     try {
       const BREVO_API_KEY = Deno.env.get('BREVO_API_KEY');
       if (BREVO_API_KEY) {
-        const senderSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'brevo_sender_email' });
-        const senderNameSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'brevo_sender_name' });
-        const senderEmail = senderSettings[0]?.value || 'noreply@kranot-reemim.co.il';
+        const senderSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'mailing_sender_email' });
+        const senderNameSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'mailing_sender_name' });
+        const senderEmail = senderSettings[0]?.value || 'office.reemim@gmail.com';
         const senderName = senderNameSettings[0]?.value || 'קרנות ראמים';
 
         await fetch('https://api.brevo.com/v3/smtp/email', {
