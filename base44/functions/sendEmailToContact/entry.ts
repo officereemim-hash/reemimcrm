@@ -1,46 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
-
-async function sendEmailViaGmail(
-  base44: any,
-  toEmail: string,
-  subject: string,
-  htmlBody: string,
-): Promise<string> {
-  const { accessToken } = await base44.asServiceRole.connectors.getConnection('gmail');
-
-  // RFC 2047 encoding for Hebrew subjects
-  const subjectEncoded = `=?UTF-8?B?${btoa(unescape(encodeURIComponent(subject)))}?=`;
-
-  const emailRaw = [
-    `From: "קרנות ראמים" <me>`,
-    `To: ${toEmail}`,
-    `Subject: ${subjectEncoded}`,
-    `MIME-Version: 1.0`,
-    `Content-Type: text/html; charset=utf-8`,
-    ``,
-    htmlBody,
-  ].join('\r\n');
-
-  const raw = btoa(unescape(encodeURIComponent(emailRaw)))
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
-
-  const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ raw }),
-  });
-
-  const result = await res.json();
-  if (!res.ok) {
-    throw new Error(`Gmail send failed: ${JSON.stringify(result)}`);
-  }
-  return result.id || '';
-}
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 
 Deno.serve(async (req) => {
   try {
@@ -54,13 +12,42 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Missing contact_id, subject or html_body' }, { status: 400 });
     }
 
-    // Contact.filter() — Base44 SDK does not support .get() by id
+    const BREVO_API_KEY = Deno.env.get('BREVO_API_KEY');
+    if (!BREVO_API_KEY) {
+      return Response.json({ error: 'BREVO_API_KEY not configured' }, { status: 500 });
+    }
+
     const contacts = await base44.asServiceRole.entities.Contact.filter({ id: contact_id });
     const contact = contacts[0];
     if (!contact) return Response.json({ error: 'Contact not found' }, { status: 404 });
     if (!contact.email) return Response.json({ error: 'Contact has no email' }, { status: 400 });
 
-    const messageId = await sendEmailViaGmail(base44, contact.email, subject, html_body);
+    const [senderEmailSettings, senderNameSettings] = await Promise.all([
+      base44.asServiceRole.entities.SystemSetting.filter({ key: 'mailing_sender_email' }),
+      base44.asServiceRole.entities.SystemSetting.filter({ key: 'mailing_sender_name' }),
+    ]);
+    const senderEmail = senderEmailSettings[0]?.value || 'office.reemim@gmail.com';
+    const senderName = senderNameSettings[0]?.value || 'קרנות ראמים';
+
+    const brevoRes = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: { 'api-key': BREVO_API_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sender: { name: senderName, email: senderEmail },
+        to: [{ email: contact.email, name: contact.full_name || '' }],
+        subject,
+        htmlContent: html_body,
+      }),
+    });
+
+    if (!brevoRes.ok) {
+      const errBody = await brevoRes.text();
+      console.error('Brevo rejected:', errBody);
+      throw new Error(`Brevo error: ${errBody}`);
+    }
+
+    const brevoData = await brevoRes.json().catch(() => ({}));
+    const messageId = brevoData.messageId || '';
 
     await base44.asServiceRole.entities.Communication.create({
       contact_id,
