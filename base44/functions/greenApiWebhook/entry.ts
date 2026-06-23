@@ -578,17 +578,73 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ===== FP-DocsSent: "שלחתי" אחרי מילוי שאלון — אישור קבלת מסמכים =====
+    // ===== FP-IDDetails: קליטת ת.ז. + תאריך לידה אחרי מילוי שאלון =====
+    if (serviceRequest && serviceRequest.current_step === 'waiting_id_details' && contact) {
+      // חילוץ ת.ז. (9 ספרות) ותאריך לידה (DD/MM/YYYY או DD.MM.YYYY או DD-MM-YYYY)
+      const idMatch = text.match(/\b(\d{9})\b/);
+      const dateMatch = text.match(/(\d{1,2})[\/\.\-](\d{1,2})[\/\.\-](\d{4})/);
+
+      if (idMatch && dateMatch) {
+        const idNumber = idMatch[1];
+        const day = dateMatch[1].padStart(2, '0');
+        const month = dateMatch[2].padStart(2, '0');
+        const year = dateMatch[3];
+        const birthDate = `${year}-${month}-${day}`;
+
+        // שמירה ב-Contact
+        await base44.asServiceRole.entities.Contact.update(contact.id, {
+          id_number: idNumber,
+          birth_date: birthDate,
+          bot_status: 'waiting_user_reply',
+          last_bot_interaction_at: new Date().toISOString(),
+        });
+
+        // אישור קבלה + שליחת בקשת מסמכים
+        const ackMessage = await getBotContent(base44, 'id_details_received_ack') || 'תודה רבה! קיבלנו את הפרטים ✅';
+        const sent = await sendWhatsApp(chatId, ackMessage, botEnabled);
+        await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
+        await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_id_ack`, phone, ackMessage, chatId, conversationId, outgoingStatus);
+
+        // שליחת בקשת מסמכים
+        const docsTemplate = await getBotContent(base44, 'documents_request') || '';
+        if (docsTemplate) {
+          await new Promise(resolve => setTimeout(resolve, 1200));
+          const docsMessage = docsTemplate.replaceAll('{name}', contact.full_name || '');
+          const docsSent = await sendWhatsApp(chatId, docsMessage, botEnabled);
+          await logOutgoing(base44, docsSent?.idMessage || `out_${Date.now()}_fp_id_docs`, phone, docsMessage, chatId, conversationId, outgoingStatus);
+        }
+
+        await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, {
+          current_step: 'waiting_documents',
+        });
+
+        try {
+          await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${ackMessage}` });
+        } catch (error) {}
+        return Response.json({ ok: true, fast_path: 'fp_id_details_received', id_number: idNumber, birth_date: birthDate });
+      }
+
+      // לא הצליח לחלץ — מבקש שוב
+      const retryMessage = await getBotContent(base44, 'id_details_retry') || 'לא הצלחתי לזהות את הפרטים. נא לשלוח בהודעה אחת את מספר תעודת הזהות (9 ספרות) ותאריך לידה (DD/MM/YYYY)';
+      const sent = await sendWhatsApp(chatId, retryMessage, botEnabled);
+      await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
+      await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_id_retry`, phone, retryMessage, chatId, conversationId, outgoingStatus);
+      try {
+        await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${retryMessage}` });
+      } catch (error) {}
+      return Response.json({ ok: true, fast_path: 'fp_id_details_retry' });
+    }
+
+    // ===== FP-DocsSent: "שלחתי" אחרי מילוי שאלון — אישור שקיבלנו, ממתינים לבדיקה =====
     if (serviceRequest && serviceRequest.questionnaire_completed && !serviceRequest.documents_received && normalizeAnswer(text).startsWith('שלחתי')) {
-      const docsAckMessage = await getBotContent(base44, 'documents_received_ack') || 'תודה! המסמכים התקבלו ויועברו לבדיקה 🙏';
+      const docsAckMessage = await getBotContent(base44, 'documents_sent_ack') || 'תודה ששלחת, אנחנו נעדכן אותך ברגע שיתקבלו המסמכים 🙏';
       const sent = await sendWhatsApp(chatId, docsAckMessage, botEnabled);
-      await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { documents_received: true, documents_status: 'complete' });
       await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
       await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_docs`, phone, docsAckMessage, chatId, conversationId, outgoingStatus);
       try {
         await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${docsAckMessage}` });
       } catch (error) {}
-      return Response.json({ ok: true, fast_path: 'fp_documents_received' });
+      return Response.json({ ok: true, fast_path: 'fp_documents_sent_ack' });
     }
 
     // ===== FP-Polite: תגובת נימוס קצרה במצב המתנה — מענה קצר בלי סוכן =====

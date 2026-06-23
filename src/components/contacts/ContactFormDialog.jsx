@@ -113,6 +113,10 @@ export default function ContactFormDialog({ contact, onClose, onSave }) {
               </Select>
             </div>
             <div className="space-y-1">
+              <Label>ת.ז.</Label>
+              <Input value={form.id_number || ''} onChange={e => set('id_number', e.target.value)} placeholder="תעודת זהות" dir="ltr" />
+            </div>
+            <div className="space-y-1">
               <Label>תאריך לידה</Label>
               <Input type="date" value={form.birth_date || ''} onChange={e => set('birth_date', e.target.value)} />
             </div>

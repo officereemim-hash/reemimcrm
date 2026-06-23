@@ -44,8 +44,9 @@ Deno.serve(async (req) => {
     const statusChanged = newStatus && newStatus !== oldStatus;
     const pendingChanged = newPending && newPending !== oldPending;
     const questionnaireFilled = serviceRequest.questionnaire_completed === true && previousServiceRequest.questionnaire_completed !== true;
+    const documentsJustReceived = serviceRequest.documents_received === true && previousServiceRequest.documents_received !== true;
 
-    if (!statusChanged && !pendingChanged && !questionnaireFilled) {
+    if (!statusChanged && !pendingChanged && !questionnaireFilled && !documentsJustReceived) {
       return Response.json({ ok: true, skipped: 'no_change' });
     }
 
@@ -456,6 +457,17 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, action: 'route_c_not_interested', whatsapp_sent: sent });
     }
 
+    // === documents_received סומן ידנית ע"י הצוות → שליחת אישור ללקוח ===
+    if (documentsJustReceived) {
+      const confirmedTemplate = await getContent('documents_confirmed');
+      if (confirmedTemplate) {
+        const confirmedMessage = fillTemplate(confirmedTemplate, { name: contact.full_name || '' });
+        const confirmedResult = await sendWhatsApp(confirmedMessage);
+        await logCommunication(confirmedMessage, 'documents_confirmed', confirmedResult);
+      }
+      return Response.json({ ok: true, action: 'documents_confirmed' });
+    }
+
     if (questionnaireFilled) {
       const values = { name: contact.full_name || '' };
 
@@ -467,14 +479,18 @@ Deno.serve(async (req) => {
         await logCommunication(thanksMessage, 'questionnaire_completed_thanks', thanksResult);
       }
 
-      // 2. בקשת מסמכים + לאן לשלוח
-      const docsTemplate = await getContent('documents_request');
-      if (docsTemplate) {
+      // 2. בקשת ת.ז. + תאריך לידה (לפני בקשת מסמכים)
+      const idRequestTemplate = await getContent('questionnaire_id_request');
+      if (idRequestTemplate) {
         await new Promise(resolve => setTimeout(resolve, 1200));
-        const docsMessage = fillTemplate(docsTemplate, values);
-        const docsResult = await sendWhatsApp(docsMessage);
-        await logCommunication(docsMessage, 'documents_request', docsResult);
+        const idRequestMessage = fillTemplate(idRequestTemplate, values);
+        const idRequestResult = await sendWhatsApp(idRequestMessage);
+        await logCommunication(idRequestMessage, 'questionnaire_id_request', idRequestResult);
       }
+
+      await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, {
+        current_step: 'waiting_id_details',
+      });
 
       await base44.asServiceRole.entities.Contact.update(contact.id, {
         bot_status: 'waiting_user_reply',
@@ -482,7 +498,7 @@ Deno.serve(async (req) => {
         last_bot_interaction_at: new Date().toISOString(),
       });
 
-      return Response.json({ ok: true, action: 'questionnaire_completed_docs' });
+      return Response.json({ ok: true, action: 'questionnaire_completed_waiting_id' });
     }
 
     return Response.json({ ok: true, skipped: 'no_matching_action' });

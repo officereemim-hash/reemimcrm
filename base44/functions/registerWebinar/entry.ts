@@ -165,6 +165,12 @@ Deno.serve(async (req) => {
 
     // Send email confirmation via Brevo (if email provided)
     if (cleanEmail && BREVO_API_KEY) {
+      // Use same verified sender as campaign emails
+      const senderSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'mailing_sender_email' });
+      const senderNameSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'mailing_sender_name' });
+      const senderEmail = senderSettings[0]?.value || 'office.reemim@gmail.com';
+      const senderName = senderNameSettings[0]?.value || 'קרנות ראמים';
+
       const htmlBody = `<div dir="rtl" style="font-family:Arial;font-size:16px;color:#333">
         <h2 style="color:#4B2E83">נרשמת בהצלחה לוובינר! 🎓</h2>
         <p>שלום ${full_name},</p>
@@ -172,16 +178,20 @@ Deno.serve(async (req) => {
         ${calendarAddLink ? `<p><a href="${calendarAddLink}" style="display:inline-block;background:#4B2E83;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none">📅 הוסף ליומן Google</a></p>` : ''}
         <p>נתראה! צוות קרנות ראמים</p>
       </div>`;
-      await fetch('https://api.brevo.com/v3/smtp/email', {
+      const emailRes = await fetch('https://api.brevo.com/v3/smtp/email', {
         method: 'POST',
         headers: { 'api-key': BREVO_API_KEY, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          sender: { name: 'קרנות ראמים', email: 'no-reply@kranot-reemim.co.il' },
+          sender: { name: senderName, email: senderEmail },
           to: [{ email: cleanEmail, name: full_name }],
           subject: 'אישור הרשמה לוובינר — קרנות ראמים',
           htmlContent: htmlBody,
         }),
-      }).catch(() => {});
+      }).catch(err => { console.error('Brevo email error:', err.message); });
+      if (emailRes && !emailRes.ok) {
+        const errText = await emailRes.text().catch(() => '');
+        console.error('Brevo webinar email rejected:', errText);
+      }
     }
 
     return Response.json({ ok: true, contact_id: contact.id, success_message: page.success_message || '' });
