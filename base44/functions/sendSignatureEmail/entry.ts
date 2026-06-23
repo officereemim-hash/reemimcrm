@@ -14,10 +14,13 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'BREVO_API_KEY not configured' }, { status: 500 });
     }
 
+    // Use same sender settings as the mailing center (processCampaignQueue)
     const senderSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'mailing_sender_email' });
     const senderNameSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'mailing_sender_name' });
     const senderEmail = senderSettings[0]?.value || 'office.reemim@gmail.com';
     const senderName = senderNameSettings[0]?.value || 'קרנות ראמים';
+
+    console.log('Signature email sender:', senderEmail, '| name:', senderName, '| to:', contact_email);
 
     const htmlBody = `
       <div dir="rtl" style="font-family: 'Heebo', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #faf8f5; border-radius: 12px; overflow: hidden;">
@@ -64,8 +67,12 @@ Deno.serve(async (req) => {
 
     if (!brevoRes.ok) {
       const errBody = await brevoRes.text();
+      console.error('Brevo rejected:', errBody);
       throw new Error(`Brevo error: ${errBody}`);
     }
+
+    const brevoData = await brevoRes.json().catch(() => ({}));
+    console.log('Brevo response:', JSON.stringify(brevoData));
 
     // Log communication
     if (contact_id) {
