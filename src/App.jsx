@@ -21,7 +21,7 @@ import MarketingHub from '@/pages/MarketingHub';
 import BotContentPage from '@/pages/BotContentPage';
 import ServiceContentPage from '@/pages/ServiceContentPage';
 
-import BotChat from '@/pages/BotChat';
+
 import ServiceRequestDetail from '@/pages/ServiceRequestDetail';
 import ScheduleMeeting from '@/pages/ScheduleMeeting';
 import SignDocument from '@/pages/SignDocument';
@@ -66,7 +66,7 @@ const AuthenticatedApp = () => {
         <Route path="/marketing" element={<MarketingHub />} />
         <Route path="/bot-content" element={<BotContentPage />} />
         <Route path="/service-content" element={<ServiceContentPage />} />
-        <Route path="/bot-chat" element={<BotChat />} />
+
         <Route path="*" element={<PageNotFound />} />
       </Route>
     </Routes>

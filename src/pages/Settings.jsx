@@ -6,6 +6,7 @@ import SystemSettingsTab from '@/components/settings/SystemSettingsTab';
 import CommunicationsTab from '@/components/settings/CommunicationsTab';
 import CouponsSettingsTab from '@/components/settings/CouponsSettingsTab';
 import ResetTestUserCard from '@/components/settings/ResetTestUserCard';
+import BotChat from '@/pages/BotChat';
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState('general');
@@ -73,6 +74,15 @@ export default function Settings() {
           <FlaskConical size={14} className="inline ml-1" />
           כלי בדיקה
         </button>
+        <button
+          onClick={() => setActiveTab('bot-chat')}
+          className={`px-4 py-2 rounded-t-lg text-sm font-medium transition-colors ${
+            activeTab === 'bot-chat' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
+          }`}
+        >
+          <Bot size={14} className="inline ml-1" />
+          בדיקת בוט
+        </button>
       </div>
 
       {activeTab === 'marketing' && <MarketingSettingsTab />}
@@ -88,6 +98,8 @@ export default function Settings() {
           <ResetTestUserCard />
         </div>
       )}
+
+      {activeTab === 'bot-chat' && <BotChat />}
 
       {activeTab === 'general' && <div className="grid md:grid-cols-2 gap-6">
         <Card>

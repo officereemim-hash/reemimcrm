@@ -17,7 +17,7 @@ const navItems = [
   { path: '/landing-pages', label: 'דפי נחיתה', icon: Globe },
   { path: '/bot-content', label: 'תוכן הבוט', icon: Bot },
   { path: '/service-content', label: 'ניהול תוכן', icon: FileText },
-  { path: '/bot-chat', label: 'בדיקת בוט', icon: MessageSquare },
+
   { path: '/settings', label: 'הגדרות', icon: Settings },
 ];
 
