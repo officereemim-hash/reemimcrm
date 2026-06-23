@@ -54,8 +54,8 @@ export default function SendSignatureDialog({ open, onClose, contact, contactId,
           });
           sentChannels.push('מייל');
         } catch (err) {
-          console.warn('Email send failed:', err.message);
-          toast.error('שליחת מייל נכשלה');
+          console.error('Email send failed:', err.message, err);
+          toast.error('שליחת מייל נכשלה: ' + (err?.response?.data?.error || err.message));
         }
       }
 
@@ -65,6 +65,7 @@ export default function SendSignatureDialog({ open, onClose, contact, contactId,
       onRefresh();
       onClose();
     } catch (err) {
+      console.error('Signature send outer error:', err);
       toast.error('שגיאה בשליחת המסמך: ' + err.message);
     } finally {
       setSending(false);
