@@ -5,19 +5,40 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json();
     const base44 = createClientFromRequest(req);
-    const { token, signer_name, signature_image_url } = body;
+    const { token, signer_name, signature_data } = body;
 
-    if (!token || !signer_name || !signature_image_url) {
+    if (!token || !signer_name || !signature_data) {
       return Response.json({ error: 'missing_fields' }, { status: 400 });
     }
 
-    const docs = await base44.asServiceRole.entities.Document.filter({ signature_token: token });
+    // Find document by token
+    let docs = await base44.asServiceRole.entities.Document.filter({ signature_token: token });
+    if (!docs?.length) {
+      const pending = await base44.asServiceRole.entities.Document.filter({ signature_status: 'pending' });
+      docs = pending.filter(d => d.signature_token === token);
+    }
     if (!docs?.length) return Response.json({ error: 'not_found' }, { status: 404 });
     const doc = docs[0];
     if (doc.signature_status === 'signed') return Response.json({ error: 'already_signed' }, { status: 410 });
 
     const signedAt = new Date().toISOString();
     const signedAtDisplay = new Date().toLocaleString('he-IL');
+
+    // Convert base64 data URL to Uint8Array and upload
+    const base64Content = signature_data.split(',')[1];
+    const binaryStr = atob(base64Content);
+    const sigBytes = new Uint8Array(binaryStr.length);
+    for (let i = 0; i < binaryStr.length; i++) {
+      sigBytes[i] = binaryStr.charCodeAt(i);
+    }
+    const sigBlob = new Blob([sigBytes], { type: 'image/png' });
+    const sigFile = new File([sigBlob], 'signature.png', { type: 'image/png' });
+    const uploadSigResult = await base44.asServiceRole.integrations.Core.UploadFile({ file: sigFile });
+    const signatureImageUrl = uploadSigResult?.file_url;
+
+    if (!signatureImageUrl) {
+      return Response.json({ error: 'signature_upload_failed' }, { status: 500 });
+    }
 
     let signedPdfUrl = doc.file_url;
 
@@ -32,7 +53,7 @@ Deno.serve(async (req) => {
         const lastOrigPage = pages[pages.length - 1];
         const { width: origW, height: origH } = lastOrigPage.getSize();
 
-        // Decide where to place signature: add new page if >=2 pages, else use last page
+        // Add new page if >=2 pages, else use last page
         let lastPage;
         if (pages.length >= 2) {
           lastPage = pdfDoc.addPage([origW, origH]);
@@ -42,8 +63,8 @@ Deno.serve(async (req) => {
         const { width } = lastPage.getSize();
         const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
-        // Fetch signature image from uploaded URL
-        const imgRes = await fetch(signature_image_url);
+        // Fetch uploaded signature image
+        const imgRes = await fetch(signatureImageUrl);
         const sigImageBytes = new Uint8Array(await imgRes.arrayBuffer());
         const sigImage = await pdfDoc.embedPng(sigImageBytes);
 
@@ -87,7 +108,7 @@ Deno.serve(async (req) => {
       signature_status: 'signed',
       signed_at: signedAt,
       signer_name,
-      signature_data: signature_image_url,
+      signature_data: signatureImageUrl,
       file_url: signedPdfUrl,
     });
 

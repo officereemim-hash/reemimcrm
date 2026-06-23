@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Plus, FileText, Trash2, ExternalLink, Send, Edit } from 'lucide-react';
+import SendSignatureDialog from '@/components/contacts/SendSignatureDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -26,7 +27,7 @@ export default function DocumentsList({ contactId, documents, onRefresh, contact
   const [form, setForm] = useState({ name: '', category: 'identity' });
   const [file, setFile] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [sendingSig, setSendingSig] = useState(null);
+  const [sigDialog, setSigDialog] = useState(null);
 
   const openCreate = () => {
     setEditingDoc(null);
@@ -81,60 +82,12 @@ export default function DocumentsList({ contactId, documents, onRefresh, contact
     setSelectedIds(ids => ids.includes(id) ? ids.filter(item => item !== id) : [...ids, id]);
   };
 
-  const sendDocumentForSignature = async (documentId, documentName) => {
+  const openSigDialog = (documentId, documentName) => {
     if (!contact?.phone && !contact?.email) {
       toast.error('אין טלפון או מייל ללקוח');
       return;
     }
-    setSendingSig(documentId);
-    try {
-      const token = Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b => b.toString(16).padStart(2, '0')).join('');
-      await base44.entities.Document.update(documentId, { signature_token: token, signature_status: 'pending' });
-      const appUrl = import.meta.env.VITE_BASE44_APP_BASE_URL || window.location.origin;
-      const signUrl = `${appUrl}/sign?token=${token}`;
-      const message = `שלום ${contact.full_name} 🌿\nלחתימה על המסמך "${documentName}":\n${signUrl}`;
-      const sentChannels = [];
-
-      if (contact.phone) {
-        try {
-          await base44.functions.invoke('sendWhatsAppMessage', { phone: contact.phone, message });
-          await base44.entities.Communication.create({
-            contact_id: contactId,
-            type: 'whatsapp',
-            direction: 'outbound',
-            content: message,
-            sent_by: 'system',
-            is_automated: false,
-            status: 'sent',
-          });
-          sentChannels.push('WhatsApp');
-        } catch (error) {
-          console.warn('WhatsApp signature send failed:', error.message);
-        }
-      }
-
-      if (contact.email) {
-        try {
-          await base44.functions.invoke('sendSignatureEmail', {
-            contact_id: contactId,
-            contact_name: contact.full_name || '',
-            contact_email: contact.email,
-            document_name: documentName,
-            sign_url: signUrl,
-          });
-          sentChannels.push('מייל');
-        } catch (emailErr) {
-          console.warn('Email signature send failed:', emailErr.message);
-        }
-      }
-
-      toast.success(sentChannels.length ? `לינק לחתימה נשלח ב-${sentChannels.join(' ו-')}` : 'לא נשלח לינק לחתימה');
-      onRefresh();
-    } catch (error) {
-      toast.error('שגיאה בשליחת המסמך: ' + error.message);
-    } finally {
-      setSendingSig(null);
-    }
+    setSigDialog({ documentId, documentName });
   };
 
   const grouped = documents.reduce((acc, doc) => {
@@ -168,8 +121,8 @@ export default function DocumentsList({ contactId, documents, onRefresh, contact
                   <span className="text-sm flex-1">{doc.name}</span>
                   <span className="text-xs text-muted-foreground">{doc.created_date ? format(new Date(doc.created_date), 'dd/MM/yy') : ''}</span>
                   {doc.signature_status === 'pending' && (
-                    <Button size="sm" variant="ghost" onClick={() => sendDocumentForSignature(doc.id, doc.name)} disabled={sendingSig === doc.id} className="gap-1 h-6">
-                      <Send size={13} />{sendingSig === doc.id ? 'שולח...' : 'לחתימה'}
+                    <Button size="sm" variant="ghost" onClick={() => openSigDialog(doc.id, doc.name)} className="gap-1 h-6">
+                      <Send size={13} />לחתימה
                     </Button>
                   )}
                   {doc.signature_status === 'signed' && <span className="text-xs text-success">✍️ נחתם</span>}
@@ -181,6 +134,18 @@ export default function DocumentsList({ contactId, documents, onRefresh, contact
             </div>
           </div>
         ))
+      )}
+
+      {sigDialog && (
+        <SendSignatureDialog
+          open
+          onClose={() => setSigDialog(null)}
+          contact={contact}
+          contactId={contactId}
+          documentId={sigDialog.documentId}
+          documentName={sigDialog.documentName}
+          onRefresh={onRefresh}
+        />
       )}
 
       {showForm && (

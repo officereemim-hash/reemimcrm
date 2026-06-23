@@ -3,9 +3,6 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
-    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
-
     const { contact_id, contact_name, contact_email, document_name, sign_url } = await req.json();
 
     if (!contact_email || !sign_url || !document_name) {
@@ -77,7 +74,7 @@ Deno.serve(async (req) => {
         type: 'email',
         direction: 'outbound',
         content: `נשלח מייל לחתימה על מסמך "${document_name}"`,
-        sent_by: user.email || 'system',
+        sent_by: 'system',
         is_automated: false,
         status: 'sent',
         template_id: 'document_signature',
