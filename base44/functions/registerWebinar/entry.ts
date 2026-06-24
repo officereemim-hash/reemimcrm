@@ -2,7 +2,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 
 const INSTANCE_ID = Deno.env.get('GREEN_API_INSTANCE_ID');
 const API_TOKEN = Deno.env.get('GREEN_API_TOKEN');
-const BREVO_API_KEY = Deno.env.get('BREVO_API_KEY');
+// BREVO_API_KEY is read inside the handler (not module-level) to avoid boot errors
 
 function normalizePhone(raw) {
   let clean = String(raw || '').replace(/[^\d]/g, '');
@@ -164,33 +164,54 @@ Deno.serve(async (req) => {
     });
 
     // Send email confirmation via Brevo (if email provided)
+    const BREVO_API_KEY = Deno.env.get('BREVO_API_KEY') || '';
     if (cleanEmail && BREVO_API_KEY) {
-      // Use same verified sender as campaign emails
       const senderSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'mailing_sender_email' });
       const senderNameSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'mailing_sender_name' });
-      const senderEmail = senderSettings[0]?.value || 'office.reemim@gmail.com';
+      const senderEmail = senderSettings[0]?.value || '';
       const senderName = senderNameSettings[0]?.value || 'קרנות ראמים';
 
-      const htmlBody = `<div dir="rtl" style="font-family:Arial;font-size:16px;color:#333">
-        <h2 style="color:#4B2E83">נרשמת בהצלחה לוובינר! 🎓</h2>
-        <p>שלום ${full_name},</p>
-        <p>${dateStr ? `📅 מועד: ${dateStr}<br/>` : ''}${zoomLink ? `🔗 קישור להצטרפות: <a href="${zoomLink}">${zoomLink}</a>` : ''}</p>
-        ${calendarAddLink ? `<p><a href="${calendarAddLink}" style="display:inline-block;background:#4B2E83;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none">📅 הוסף ליומן Google</a></p>` : ''}
-        <p>נתראה! צוות קרנות ראמים</p>
-      </div>`;
-      const emailRes = await fetch('https://api.brevo.com/v3/smtp/email', {
-        method: 'POST',
-        headers: { 'api-key': BREVO_API_KEY, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sender: { name: senderName, email: senderEmail },
-          to: [{ email: cleanEmail, name: full_name }],
-          subject: 'אישור הרשמה לוובינר — קרנות ראמים',
-          htmlContent: htmlBody,
-        }),
-      }).catch(err => { console.error('Brevo email error:', err.message); });
-      if (emailRes && !emailRes.ok) {
-        const errText = await emailRes.text().catch(() => '');
-        console.error('Brevo webinar email rejected:', errText);
+      if (!senderEmail) {
+        console.error('Missing mailing_sender_email in SystemSetting — skipping email');
+      } else {
+        const htmlBody = `<div dir="rtl" style="font-family:Arial;font-size:16px;color:#333">
+          <h2 style="color:#4B2E83">נרשמת בהצלחה לוובינר! 🎓</h2>
+          <p>שלום ${full_name},</p>
+          <p>${dateStr ? `📅 מועד: ${dateStr}<br/>` : ''}${effectiveLink ? `🔗 קישור להצטרפות: <a href="${effectiveLink}">${effectiveLink}</a>` : ''}</p>
+          ${calendarAddLink ? `<p><a href="${calendarAddLink}" style="display:inline-block;background:#4B2E83;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none">📅 הוסף ליומן Google</a></p>` : ''}
+          <p>נתראה! צוות קרנות ראמים</p>
+        </div>`;
+        let emailOk = false;
+        try {
+          const emailRes = await fetch('https://api.brevo.com/v3/smtp/email', {
+            method: 'POST',
+            headers: { 'api-key': BREVO_API_KEY, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              sender: { name: senderName, email: senderEmail },
+              to: [{ email: cleanEmail, name: full_name }],
+              subject: 'אישור הרשמה לוובינר — קרנות ראמים',
+              htmlContent: htmlBody,
+            }),
+          });
+          if (!emailRes.ok) {
+            const errText = await emailRes.text().catch(() => '');
+            console.error('Brevo webinar email rejected:', emailRes.status, errText);
+          } else {
+            emailOk = true;
+          }
+        } catch (err) {
+          console.error('Brevo email fetch error:', err.message);
+        }
+        await base44.asServiceRole.entities.Communication.create({
+          contact_id: contact.id,
+          type: 'email',
+          direction: 'outbound',
+          content: `אישור הרשמה לוובינר נשלח למייל ${cleanEmail}`,
+          sent_by: 'system',
+          is_automated: true,
+          template_id: 'webinar_confirm_email',
+          status: emailOk ? 'sent' : 'failed',
+        });
       }
     }
 
