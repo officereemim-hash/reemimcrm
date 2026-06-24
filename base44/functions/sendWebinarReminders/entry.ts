@@ -68,7 +68,7 @@ Deno.serve(async (req) => {
       if (!contact?.phone) continue;
 
       if (zoomCache[reg.webinar_type] === undefined) zoomCache[reg.webinar_type] = await getZoom(reg.webinar_type);
-      const zoomLink = zoomCache[reg.webinar_type];
+      const zoomLink = reg.zoom_join_url || zoomCache[reg.webinar_type];
 
       const template = phase === '1h' ? tpl1h : tplStart;
       const message = fillTemplate(template, { name: contact.full_name, zoom_link: zoomLink });

@@ -47,6 +47,21 @@ const ZOOM_SUBTYPE = {
   retirement: 'zoom_webinar_retirement',
 };
 
+async function getZoomToken() {
+  const accountId = Deno.env.get('ZOOM_ACCOUNT_ID');
+  const clientId = Deno.env.get('ZOOM_CLIENT_ID');
+  const clientSecret = Deno.env.get('ZOOM_CLIENT_SECRET');
+  if (!accountId || !clientId || !clientSecret) return null;
+  const auth = btoa(`${clientId}:${clientSecret}`);
+  const res = await fetch(`https://zoom.us/oauth/token?grant_type=account_credentials&account_id=${accountId}`, {
+    method: 'POST',
+    headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+  });
+  if (!res.ok) { console.error('Zoom token error:', await res.text()); return null; }
+  const data = await res.json();
+  return data.access_token;
+}
+
 // Public — webinar landing-page registration (no auth required)
 Deno.serve(async (req) => {
   try {
@@ -88,16 +103,44 @@ Deno.serve(async (req) => {
       contact_id: contact.id,
       webinar_type: page.webinar_type,
     });
+    let regRecord;
     if (existingRegs.length > 0) {
-      await base44.asServiceRole.entities.WebinarRegistration.update(existingRegs[0].id, {
+      regRecord = await base44.asServiceRole.entities.WebinarRegistration.update(existingRegs[0].id, {
         webinar_date: page.webinar_date || new Date().toISOString(),
       });
     } else {
-      await base44.asServiceRole.entities.WebinarRegistration.create({
+      regRecord = await base44.asServiceRole.entities.WebinarRegistration.create({
         contact_id: contact.id,
         webinar_type: page.webinar_type,
         webinar_date: page.webinar_date || new Date().toISOString(),
       });
+    }
+
+    // Register in Zoom and get personal join URL
+    let zoomJoinUrl = '';
+    const zoomWebinarId = (await base44.asServiceRole.entities.SystemSetting.filter({ key: 'zoom_webinar_id' }))[0]?.value;
+    if (zoomWebinarId && cleanEmail) {
+      try {
+        const zoomToken = await getZoomToken();
+        if (zoomToken) {
+          const [firstName, ...rest] = String(full_name).trim().split(' ');
+          const zr = await fetch(`https://api.zoom.us/v2/webinars/${zoomWebinarId}/registrants`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${zoomToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: cleanEmail, first_name: firstName, last_name: rest.join(' ') || '-' }),
+          });
+          if (zr.ok) {
+            const zrData = await zr.json();
+            zoomJoinUrl = zrData.join_url || '';
+            await base44.asServiceRole.entities.WebinarRegistration.update(regRecord.id, {
+              zoom_registration_id: String(zrData.registrant_id || ''),
+              zoom_join_url: zoomJoinUrl,
+            });
+          } else {
+            console.error('Zoom registrant failed:', await zr.text());
+          }
+        }
+      } catch (e) { console.error('Zoom registrant error:', e.message); }
     }
 
     // Resolve content
@@ -130,7 +173,7 @@ Deno.serve(async (req) => {
       zoomLink ? `קישור להצטרפות: ${zoomLink}` : ''
     );
 
-    const effectiveLink = hasRecording ? page.recording_url : zoomLink;
+    const effectiveLink = hasRecording ? page.recording_url : (zoomJoinUrl || zoomLink);
     const message = fillTemplate(confirmTemplate, { name: full_name, date: dateStr, zoom_link: effectiveLink, calendar_add_link: calendarAddLink });
 
     // Check bot/green-api enabled
