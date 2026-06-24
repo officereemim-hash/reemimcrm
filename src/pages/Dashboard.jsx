@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Link } from 'react-router-dom';
-import { Users, Calendar, CheckSquare, AlertTriangle, TrendingUp, Phone, Bell, FileX, ShieldAlert } from 'lucide-react';
+import { Users, Calendar, CheckSquare, AlertTriangle, TrendingUp, Phone, Bell, ShieldAlert } from 'lucide-react';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { format, isToday, parseISO } from 'date-fns';
@@ -51,7 +51,6 @@ export default function Dashboard() {
     return bd.getDate() === today.getDate() && bd.getMonth() === today.getMonth();
   });
 
-  const systemErrors = isAdmin ? communications.filter(c => c.type === 'system_error' && c.created_date > new Date(Date.now() - 7*24*60*60*1000).toISOString()).length : 0;
   
   // SLA overdue tasks
   const slaOverdueTasks = tasks.filter(t => 
@@ -87,7 +86,7 @@ export default function Dashboard() {
       </div>
 
       {/* Alerts */}
-      {(noResponse > 0 || systemErrors > 0 || urgentTasks > 0) && (
+      {(noResponse > 0 || urgentTasks > 0 || slaOverdueTasks > 0) && (
         <div className="space-y-2">
           {noResponse > 0 && (
             <div className="flex items-center gap-3 bg-[#FDECEA] border-r-4 border-[#E07B6B] rounded-lg px-4 py-3">
@@ -97,17 +96,6 @@ export default function Dashboard() {
               </span>
               <Link to="/contacts?filter=no_response" className="mr-auto text-sm text-primary font-semibold hover:underline">
                 צפה במשימות
-              </Link>
-            </div>
-          )}
-          {isAdmin && systemErrors > 0 && (
-            <div className="flex items-center gap-3 bg-[#FDECEA] border-r-4 border-red-500 rounded-lg px-4 py-3">
-              <FileX size={18} className="text-destructive flex-shrink-0" />
-              <span className="text-sm font-medium text-foreground">
-                {systemErrors} שגיאות אוטומציה השבוע
-              </span>
-              <Link to="/communications?filter=system_error" className="mr-auto text-sm text-primary font-semibold hover:underline">
-                צפה בשגיאות
               </Link>
             </div>
           )}
