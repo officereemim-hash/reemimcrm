@@ -14,8 +14,8 @@ export default function WebinarRegistrationForm({ slug, page }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.full_name.trim() || !form.phone.trim()) {
-      setError('נא למלא שם וטלפון');
+    if (!form.full_name.trim() || !form.phone.trim() || !form.email.trim()) {
+      setError('נא למלא שם, טלפון ואימייל');
       return;
     }
     if (!consent) {
@@ -73,7 +73,8 @@ export default function WebinarRegistrationForm({ slug, page }) {
       />
       <input
         type="email"
-        placeholder="אימייל (אופציונלי)"
+        placeholder="אימייל"
+        required
         value={form.email}
         onChange={e => setForm({ ...form, email: e.target.value })}
         className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2"
