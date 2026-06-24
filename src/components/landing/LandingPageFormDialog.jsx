@@ -36,6 +36,7 @@ const EMPTY = {
 export default function LandingPageFormDialog({ open, onClose, onSave, editItem }) {
   const [form, setForm] = useState(EMPTY);
   const [uploading, setUploading] = useState(null);
+  const [dateError, setDateError] = useState(false);
 
   useEffect(() => {
     if (editItem) {
@@ -62,9 +63,14 @@ export default function LandingPageFormDialog({ open, onClose, onSave, editItem 
 
   const handleSubmit = () => {
     if (!form.slug.trim()) return;
+    if (!form.webinar_date) {
+      setDateError(true);
+      return;
+    }
+    setDateError(false);
     const payload = {
       ...form,
-      webinar_date: form.webinar_date ? new Date(form.webinar_date).toISOString() : undefined,
+      webinar_date: new Date(form.webinar_date).toISOString(),
     };
     onSave(payload);
   };
@@ -96,8 +102,9 @@ export default function LandingPageFormDialog({ open, onClose, onSave, editItem 
 
           <div className="grid grid-cols-2 gap-3 items-center">
             <div>
-              <Label>מועד הוובינר</Label>
-              <Input type="datetime-local" value={form.webinar_date} onChange={e => set('webinar_date', e.target.value)} />
+              <Label>מועד הוובינר <span className="text-destructive">*</span></Label>
+              <Input type="datetime-local" value={form.webinar_date} onChange={e => { set('webinar_date', e.target.value); setDateError(false); }} className={dateError ? 'border-destructive' : ''} />
+              {dateError && <p className="text-xs text-destructive mt-1">יש להזין תאריך ושעה לוובינר</p>}
             </div>
             <div className="flex items-center gap-2 pt-5">
               <Switch checked={form.is_active} onCheckedChange={v => set('is_active', v)} />
