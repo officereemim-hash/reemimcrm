@@ -1,5 +1,20 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 
+async function getZoomToken() {
+  const accountId = Deno.env.get('ZOOM_ACCOUNT_ID');
+  const clientId = Deno.env.get('ZOOM_CLIENT_ID');
+  const clientSecret = Deno.env.get('ZOOM_CLIENT_SECRET');
+  if (!accountId || !clientId || !clientSecret) return null;
+  const auth = btoa(`${clientId}:${clientSecret}`);
+  const res = await fetch(`https://zoom.us/oauth/token?grant_type=account_credentials&account_id=${accountId}`, {
+    method: 'POST',
+    headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+  });
+  if (!res.ok) { console.error('Zoom token error:', await res.text()); return null; }
+  const data = await res.json();
+  return data.access_token;
+}
+
 // Automation (LandingPage update): sync webinar_date to all registrations of the current cycle
 Deno.serve(async (req) => {
   try {
@@ -26,6 +41,36 @@ Deno.serve(async (req) => {
         reminder_start_sent: false,
       });
       synced++;
+    }
+
+    // Update the nearest future Zoom occurrence to match the new date
+    if (newDate) {
+      try {
+        const token = await getZoomToken();
+        const webinarId = (await base44.asServiceRole.entities.SystemSetting.filter({ key: 'zoom_webinar_id' }))[0]?.value;
+        if (token && webinarId) {
+          const wRes = await fetch(`https://api.zoom.us/v2/webinars/${webinarId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const w = await wRes.json();
+          const now = Date.now();
+          const next = (w.occurrences || [])
+            .filter(o => o.status === 'available' && new Date(o.start_time).getTime() > now)
+            .sort((a, b) => new Date(a.start_time) - new Date(b.start_time))[0];
+          if (next) {
+            await fetch(`https://api.zoom.us/v2/webinars/${webinarId}?occurrence_id=${next.occurrence_id}`, {
+              method: 'PATCH',
+              headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                start_time: new Date(newDate).toISOString(),
+                timezone: 'Asia/Jerusalem',
+              }),
+            });
+          }
+        }
+      } catch (e) {
+        console.error('zoom occurrence date update failed:', e.message);
+      }
     }
 
     return Response.json({ ok: true, synced });
