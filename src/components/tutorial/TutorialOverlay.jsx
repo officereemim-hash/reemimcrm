@@ -18,6 +18,7 @@ export default function TutorialOverlay({ tutorial }) {
             onPrev={tutorial.prev}
             onClose={tutorial.close}
             onGoToStep={tutorial.goToStep}
+            onPractice={tutorial.practice}
           />
         </AnimatePresence>
       </div>

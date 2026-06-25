@@ -44,10 +44,17 @@ export default function useTutorial() {
     if (TUTORIAL_STEPS[idx]?.navigateTo) navigate(TUTORIAL_STEPS[idx].navigateTo);
   }, [navigate]);
 
+  const practice = useCallback(() => {
+    if (step?.navigateTo) {
+      navigate(step.navigateTo);
+      close();
+    }
+  }, [step, navigate, close]);
+
   const isDone = localStorage.getItem(STORAGE_KEY) === 'true';
 
   return {
     isOpen, step, currentStep, totalSteps: TUTORIAL_STEPS.length,
-    steps: TUTORIAL_STEPS, open, close, next, prev, goToStep, isDone,
+    steps: TUTORIAL_STEPS, open, close, next, prev, goToStep, practice, isDone,
   };
 }
