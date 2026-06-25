@@ -29,9 +29,15 @@ Deno.serve(async (req) => {
     const oldDate = prev.webinar_date || null;
     if (newDate === oldDate) return Response.json({ ok: true, skipped: 'date_unchanged' });
 
-    // Only update registrations from the current cycle (same old date)
+    const now = Date.now();
+
+    // Only update registrations from the current cycle — skip attended and past cycles
     const regs = await base44.asServiceRole.entities.WebinarRegistration.filter({ webinar_type: page.webinar_type });
-    const targets = regs.filter(r => (r.webinar_date || null) === oldDate);
+    const targets = regs.filter(r =>
+      (r.webinar_date || null) === oldDate &&
+      r.attended !== true &&
+      (!oldDate || new Date(oldDate).getTime() > now)
+    );
 
     let synced = 0;
     for (const r of targets) {
@@ -53,7 +59,6 @@ Deno.serve(async (req) => {
             headers: { Authorization: `Bearer ${token}` },
           });
           const w = await wRes.json();
-          const now = Date.now();
           const next = (w.occurrences || [])
             .filter(o => o.status === 'available' && new Date(o.start_time).getTime() > now)
             .sort((a, b) => new Date(a.start_time) - new Date(b.start_time))[0];

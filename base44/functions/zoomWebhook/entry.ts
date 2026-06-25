@@ -110,6 +110,10 @@ Deno.serve(async (req) => {
         const contact = contacts[0];
         if (!contact?.phone) continue;
 
+        // Send only to actual registrants (skip host/panelists/internal staff)
+        const regs = await base44.asServiceRole.entities.WebinarRegistration.filter({ contact_id: contact.id }, '-created_date', 1);
+        if (!regs[0]) continue;
+
         const message = template
           .replaceAll('{name}', contact.full_name || '')
           .replaceAll('{recording_link}', shareLink);
