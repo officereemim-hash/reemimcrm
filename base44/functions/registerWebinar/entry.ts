@@ -105,8 +105,12 @@ Deno.serve(async (req) => {
     });
     let regRecord;
     if (existingRegs.length > 0) {
-      regRecord = await base44.asServiceRole.entities.WebinarRegistration.update(existingRegs[0].id, {
-        webinar_date: page.webinar_date || new Date().toISOString(),
+      const existing = existingRegs[0];
+      const newWdate = page.webinar_date || new Date().toISOString();
+      const dateChanged = (existing.webinar_date || null) !== newWdate;
+      regRecord = await base44.asServiceRole.entities.WebinarRegistration.update(existing.id, {
+        webinar_date: newWdate,
+        ...(dateChanged ? { reminder_1h_sent: false, reminder_start_sent: false } : {}),
       });
     } else {
       regRecord = await base44.asServiceRole.entities.WebinarRegistration.create({
