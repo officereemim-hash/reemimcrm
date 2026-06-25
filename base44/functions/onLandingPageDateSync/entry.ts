@@ -63,11 +63,17 @@ Deno.serve(async (req) => {
             .filter(o => o.status === 'available' && new Date(o.start_time).getTime() > now)
             .sort((a, b) => new Date(a.start_time) - new Date(b.start_time))[0];
           if (next) {
+            const d = new Date(newDate);
+            const local = new Intl.DateTimeFormat('sv-SE', {
+              timeZone: 'Asia/Jerusalem',
+              year: 'numeric', month: '2-digit', day: '2-digit',
+              hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+            }).format(d).replace(' ', 'T');
             await fetch(`https://api.zoom.us/v2/webinars/${webinarId}?occurrence_id=${next.occurrence_id}`, {
               method: 'PATCH',
               headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                start_time: new Date(newDate).toISOString(),
+                start_time: local,
                 timezone: 'Asia/Jerusalem',
               }),
             });
@@ -76,6 +82,11 @@ Deno.serve(async (req) => {
       } catch (e) {
         console.error('zoom occurrence date update failed:', e.message);
       }
+    }
+
+    // Clear old recording so new cycle starts fresh
+    if (newDate && oldDate && newDate !== oldDate && page.id) {
+      await base44.asServiceRole.entities.LandingPage.update(page.id, { recording_url: '' });
     }
 
     return Response.json({ ok: true, synced });

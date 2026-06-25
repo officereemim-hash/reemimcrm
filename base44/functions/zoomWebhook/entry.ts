@@ -100,6 +100,7 @@ Deno.serve(async (req) => {
 
       let sent = 0;
       const processedEmails = new Set();
+      const typeCounts = {};
 
       for (const p of (pData.participants || [])) {
         const email = (p.user_email || '').toLowerCase().trim();
@@ -113,6 +114,10 @@ Deno.serve(async (req) => {
         // Send only to actual registrants (skip host/panelists/internal staff)
         const regs = await base44.asServiceRole.entities.WebinarRegistration.filter({ contact_id: contact.id }, '-created_date', 1);
         if (!regs[0]) continue;
+
+        if (regs[0].webinar_type) {
+          typeCounts[regs[0].webinar_type] = (typeCounts[regs[0].webinar_type] || 0) + 1;
+        }
 
         const message = template
           .replaceAll('{name}', contact.full_name || '')
@@ -140,6 +145,15 @@ Deno.serve(async (req) => {
         // Small delay between messages
         await new Promise(r => setTimeout(r, 1500));
       }
+      // Auto-fill recording_url on the active landing page for the top webinar type
+      const topType = Object.entries(typeCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
+      if (topType) {
+        const lp = (await base44.asServiceRole.entities.LandingPage.filter({ webinar_type: topType, is_active: true }))[0];
+        if (lp && !lp.recording_url) {
+          await base44.asServiceRole.entities.LandingPage.update(lp.id, { recording_url: shareLink });
+        }
+      }
+
       return Response.json({ ok: true, sent });
     }
 
