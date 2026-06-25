@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Settings as SettingsIcon, Bot, Zap, Clock, Shield, Mail, Database, MessageSquare, Ticket, FlaskConical } from 'lucide-react';
+import { Settings as SettingsIcon, Bot, Zap, Clock, Shield, Mail, Database, MessageSquare, Ticket, FlaskConical, BookOpen } from 'lucide-react';
 import MarketingSettingsTab from '@/components/marketing/MarketingSettingsTab';
 import SystemSettingsTab from '@/components/settings/SystemSettingsTab';
 import CommunicationsTab from '@/components/settings/CommunicationsTab';
 import CouponsSettingsTab from '@/components/settings/CouponsSettingsTab';
 import ResetTestUserCard from '@/components/settings/ResetTestUserCard';
+import HelpGuideTab from '@/components/settings/HelpGuideTab';
 import BotChat from '@/pages/BotChat';
 
 export default function Settings() {
@@ -83,6 +84,15 @@ export default function Settings() {
           <Bot size={14} className="inline ml-1" />
           בדיקת בוט
         </button>
+        <button
+          onClick={() => setActiveTab('guide')}
+          className={`px-4 py-2 rounded-t-lg text-sm font-medium transition-colors ${
+            activeTab === 'guide' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
+          }`}
+        >
+          <BookOpen size={14} className="inline ml-1" />
+          מדריך שימוש
+        </button>
       </div>
 
       {activeTab === 'marketing' && <MarketingSettingsTab />}
@@ -100,6 +110,8 @@ export default function Settings() {
       )}
 
       {activeTab === 'bot-chat' && <BotChat />}
+
+      {activeTab === 'guide' && <HelpGuideTab />}
 
       {activeTab === 'general' && <div className="grid md:grid-cols-2 gap-6">
         <Card>

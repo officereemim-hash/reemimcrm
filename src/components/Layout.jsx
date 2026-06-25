@@ -5,6 +5,9 @@ import {
   Video, Settings, Menu, X, Bell, Mail, Bot, Globe
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import useTutorial from '@/hooks/useTutorial';
+import TutorialOverlay from '@/components/tutorial/TutorialOverlay';
+import TutorialFAB from '@/components/tutorial/TutorialFAB';
 
 const navItems = [
   { path: '/', label: 'דשבורד', icon: LayoutDashboard },
@@ -24,6 +27,7 @@ const navItems = [
 export default function Layout() {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const tutorial = useTutorial();
 
   return (
     <div className="min-h-screen bg-background flex flex-col" dir="rtl">
@@ -98,6 +102,9 @@ export default function Layout() {
       <main className="flex-1 p-4 md:p-8 max-w-[1400px] mx-auto w-full">
         <Outlet />
       </main>
+
+      <TutorialOverlay tutorial={tutorial} />
+      <TutorialFAB onClick={tutorial.open} />
     </div>
   );
 }
