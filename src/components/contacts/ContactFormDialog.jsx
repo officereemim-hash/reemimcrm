@@ -11,7 +11,7 @@ export default function ContactFormDialog({ contact, onClose, onSave }) {
   const [form, setForm] = useState(contact || {
     full_name: '', phone: '', email: '', status: 'new_lead',
     source: 'manual', service_type: '', assigned_to: '',
-    lead_temperature: 'warm', notes: '', bot_status: 'new',
+    notes: '', bot_status: 'new',
   });
   const [saving, setSaving] = useState(false);
 
@@ -90,17 +90,7 @@ export default function ContactFormDialog({ contact, onClose, onSave }) {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
-              <Label>חום ליד</Label>
-              <Select value={form.lead_temperature || 'warm'} onValueChange={v => set('lead_temperature', v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="hot">🔥 חם</SelectItem>
-                  <SelectItem value="warm">☀️ פושר</SelectItem>
-                  <SelectItem value="cold">❄️ קר</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+
             <div className="space-y-1">
               <Label>משויך/ת ל</Label>
               <Select value={form.assigned_to || ''} onValueChange={v => set('assigned_to', v)}>

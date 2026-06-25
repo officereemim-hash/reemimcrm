@@ -127,7 +127,6 @@ export default function ContactDetail() {
                 <InfoRow label="סטטוס CRM" value={<ContactStatusBadge status={contact.status} />} />
                 <InfoRow label="סטטוס בוט" value={<BotStatusBadge status={contact.bot_status} />} />
                 <InfoRow label="שאלון שורנס" value={contact.shoranss_questionnaire} />
-                <InfoRow label="חום ליד" value={contact.lead_temperature} />
                 <InfoRow label="הסכמה לפנייה עתידית" value={contact.opt_in_future ? 'כן' : 'לא'} />
                 {contact.notes && <InfoRow label="הערות" value={contact.notes} />}
               </CardContent>
