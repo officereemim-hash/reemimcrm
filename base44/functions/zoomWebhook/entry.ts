@@ -115,6 +115,12 @@ Deno.serve(async (req) => {
         const regs = await base44.asServiceRole.entities.WebinarRegistration.filter({ contact_id: contact.id }, '-created_date', 1);
         if (!regs[0]) continue;
 
+        // Dedup: skip if this specific recording link was already sent to this contact
+        const priorRec = await base44.asServiceRole.entities.Communication.filter(
+          { contact_id: contact.id, template_id: 'webinar_recording' }, '-created_date', 5
+        );
+        if (priorRec.some(c => (c.content || '').includes(shareLink))) continue;
+
         if (regs[0].webinar_type) {
           typeCounts[regs[0].webinar_type] = (typeCounts[regs[0].webinar_type] || 0) + 1;
         }
