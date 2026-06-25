@@ -120,4 +120,5 @@ export const SOURCE_LABELS = {
   manual: 'ידני',
   bot: 'בוט',
   bar_call: 'שיחת בר',
+  shoranss: 'שורנס',
 };

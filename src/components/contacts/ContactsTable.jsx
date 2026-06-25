@@ -22,15 +22,15 @@ export default function ContactsTable({ contacts, selectedIds, onToggleSelect, o
                 onCheckedChange={() => onToggleAll()}
               />
             </TableHead>
-            <TableHead>שם מלא</TableHead>
-            <TableHead>טלפון</TableHead>
-            <TableHead>מייל</TableHead>
-            <TableHead>סטטוס</TableHead>
-            <TableHead>סטטוס בוט</TableHead>
-            <TableHead>סוג שירות</TableHead>
-            <TableHead>מקור</TableHead>
-            <TableHead>מטפל/ת</TableHead>
-            <TableHead>תאריך</TableHead>
+            <TableHead className="text-right">שם מלא</TableHead>
+            <TableHead className="text-right">טלפון</TableHead>
+            <TableHead className="text-right">מייל</TableHead>
+            <TableHead className="text-right">סטטוס</TableHead>
+            <TableHead className="text-right">סטטוס בוט</TableHead>
+            <TableHead className="text-right">סוג שירות</TableHead>
+            <TableHead className="text-right">מקור</TableHead>
+            <TableHead className="text-right">מטפל/ת</TableHead>
+            <TableHead className="text-right">תאריך</TableHead>
             <TableHead className="w-20"></TableHead>
           </TableRow>
         </TableHeader>
