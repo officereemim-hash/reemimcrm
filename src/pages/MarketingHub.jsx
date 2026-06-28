@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Mail, Send, Users, Calendar, Star, Bell, Plus, CheckCircle, Clock, FileText } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -132,10 +133,10 @@ export default function MarketingHub() {
       {activeTab === 'overview' && <>
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="סה״כ נשלחו" value={totalSent} icon={Send} color="bg-primary/10 text-primary" />
-        <StatCard label="אוטומטי" value={automatedSent} icon={Bell} color="bg-gold/20 text-gold" />
-        <StatCard label="החודש" value={thisMonthSent} icon={Calendar} color="bg-success/10 text-success" />
-        <StatCard label="לקוחות פעילים" value={contacts.filter(c => c.status === 'active_client').length} icon={Users} color="bg-accent/20 text-accent-foreground" />
+        <MktStatCard label="סה״כ נשלחו" value={totalSent} icon={Send} color="bg-primary/10 text-primary" to="/marketing" />
+        <MktStatCard label="אוטומטי" value={automatedSent} icon={Bell} color="bg-gold/20 text-gold" to="/marketing" />
+        <MktStatCard label="החודש" value={thisMonthSent} icon={Calendar} color="bg-success/10 text-success" to="/marketing" />
+        <MktStatCard label="לקוחות פעילים" value={contacts.filter(c => c.status === 'active_client').length} icon={Users} color="bg-accent/20 text-accent-foreground" to="/contacts?filter=active_client" />
       </div>
 
       {/* Message types */}
@@ -224,9 +225,9 @@ export default function MarketingHub() {
   );
 }
 
-function StatCard({ label, value, icon: Icon, color }) {
-  return (
-    <Card className="shadow-sm">
+function MktStatCard({ label, value, icon: Icon, color, to }) {
+  const content = (
+    <Card className={`shadow-sm ${to ? 'hover:shadow-md hover:border-primary/30 transition-all cursor-pointer' : ''}`}>
       <CardContent className="p-4">
         <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-2 ${color}`}>
           <Icon size={16} />
@@ -236,4 +237,6 @@ function StatCard({ label, value, icon: Icon, color }) {
       </CardContent>
     </Card>
   );
+  if (to) return <Link to={to}>{content}</Link>;
+  return content;
 }

@@ -59,12 +59,12 @@ export default function Dashboard() {
   const urgentTasks = tasks.filter(t => ['high','urgent'].includes(t.priority) && t.status === 'open').length;
 
   const kpis = [
-    { label: 'לידים חדשים היום', value: newLeadsToday, icon: Users, color: 'bg-primary/10 text-primary' },
-    { label: 'פגישות היום', value: todayMeetings, icon: Calendar, color: 'bg-gold/20 text-gold' },
-    { label: 'משימות פתוחות', value: openTasks, icon: CheckSquare, color: 'bg-accent/20 text-accent-foreground' },
-    { label: 'ללא מענה', value: noResponse, icon: Phone, color: 'bg-coral/20 text-coral' },
-    { label: 'לקוחות פעילים', value: activeClients, icon: TrendingUp, color: 'bg-success/10 text-success' },
-    { label: 'משימות דחופות', value: urgentTasks, icon: AlertTriangle, color: 'bg-destructive/10 text-destructive' },
+    { label: 'לידים חדשים היום', value: newLeadsToday, icon: Users, color: 'bg-primary/10 text-primary', to: '/contacts?filter=new_lead' },
+    { label: 'פגישות היום', value: todayMeetings, icon: Calendar, color: 'bg-gold/20 text-gold', to: '/meetings' },
+    { label: 'משימות פתוחות', value: openTasks, icon: CheckSquare, color: 'bg-accent/20 text-accent-foreground', to: '/meetings?tab=tasks' },
+    { label: 'ללא מענה', value: noResponse, icon: Phone, color: 'bg-coral/20 text-coral', to: '/contacts?filter=no_response' },
+    { label: 'לקוחות פעילים', value: activeClients, icon: TrendingUp, color: 'bg-success/10 text-success', to: '/contacts?filter=active_client' },
+    { label: 'משימות דחופות', value: urgentTasks, icon: AlertTriangle, color: 'bg-destructive/10 text-destructive', to: '/meetings?tab=tasks' },
   ];
 
   if (loading) return (
@@ -116,15 +116,17 @@ export default function Dashboard() {
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         {kpis.map((kpi) => (
-          <Card key={kpi.label} className="shadow-sm hover:shadow-md transition-shadow">
-            <CardContent className="p-4">
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${kpi.color}`}>
-                <kpi.icon size={20} />
-              </div>
-              <div className="text-2xl font-bold text-foreground">{kpi.value}</div>
-              <div className="text-xs text-muted-foreground mt-1 leading-tight">{kpi.label}</div>
-            </CardContent>
-          </Card>
+          <Link key={kpi.label} to={kpi.to}>
+            <Card className="shadow-sm hover:shadow-md hover:border-primary/30 transition-all cursor-pointer">
+              <CardContent className="p-4">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${kpi.color}`}>
+                  <kpi.icon size={20} />
+                </div>
+                <div className="text-2xl font-bold text-foreground">{kpi.value}</div>
+                <div className="text-xs text-muted-foreground mt-1 leading-tight">{kpi.label}</div>
+              </CardContent>
+            </Card>
+          </Link>
         ))}
       </div>
 
@@ -136,10 +138,10 @@ export default function Dashboard() {
             <CardTitle className="text-base font-semibold">Pipeline — מצב לידים</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <PipelineBar label="לידים חדשים" value={contacts.filter(c => c.status === 'new_lead').length} color="bg-[#EDE8F5]" textColor="text-[#4A2C78]" />
-            <PipelineBar label="בטיפול" value={inProgress} color="bg-[#E8EEF8]" textColor="text-[#2952A3]" />
-            <PipelineBar label="הצעה נשלחה" value={quoteSent} color="bg-[#F8F0DC]" textColor="text-[#A87B20]" />
-            <PipelineBar label="לקוח פעיל" value={activeClients} color="bg-[#DCF0E8]" textColor="text-[#2E7A4A]" />
+            <PipelineBar label="לידים חדשים" value={contacts.filter(c => c.status === 'new_lead').length} color="bg-[#EDE8F5]" textColor="text-[#4A2C78]" to="/contacts?filter=new_lead" />
+            <PipelineBar label="בטיפול" value={inProgress} color="bg-[#E8EEF8]" textColor="text-[#2952A3]" to="/contacts?filter=in_progress" />
+            <PipelineBar label="הצעה נשלחה" value={quoteSent} color="bg-[#F8F0DC]" textColor="text-[#A87B20]" to="/contacts?filter=quote_sent" />
+            <PipelineBar label="לקוח פעיל" value={activeClients} color="bg-[#DCF0E8]" textColor="text-[#2E7A4A]" to="/contacts?filter=active_client" />
             <div className="pt-2 border-t border-border">
               <div className="flex justify-between items-center">
                 <span className="text-sm text-muted-foreground">שיעור המרה כולל</span>
@@ -216,10 +218,9 @@ const LOCATION_LABELS = {
   phone: 'טלפון',
 };
 
-function PipelineBar({ label, value, color, textColor }) {
-  const max = 100;
-  return (
-    <div className="flex items-center gap-3">
+function PipelineBar({ label, value, color, textColor, to }) {
+  const bar = (
+    <div className={`flex items-center gap-3 ${to ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`}>
       <div className="w-24 text-sm text-muted-foreground text-right">{label}</div>
       <div className="flex-1 bg-muted rounded-full h-5 overflow-hidden">
         <div
@@ -230,4 +231,6 @@ function PipelineBar({ label, value, color, textColor }) {
       <div className={`text-sm font-bold w-8 text-left ${textColor}`}>{value}</div>
     </div>
   );
+  if (to) return <Link to={to}>{bar}</Link>;
+  return bar;
 }

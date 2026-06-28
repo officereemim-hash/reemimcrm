@@ -9,6 +9,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { format } from 'date-fns';
 import ViewToggle from '@/components/shared/ViewToggle';
+import StatCard from '@/components/shared/StatCard';
 import WebinarTable from '@/components/webinars/WebinarTable';
 import WebinarFormDialog from '@/components/webinars/WebinarFormDialog';
 import BulkActionsBar from '@/components/webinars/BulkActionsBar';
@@ -181,20 +182,10 @@ export default function Webinars() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label: 'נרשמו', value: stats.total, color: 'text-primary' },
-          { label: 'השתתפו', value: stats.attended, color: 'text-gold' },
-          { label: 'שילמו', value: stats.paid, color: 'text-success' },
-          { label: 'קבעו פגישה', value: stats.meeting, color: 'text-primary' },
-        ].map(s => (
-          <Card key={s.label} className="text-center">
-            <CardContent className="py-4">
-              <div className={`text-3xl font-bold ${s.color}`}>{s.value}</div>
-              <div className="text-sm text-muted-foreground mt-1">{s.label}</div>
-              {stats.total > 0 && <div className="text-xs text-muted-foreground">{Math.round(s.value / stats.total * 100)}%</div>}
-            </CardContent>
-          </Card>
-        ))}
+        <StatCard label="נרשמו" value={stats.total} color="text-primary" percent={100} to="/webinars" />
+        <StatCard label="השתתפו" value={stats.attended} color="text-gold" percent={stats.total > 0 ? Math.round(stats.attended / stats.total * 100) : 0} to="/webinars" />
+        <StatCard label="שילמו" value={stats.paid} color="text-success" percent={stats.total > 0 ? Math.round(stats.paid / stats.total * 100) : 0} to="/webinars" />
+        <StatCard label="קבעו פגישה" value={stats.meeting} color="text-primary" percent={stats.total > 0 ? Math.round(stats.meeting / stats.total * 100) : 0} to="/webinars" />
       </div>
 
       {/* Filters */}

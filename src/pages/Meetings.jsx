@@ -13,6 +13,8 @@ import MeetingsTable from '@/components/meetings/MeetingsTable';
 import TasksTable from '@/components/meetings/TasksTable';
 import MeetingFormDialog from '@/components/meetings/MeetingFormDialog';
 import TaskFormDialog from '@/components/meetings/TaskFormDialog';
+import StatCard from '@/components/shared/StatCard';
+import { CheckSquare, AlertTriangle, Clock as ClockIcon } from 'lucide-react';
 
 const LOCATION_LABELS = { modiin: 'מודיעין', petah_tikva_wednesday: 'פ"ת', zoom: 'זום', phone: 'טלפון' };
 
@@ -28,6 +30,12 @@ export default function Meetings() {
   const [editMeeting, setEditMeeting] = useState(null);
   const [editTask, setEditTask] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+
+  // Read filter from URL
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search).get('tab');
+    if (p === 'tasks') setActiveTab('tasks');
+  }, []);
   const [deleteType, setDeleteType] = useState(null);
   const [selectedMeetings, setSelectedMeetings] = useState([]);
   const [selectedTasks, setSelectedTasks] = useState([]);
@@ -119,6 +127,18 @@ export default function Meetings() {
             </Button>
           )}
         </div>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <StatCard label="פגישות מתוכננות" value={meetings.filter(m => m.status === 'scheduled').length} icon={Calendar} color="bg-[#E8EEF8] text-[#2952A3]"
+          to="/meetings" />
+        <StatCard label="התקיימו" value={meetings.filter(m => m.status === 'completed').length} icon={Calendar} color="bg-success/10 text-success"
+          to="/meetings" />
+        <StatCard label="משימות פתוחות" value={openTasks.length} icon={CheckSquare} color="bg-accent/20 text-accent-foreground"
+          to="/meetings?tab=tasks" />
+        <StatCard label="משימות דחופות" value={tasks.filter(t => ['high','urgent'].includes(t.priority) && t.status === 'open').length} icon={AlertTriangle} color="bg-destructive/10 text-destructive"
+          to="/meetings?tab=tasks" />
       </div>
 
       <div className="flex gap-2 border-b border-border pb-0">

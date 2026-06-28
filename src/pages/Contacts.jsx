@@ -12,13 +12,19 @@ import { format } from 'date-fns';
 import ContactFormDialog from '@/components/contacts/ContactFormDialog';
 import ContactsTable from '@/components/contacts/ContactsTable';
 import ViewToggle from '@/components/shared/ViewToggle';
+import StatCard from '@/components/shared/StatCard';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { Users, UserCheck, FileText, XCircle } from 'lucide-react';
 
 const TABS = [
   { key: 'all', label: 'הכל' },
   { key: 'new_lead', label: 'לידים חדשים' },
+  { key: 'in_progress', label: 'בטיפול' },
+  { key: 'quote_sent', label: 'הצעה נשלחה' },
   { key: 'active_client', label: 'לקוחות פעילים' },
+  { key: 'not_relevant', label: 'לא רלוונטי' },
   { key: 'completed', label: 'הושלמו' },
+  { key: 'no_response', label: 'ללא מענה', filterField: 'bot_status' },
 ];
 
 export default function Contacts() {
@@ -33,6 +39,13 @@ export default function Contacts() {
   const [deleteTarget, setDeleteTarget] = useState(null); // array of ids to confirm
   const [editingContact, setEditingContact] = useState(null);
 
+  // Read filter from URL on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const f = params.get('filter');
+    if (f) setActiveTab(f);
+  }, []);
+
   const load = () => {
     base44.entities.Contact.list('-created_date', 200).then(data => {
       setContacts(filterForUser(data));
@@ -44,8 +57,9 @@ export default function Contacts() {
     if (!userLoading) load();
   }, [userLoading]);
 
+  const activeTabObj = TABS.find(t => t.key === activeTab);
   const filtered = contacts.filter(c => {
-    const matchTab = activeTab === 'all' || c.status === activeTab;
+    const matchTab = activeTab === 'all' || (activeTabObj?.filterField === 'bot_status' ? c.bot_status === activeTab : c.status === activeTab);
     const matchSearch = !search || c.full_name?.includes(search) || c.phone?.includes(search) || c.email?.includes(search);
     return matchTab && matchSearch;
   });
@@ -89,6 +103,20 @@ export default function Contacts() {
             לקוח/ה חדש
           </Button>
         </div>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <StatCard label="סה״כ לקוחות" value={contacts.length} icon={Users} color="bg-primary/10 text-primary"
+          to="/contacts" />
+        <StatCard label="לידים חדשים" value={contacts.filter(c => c.status === 'new_lead').length} icon={Users} color="bg-[#EDE8F5] text-[#4A2C78]"
+          to="/contacts?filter=new_lead" />
+        <StatCard label="בטיפול" value={contacts.filter(c => c.status === 'in_progress').length} icon={FileText} color="bg-[#E8EEF8] text-[#2952A3]"
+          to="/contacts?filter=in_progress" />
+        <StatCard label="לקוחות פעילים" value={contacts.filter(c => c.status === 'active_client').length} icon={UserCheck} color="bg-success/10 text-success"
+          to="/contacts?filter=active_client" />
+        <StatCard label="לא רלוונטי" value={contacts.filter(c => c.status === 'not_relevant').length} icon={XCircle} color="bg-muted text-muted-foreground"
+          to="/contacts?filter=not_relevant" />
       </div>
 
       {/* Tabs */}

@@ -15,6 +15,8 @@ import ServiceRequestTable from '@/components/service-requests/ServiceRequestTab
 import ServiceRequestCard from '@/components/service-requests/ServiceRequestCard';
 import ServiceRequestFormDialog from '@/components/service-requests/ServiceRequestFormDialog';
 import { handleBotMessage } from '@/lib/sendBotMessage';
+import StatCard from '@/components/shared/StatCard';
+import { FileText, Clock, CalendarCheck, Users, XCircle } from 'lucide-react';
 
 const SR_STATUS_COLUMNS = [
   { key: 'new_inprogress', label: 'פניות חדשות', statuses: ['new', 'in_progress'] },
@@ -47,8 +49,12 @@ const TYPE_FILTER_OPTIONS = [
 ];
 
 export default function ServiceRequests() {
+  const initialStatus = (() => {
+    const p = new URLSearchParams(window.location.search).get('filter');
+    return p || 'all';
+  })();
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState(initialStatus);
   const [typeFilter, setTypeFilter] = useState('all');
   const [viewMode, setViewMode] = useState('table');
   const [showForm, setShowForm] = useState(false);
@@ -73,7 +79,7 @@ export default function ServiceRequests() {
       const c = getContact(r.contact_id);
       return c?.full_name?.includes(search) || c?.phone?.includes(search) || (r.contact_name || '').includes(search) || (r.contact_phone || '').includes(search);
     })();
-    const matchStatus = statusFilter === 'all' || r.status === statusFilter;
+    const matchStatus = statusFilter === 'all' || r.status === statusFilter || (statusFilter === 'meeting_scheduled' && ['meeting_scheduled','meeting_scheduled_frontal','meeting_scheduled_zoom'].includes(r.status));
     const matchType = typeFilter === 'all' || r.service_type === typeFilter;
     return matchSearch && matchStatus && matchType;
   });
@@ -173,6 +179,20 @@ export default function ServiceRequests() {
             פנייה חדשה
           </Button>
         </div>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <StatCard label="חדשות" value={requests.filter(r => r.status === 'new').length} icon={FileText} color="bg-[#EDE8F5] text-[#4A2C78]"
+          to="/service-requests?filter=new" />
+        <StatCard label="בטיפול" value={requests.filter(r => r.status === 'in_progress').length} icon={Clock} color="bg-[#E8EEF8] text-[#2952A3]"
+          to="/service-requests?filter=in_progress" />
+        <StatCard label="הצעה נשלחה" value={requests.filter(r => r.status === 'quote_sent').length} icon={FileText} color="bg-[#F8F0DC] text-[#A87B20]"
+          to="/service-requests?filter=quote_sent" />
+        <StatCard label="פגישה נקבעה" value={requests.filter(r => ['meeting_scheduled','meeting_scheduled_frontal','meeting_scheduled_zoom'].includes(r.status)).length} icon={CalendarCheck} color="bg-success/10 text-success"
+          to="/service-requests?filter=meeting_scheduled" />
+        <StatCard label="הושלמו" value={requests.filter(r => r.status === 'completed').length} icon={Users} color="bg-muted text-muted-foreground"
+          to="/service-requests?filter=completed" />
       </div>
 
       {/* Filters */}
