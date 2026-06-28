@@ -5,7 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ArrowRight, Phone, Mail, Edit, Plus, Calendar, FileText, MessageSquare, CheckSquare } from 'lucide-react';
-import { ContactStatusBadge, BotStatusBadge, SERVICE_TYPE_LABELS } from '@/components/StatusBadge';
+import { ContactStatusBadge, BotStatusBadge, SERVICE_TYPE_LABELS, SOURCE_LABELS } from '@/components/StatusBadge';
 import { format } from 'date-fns';
 import ContactFormDialog from '@/components/contacts/ContactFormDialog';
 import ServiceRequestCard from '@/components/contacts/ServiceRequestCard';
@@ -116,7 +116,7 @@ export default function ContactDetail() {
                 <InfoRow label="אימייל" value={contact.email} />
                 <InfoRow label="ת.ז." value={contact.id_number} />
                 <InfoRow label="תאריך לידה" value={contact.birth_date ? format(new Date(contact.birth_date), 'dd/MM/yyyy') : null} />
-                <InfoRow label="מקור" value={contact.source} />
+                <InfoRow label="מקור" value={SOURCE_LABELS[contact.source] || contact.source} />
                 <InfoRow label="סוג שירות" value={SERVICE_TYPE_LABELS[contact.service_type]} />
                 <InfoRow label="משויך/ת ל" value={contact.assigned_to} />
               </CardContent>
@@ -126,7 +126,7 @@ export default function ContactDetail() {
               <CardContent className="space-y-3">
                 <InfoRow label="סטטוס CRM" value={<ContactStatusBadge status={contact.status} />} />
                 <InfoRow label="סטטוס בוט" value={<BotStatusBadge status={contact.bot_status} />} />
-                <InfoRow label="שאלון שורנס" value={contact.shoranss_questionnaire} />
+                <InfoRow label="שאלון שורנס" value={{ not_sent: 'לא נשלח', sent: 'נשלח', filled: 'מולא' }[contact.shoranss_questionnaire] || contact.shoranss_questionnaire} />
                 <InfoRow label="הסכמה לפנייה עתידית" value={contact.opt_in_future ? 'כן' : 'לא'} />
                 {contact.notes && <InfoRow label="הערות" value={contact.notes} />}
               </CardContent>
