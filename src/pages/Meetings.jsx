@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Calendar, MapPin, Plus } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -31,11 +31,13 @@ export default function Meetings() {
   const [editTask, setEditTask] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
-  // Read filter from URL
+  // Read filter from URL (reactive)
+  const [searchParams] = useSearchParams();
+  const urlTab = searchParams.get('tab');
   useEffect(() => {
-    const p = new URLSearchParams(window.location.search).get('tab');
-    if (p === 'tasks') setActiveTab('tasks');
-  }, []);
+    if (urlTab === 'tasks') setActiveTab('tasks');
+    else setActiveTab('meetings');
+  }, [urlTab]);
   const [deleteType, setDeleteType] = useState(null);
   const [selectedMeetings, setSelectedMeetings] = useState([]);
   const [selectedTasks, setSelectedTasks] = useState([]);

@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { SRStatusBadge, SERVICE_TYPE_LABELS } from '@/components/StatusBadge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -49,12 +49,16 @@ const TYPE_FILTER_OPTIONS = [
 ];
 
 export default function ServiceRequests() {
-  const initialStatus = (() => {
-    const p = new URLSearchParams(window.location.search).get('filter');
-    return p || 'all';
-  })();
+  const [searchParams] = useSearchParams();
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState(initialStatus);
+  const [statusFilter, setStatusFilter] = useState('all');
+
+  // Sync filter from URL reactively
+  const urlFilter = searchParams.get('filter');
+  useEffect(() => {
+    if (urlFilter) setStatusFilter(urlFilter);
+    else setStatusFilter('all');
+  }, [urlFilter]);
   const [typeFilter, setTypeFilter] = useState('all');
   const [viewMode, setViewMode] = useState('table');
   const [showForm, setShowForm] = useState(false);

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Plus, Search, Phone, Calendar, Trash2, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -39,12 +39,13 @@ export default function Contacts() {
   const [deleteTarget, setDeleteTarget] = useState(null); // array of ids to confirm
   const [editingContact, setEditingContact] = useState(null);
 
-  // Read filter from URL on mount
+  // Read filter from URL (reactive to changes)
+  const [searchParams] = useSearchParams();
+  const urlFilter = searchParams.get('filter');
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const f = params.get('filter');
-    if (f) setActiveTab(f);
-  }, []);
+    if (urlFilter) setActiveTab(urlFilter);
+    else setActiveTab('all');
+  }, [urlFilter]);
 
   const load = () => {
     base44.entities.Contact.list('-created_date', 200).then(data => {
