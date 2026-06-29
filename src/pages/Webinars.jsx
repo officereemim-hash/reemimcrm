@@ -29,6 +29,7 @@ export default function Webinars() {
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
+  const [statFilter, setStatFilter] = useState('all');
 
   const load = () => {
     setLoading(true);
@@ -45,7 +46,14 @@ export default function Webinars() {
   useEffect(() => { load(); }, []);
 
   const getContact = id => contacts.find(c => c.id === id);
-  const filtered = registrations.filter(r => filter === 'all' || r.webinar_type === filter);
+  const typeFiltered = registrations.filter(r => filter === 'all' || r.webinar_type === filter);
+  const filtered = typeFiltered.filter(r => {
+    if (statFilter === 'all') return true;
+    if (statFilter === 'attended') return r.attended;
+    if (statFilter === 'paid') return r.payment_completed;
+    if (statFilter === 'meeting') return r.meeting_scheduled;
+    return true;
+  });
 
   // Unique webinars by type+date for dropdown
   const uniqueWebinars = useMemo(() => {
@@ -182,10 +190,22 @@ export default function Webinars() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="נרשמו" value={stats.total} color="text-primary" percent={100} to="/webinars" />
-        <StatCard label="השתתפו" value={stats.attended} color="text-gold" percent={stats.total > 0 ? Math.round(stats.attended / stats.total * 100) : 0} to="/webinars" />
-        <StatCard label="שילמו" value={stats.paid} color="text-success" percent={stats.total > 0 ? Math.round(stats.paid / stats.total * 100) : 0} to="/webinars" />
-        <StatCard label="קבעו פגישה" value={stats.meeting} color="text-primary" percent={stats.total > 0 ? Math.round(stats.meeting / stats.total * 100) : 0} to="/webinars" />
+        {[
+          { label: 'נרשמו', value: stats.total, color: 'text-primary', filterKey: 'all' },
+          { label: 'השתתפו', value: stats.attended, color: 'text-gold', filterKey: 'attended' },
+          { label: 'שילמו', value: stats.paid, color: 'text-success', filterKey: 'paid' },
+          { label: 'קבעו פגישה', value: stats.meeting, color: 'text-primary', filterKey: 'meeting' },
+        ].map(s => (
+          <Card key={s.label}
+            className="text-center shadow-sm hover:shadow-md hover:border-primary/30 hover:scale-[1.02] transition-all cursor-pointer"
+            onClick={() => setStatFilter(prev => prev === s.filterKey ? 'all' : s.filterKey)}>
+            <CardContent className="py-4">
+              <div className={`text-3xl font-bold ${s.color}`}>{s.value}</div>
+              <div className="text-sm text-muted-foreground mt-1">{s.label}</div>
+              {stats.total > 0 && <div className="text-xs text-muted-foreground">{Math.round(s.value / stats.total * 100)}%</div>}
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       {/* Filters */}

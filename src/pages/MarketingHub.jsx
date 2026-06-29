@@ -226,8 +226,8 @@ export default function MarketingHub() {
 }
 
 function MktStatCard({ label, value, icon: Icon, color, to }) {
-  const content = (
-    <Card className={`shadow-sm ${to ? 'hover:shadow-md hover:border-primary/30 transition-all cursor-pointer' : ''}`}>
+  const card = (
+    <Card className={`shadow-sm ${to ? 'hover:shadow-md hover:border-primary/30 hover:scale-[1.02] transition-all cursor-pointer' : ''}`}>
       <CardContent className="p-4">
         <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-2 ${color}`}>
           <Icon size={16} />
@@ -237,6 +237,6 @@ function MktStatCard({ label, value, icon: Icon, color, to }) {
       </CardContent>
     </Card>
   );
-  if (to) return <Link to={to}>{content}</Link>;
-  return content;
+  if (to) return <Link to={to} className="block">{card}</Link>;
+  return card;
 }
