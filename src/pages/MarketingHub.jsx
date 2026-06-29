@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { Mail, Send, Users, Calendar, Star, Bell, Plus, CheckCircle, Clock, FileText } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Mail, Send, Users, Calendar, Star, Bell, Plus, CheckCircle, Clock, FileText, Search, X } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format } from 'date-fns';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import ComposeDialog from '@/components/marketing/ComposeDialog';
@@ -23,6 +25,7 @@ const MESSAGE_TYPES = [
 
 export default function MarketingHub() {
   const { isAdmin } = useCurrentUser();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [contacts, setContacts] = useState([]);
   const [communications, setCommunications] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -32,6 +35,15 @@ export default function MarketingHub() {
   const [viewMode, setViewMode] = useState('cards');
   const [selectedComms, setSelectedComms] = useState([]);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [searchText, setSearchText] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [typeFilter, setTypeFilter] = useState(searchParams.get('filter') || 'all');
+
+  // Sync URL filter to state
+  useEffect(() => {
+    const f = searchParams.get('filter');
+    if (f) setTypeFilter(f);
+  }, [searchParams]);
 
   const load = () => {
     Promise.all([
@@ -59,6 +71,29 @@ export default function MarketingHub() {
     const now = new Date();
     return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
   }).length;
+
+  // Filtered communications
+  const filteredComms = communications.filter(comm => {
+    // Type filter (stat cards)
+    if (typeFilter === 'automated' && !comm.is_automated) return false;
+    if (typeFilter === 'this_month') {
+      const d = new Date(comm.created_date);
+      const now = new Date();
+      if (d.getMonth() !== now.getMonth() || d.getFullYear() !== now.getFullYear()) return false;
+    }
+    // Status filter
+    if (statusFilter === 'sent' && comm.status === 'failed') return false;
+    if (statusFilter === 'failed' && comm.status !== 'failed') return false;
+    // Search
+    if (searchText) {
+      const q = searchText.toLowerCase();
+      const contact = contacts.find(c => c.id === comm.contact_id);
+      const nameMatch = contact?.full_name?.toLowerCase().includes(q);
+      const contentMatch = comm.content?.toLowerCase().includes(q);
+      if (!nameMatch && !contentMatch) return false;
+    }
+    return true;
+  });
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">
@@ -133,10 +168,34 @@ export default function MarketingHub() {
       {activeTab === 'overview' && <>
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <MktStatCard label="סה״כ נשלחו" value={totalSent} icon={Send} color="bg-primary/10 text-primary" to="/marketing" />
-        <MktStatCard label="אוטומטי" value={automatedSent} icon={Bell} color="bg-gold/20 text-gold" to="/marketing" />
-        <MktStatCard label="החודש" value={thisMonthSent} icon={Calendar} color="bg-success/10 text-success" to="/marketing" />
-        <MktStatCard label="לקוחות פעילים" value={contacts.filter(c => c.status === 'active_client').length} icon={Users} color="bg-accent/20 text-accent-foreground" to="/contacts?filter=active_client" />
+        {[
+          { label: 'סה״כ נשלחו', value: totalSent, icon: Send, color: 'bg-primary/10 text-primary', filterKey: 'all' },
+          { label: 'אוטומטי', value: automatedSent, icon: Bell, color: 'bg-gold/20 text-gold', filterKey: 'automated' },
+          { label: 'החודש', value: thisMonthSent, icon: Calendar, color: 'bg-success/10 text-success', filterKey: 'this_month' },
+        ].map(s => {
+          const Icon = s.icon;
+          const active = typeFilter === s.filterKey;
+          return (
+            <Card key={s.label}
+              className={`shadow-sm hover:shadow-md hover:scale-[1.02] transition-all cursor-pointer ${active ? 'border-primary ring-1 ring-primary/30' : 'hover:border-primary/30'}`}
+              onClick={() => { setTypeFilter(active ? 'all' : s.filterKey); setSearchParams(active ? {} : { filter: s.filterKey }); }}>
+              <CardContent className="p-4">
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-2 ${s.color}`}><Icon size={16} /></div>
+                <div className="text-2xl font-bold">{s.value}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">{s.label}</div>
+              </CardContent>
+            </Card>
+          );
+        })}
+        <Link to="/contacts?filter=active_client" className="block">
+          <Card className="shadow-sm hover:shadow-md hover:border-primary/30 hover:scale-[1.02] transition-all cursor-pointer h-full">
+            <CardContent className="p-4">
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-2 bg-accent/20 text-accent-foreground"><Users size={16} /></div>
+              <div className="text-2xl font-bold">{contacts.filter(c => c.status === 'active_client').length}</div>
+              <div className="text-xs text-muted-foreground mt-0.5">לקוחות פעילים</div>
+            </CardContent>
+          </Card>
+        </Link>
       </div>
 
       {/* Message types */}
@@ -176,10 +235,40 @@ export default function MarketingHub() {
         })}
       </div>
 
-      {/* Recent sends */}
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
+          <Search size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="חיפוש לפי שם או תוכן..."
+            value={searchText}
+            onChange={e => setSearchText(e.target.value)}
+            className="pr-9 h-9 text-sm"
+          />
+          {searchText && <button onClick={() => setSearchText('')} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"><X size={14} /></button>}
+        </div>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-[140px] h-9 text-sm"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">כל הסטטוסים</SelectItem>
+            <SelectItem value="sent">נשלח</SelectItem>
+            <SelectItem value="failed">נכשל</SelectItem>
+          </SelectContent>
+        </Select>
+        {(searchText || statusFilter !== 'all' || typeFilter !== 'all') && (
+          <Button variant="ghost" size="sm" className="text-xs h-8" onClick={() => { setSearchText(''); setStatusFilter('all'); setTypeFilter('all'); setSearchParams({}); }}>
+            <X size={12} className="ml-1" /> נקה פילטרים
+          </Button>
+        )}
+      </div>
+
+      {/* Sends list */}
       <Card className="shadow-sm">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base font-semibold">שליחות אחרונות</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base font-semibold">שליחות{typeFilter === 'automated' ? ' — אוטומטיות' : typeFilter === 'this_month' ? ' — החודש' : ''}</CardTitle>
+            <span className="text-xs text-muted-foreground">{filteredComms.length} תוצאות</span>
+          </div>
         </CardHeader>
         <CardContent>
           <BulkDeleteBar count={selectedComms.length} label="שליחות" deleting={bulkDeleting}
@@ -188,11 +277,11 @@ export default function MarketingHub() {
               for (const id of selectedComms) await base44.entities.Communication.delete(id);
               setSelectedComms([]); setBulkDeleting(false); load();
             }} />
-          {communications.length === 0 ? (
-            <p className="text-sm text-muted-foreground">אין שליחות עדיין</p>
+          {filteredComms.length === 0 ? (
+            <p className="text-sm text-muted-foreground">אין שליחות תואמות</p>
           ) : (
             <div className="space-y-2">
-              {communications.slice(0, 10).map(comm => {
+              {filteredComms.map(comm => {
                 const contact = contacts.find(c => c.id === comm.contact_id);
                 return (
                   <div key={comm.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 text-sm">
@@ -223,20 +312,4 @@ export default function MarketingHub() {
       />
     </div>
   );
-}
-
-function MktStatCard({ label, value, icon: Icon, color, to }) {
-  const card = (
-    <Card className={`shadow-sm ${to ? 'hover:shadow-md hover:border-primary/30 hover:scale-[1.02] transition-all cursor-pointer' : ''}`}>
-      <CardContent className="p-4">
-        <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-2 ${color}`}>
-          <Icon size={16} />
-        </div>
-        <div className="text-2xl font-bold">{value}</div>
-        <div className="text-xs text-muted-foreground mt-0.5">{label}</div>
-      </CardContent>
-    </Card>
-  );
-  if (to) return <Link to={to} className="block">{card}</Link>;
-  return card;
 }
