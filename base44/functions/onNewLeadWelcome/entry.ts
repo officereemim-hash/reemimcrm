@@ -70,51 +70,56 @@ Deno.serve(async (req) => {
     }
 
     const sourceLabel = SOURCE_LABEL[c.source] || '';
-    const missing = [];
-    if (!c.full_name || c.full_name.trim().length < 2) missing.push({ field: 'full_name', label: 'מה השם המלא שלך?' });
-    if (!c.email) missing.push({ field: 'email', label: 'מה כתובת המייל שלך?' });
-
     const chatId = normalizeIntlPhone(c.phone) + '@c.us';
     let messageToSend;
     let templateUsed;
 
-    if (missing.length === 0) {
-      // כל הפרטים קיימים — שולחים ברכה + תפריט שירותים
+    if (c.source === 'shoranss') {
+      // מסלול שורנס — ברכה ייעודית ללא תפריט שירותים וללא pending
       templateUsed = 'new_lead_welcome';
-      let template = await getBotContent('new_lead_welcome');
-      if (!template) {
-        template = 'שלום {name} 🌿\nהגעת לקרנות ראמים — בשמת שערי-בלוך, משרד לתכנון פרישה ופנסיה.\nראינו שפנית אלינו {source_label}, ושמחים שאת/ה כאן! 🙏\n\nנשמח לכוון אותך לתחום הנכון — במה את/ה מתעניין/ת?\n1. ייעוץ פרישה\n2. היתכנות כלכלית\n3. השקעות\n4. איזון אקטוארי (גירושין)\n5. ייעוץ מס (שכר גבוה)\n6. אחר\n\n👈 פשוט השב/י במספר המתאים (1-6)';
-      }
-      messageToSend = template
-        .replaceAll('{name}', c.full_name || '')
-        .replaceAll('{source_label}', sourceLabel);
-      // אם אין מקור — הסר את שורת "ראינו שפנית אלינו"
-      if (!sourceLabel) {
-        messageToSend = messageToSend.replace(/ראינו שפנית אלינו\s*,?\s*/g, '');
-      }
+      const template = await getBotContent('new_lead_welcome_shoranss')
+        || 'שלום {name} 🌿\nהגעת לקרנות ראמים — בשמת שערי-בלוך, משרד לתכנון פרישה ופנסיה.\nראינו שפנית אלינו דרך שורנס, ושמחים שאת/ה כאן! 🙏\n\nבכל שאלה מוזמנים לפנות אלינו למספר: 0544405554';
+      messageToSend = template.replaceAll('{name}', c.full_name || '');
     } else {
-      // חסר פרט — שולחים ברכה + בקשת השלמה
-      templateUsed = 'new_lead_welcome';
-      let template = await getBotContent('new_lead_welcome_missing');
-      if (!template) {
-        template = 'שלום {name} 🌿\nהגעת לקרנות ראמים — בשמת שערי-בלוך, משרד לתכנון פרישה ופנסיה.\nראינו שפנית אלינו {source_label}, ושמחים שאת/ה כאן! 🙏\n\nלפני שנמשיך, נשמח להשלים פרט אחד: {missing_field}\nומיד נעבור לבחירת התחום שמעניין אותך 😊';
-      }
-      messageToSend = template
-        .replaceAll('{name}', c.full_name || c.phone || '')
-        .replaceAll('{source_label}', sourceLabel)
-        .replaceAll('{missing_field}', missing[0].label);
-      if (!sourceLabel) {
-        messageToSend = messageToSend.replace(/ראינו שפנית אלינו\s*,?\s*/g, '');
-      }
+      // מסלול רגיל — בדיקת פרטים חסרים
+      const missing = [];
+      if (!c.full_name || c.full_name.trim().length < 2) missing.push({ field: 'full_name', label: 'מה השם המלא שלך?' });
+      if (!c.email) missing.push({ field: 'email', label: 'מה כתובת המייל שלך?' });
 
-      // שמירת pending כדי שה-webhook יתפוס את התשובה
-      const settingKey = 'pending_missing_field_' + normalizeIntlPhone(c.phone);
-      const existingSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: settingKey });
-      const pendingData = JSON.stringify({ contact_id: c.id, field: missing[0].field });
-      if (existingSettings.length > 0) {
-        await base44.asServiceRole.entities.SystemSetting.update(existingSettings[0].id, { value: pendingData });
+      if (missing.length === 0) {
+        templateUsed = 'new_lead_welcome';
+        let template = await getBotContent('new_lead_welcome');
+        if (!template) {
+          template = 'שלום {name} 🌿\nהגעת לקרנות ראמים — בשמת שערי-בלוך, משרד לתכנון פרישה ופנסיה.\nראינו שפנית אלינו {source_label}, ושמחים שאת/ה כאן! 🙏\n\nנשמח לכוון אותך לתחום הנכון — במה את/ה מתעניין/ת?\n1. ייעוץ פרישה\n2. היתכנות כלכלית\n3. השקעות\n4. איזון אקטוארי (גירושין)\n5. ייעוץ מס (שכר גבוה)\n6. אחר\n\n👈 פשוט השב/י במספר המתאים (1-6)';
+        }
+        messageToSend = template
+          .replaceAll('{name}', c.full_name || '')
+          .replaceAll('{source_label}', sourceLabel);
+        if (!sourceLabel) {
+          messageToSend = messageToSend.replace(/ראינו שפנית אלינו\s*,?\s*/g, '');
+        }
       } else {
-        await base44.asServiceRole.entities.SystemSetting.create({ key: settingKey, value: pendingData, category: 'flow' });
+        templateUsed = 'new_lead_welcome';
+        let template = await getBotContent('new_lead_welcome_missing');
+        if (!template) {
+          template = 'שלום {name} 🌿\nהגעת לקרנות ראמים — בשמת שערי-בלוך, משרד לתכנון פרישה ופנסיה.\nראינו שפנית אלינו {source_label}, ושמחים שאת/ה כאן! 🙏\n\nלפני שנמשיך, נשמח להשלים פרט אחד: {missing_field}\nומיד נעבור לבחירת התחום שמעניין אותך 😊';
+        }
+        messageToSend = template
+          .replaceAll('{name}', c.full_name || c.phone || '')
+          .replaceAll('{source_label}', sourceLabel)
+          .replaceAll('{missing_field}', missing[0].label);
+        if (!sourceLabel) {
+          messageToSend = messageToSend.replace(/ראינו שפנית אלינו\s*,?\s*/g, '');
+        }
+
+        const settingKey = 'pending_missing_field_' + normalizeIntlPhone(c.phone);
+        const existingSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: settingKey });
+        const pendingData = JSON.stringify({ contact_id: c.id, field: missing[0].field });
+        if (existingSettings.length > 0) {
+          await base44.asServiceRole.entities.SystemSetting.update(existingSettings[0].id, { value: pendingData });
+        } else {
+          await base44.asServiceRole.entities.SystemSetting.create({ key: settingKey, value: pendingData, category: 'flow' });
+        }
       }
     }
 
