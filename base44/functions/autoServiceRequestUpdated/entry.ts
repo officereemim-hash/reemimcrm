@@ -471,6 +471,18 @@ Deno.serve(async (req) => {
         const confirmedResult = await sendWhatsApp(confirmedMessage);
         await logCommunication(confirmedMessage, 'documents_confirmed', confirmedResult);
       }
+
+      // הודעת סיום ההכנה לפגישה (רק במסלול רגיל; וובינר מקבל סיום בנקודה אחרת)
+      const isWebinar = serviceRequest.source === 'webinar';
+      if (!isWebinar) {
+        await new Promise(resolve => setTimeout(resolve, 1200));
+        const closingTemplate = await getContent('preparation_complete_closing')
+          || 'תודה רבה {name}! 🌿\nההכנה לפגישה הושלמה — את/ה מוזמן/ת להגיע מוכן/ה ורגוע/ה.\nנשמח לראותך בפגישה עם בשמת! 💜';
+        const closingMessage = fillTemplate(closingTemplate, { name: contact.full_name || '' });
+        const closingResult = await sendWhatsApp(closingMessage);
+        await logCommunication(closingMessage, 'preparation_complete_closing', closingResult);
+      }
+
       return Response.json({ ok: true, action: 'documents_confirmed' });
     }
 

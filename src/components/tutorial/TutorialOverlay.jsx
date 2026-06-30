@@ -5,7 +5,7 @@ export default function TutorialOverlay({ tutorial }) {
   if (!tutorial.isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-end justify-center pb-8 pointer-events-none">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center pointer-events-none">
       <div className="pointer-events-auto">
         <AnimatePresence mode="wait">
           <TutorialCard
