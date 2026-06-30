@@ -9,7 +9,7 @@ import { format } from 'date-fns';
 const SR_STATUS_OPTIONS = [
   { value: 'new', label: 'חדש' },
   { value: 'in_progress', label: 'בטיפול' },
-  { value: 'interested', label: 'תיאום פגישה (וובינר)' },
+  { value: 'interested', label: 'מעוניין' },
   { value: 'quote_sent', label: 'הצעה נשלחה' },
   { value: 'awaiting_client_decision', label: 'ממתין להחלטה' },
   { value: 'followup_active', label: 'פולו-אפ פעיל' },

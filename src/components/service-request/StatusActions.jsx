@@ -13,6 +13,7 @@ const allStatuses = [
   { value: 'in_progress', label: 'בטיפול' },
   { value: 'interested', label: 'מעוניין' },
   { value: 'quote_sent', label: 'הצעה נשלחה' },
+  { value: 'awaiting_client_decision', label: 'ממתין להחלטה' },
   { value: 'closed_lost', label: 'לא מעוניין' },
   { value: 'followup_active', label: 'פולו-אפ פעיל' },
   { value: 'phone_meeting', label: 'נקבעה שיחה טלפונית' },
