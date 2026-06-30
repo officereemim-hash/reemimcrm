@@ -64,20 +64,43 @@ async function getZoomToken() {
 
 async function shortenUrl(url) {
   if (!url) return '';
+  // ניסיון 1: cleanuri.com
   try {
-    const r = await fetch('https://tinyurl.com/api-create.php?url=' + encodeURIComponent(url), {
-      headers: { 'User-Agent': 'Mozilla/5.0' },
+    const r = await fetch('https://cleanuri.com/api/v1/shorten', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'url=' + encodeURIComponent(url),
     });
     if (r.ok) {
-      const s = (await r.text()).trim();
-      if (s.startsWith('http')) return s;
-      console.warn('shortenUrl: TinyURL returned non-URL:', s.slice(0, 100));
+      const data = await r.json();
+      if (data?.result_url && data.result_url.startsWith('http')) {
+        console.log('shortenUrl: cleanuri OK →', data.result_url);
+        return data.result_url;
+      }
+      console.warn('shortenUrl: cleanuri bad response:', JSON.stringify(data).slice(0, 200));
     } else {
-      console.warn('shortenUrl: TinyURL HTTP', r.status);
+      console.warn('shortenUrl: cleanuri HTTP', r.status, (await r.text()).slice(0, 200));
     }
   } catch (e) {
-    console.warn('shortenUrl: fetch failed:', e.message);
+    console.warn('shortenUrl: cleanuri threw:', e.message);
   }
+  // ניסיון 2 (גיבוי): is.gd
+  try {
+    const r = await fetch('https://is.gd/create.php?format=simple&url=' + encodeURIComponent(url));
+    if (r.ok) {
+      const s = (await r.text()).trim();
+      if (s.startsWith('http')) {
+        console.log('shortenUrl: is.gd OK →', s);
+        return s;
+      }
+      console.warn('shortenUrl: is.gd bad response:', s.slice(0, 200));
+    } else {
+      console.warn('shortenUrl: is.gd HTTP', r.status);
+    }
+  } catch (e) {
+    console.warn('shortenUrl: is.gd threw:', e.message);
+  }
+  console.warn('shortenUrl: ALL services failed, returning full URL');
   return url;
 }
 

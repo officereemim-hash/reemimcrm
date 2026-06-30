@@ -745,7 +745,11 @@ Deno.serve(async (req) => {
     // ===== FP-Polite: תגובת נימוס קצרה במצב המתנה — מענה קצר בלי סוכן =====
     const politeAnswers = ['תודה', 'תודה רבה', 'מעולה', 'אחלה', 'סבבה', 'יופי', 'מושלם', 'בסדר', 'בסדר גמור', '👍', '🙏', '❤️', '😊'];
     const waitingStatuses = ['phone_meeting', 'meeting_scheduled', 'meeting_scheduled_frontal', 'meeting_scheduled_zoom', 'interested', 'in_progress', 'awaiting_client_decision'];
-    if (serviceRequest && waitingStatuses.includes(serviceRequest.status) && politeAnswers.includes(normalizeAnswer(text))) {
+    // גם לקוח וובינר (יש לו WebinarRegistration עם coupon_sent/pending_payment/payment_completed) נחשב במצב המתנה
+    const isWebinarLead = contact && !serviceRequest && (await base44.asServiceRole.entities.WebinarRegistration.filter({ contact_id: contact.id }, '-created_date', 5))
+      .some(r => r.coupon_sent === true || r.pending_payment === true || r.payment_completed === true);
+    const inWaitingState = (serviceRequest && waitingStatuses.includes(serviceRequest.status)) || isWebinarLead;
+    if (inWaitingState && politeAnswers.includes(normalizeAnswer(text))) {
       const politeReply = await getBotContent(base44, 'polite_ack') || 'בשמחה 🙂';
       const sent = await sendWhatsApp(chatId, politeReply, botEnabled);
       await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
