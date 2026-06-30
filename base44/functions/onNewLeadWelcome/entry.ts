@@ -33,6 +33,13 @@ Deno.serve(async (req) => {
     if (c.status && c.status !== 'new_lead') return Response.json({ ok: true, skipped: 'not_new_lead' });
     if (c.source === 'webinar') return Response.json({ ok: true, skipped: 'webinar_has_own_intro' });
 
+    // אם הליד כבר בשיחת בוט פעילה (כתב ראשון והבוט יצר לו Contact) — לא לשלוח ברכה כפולה
+    const convKey = 'phone_conv_' + normalizeIntlPhone(c.phone);
+    const existingConv = await base44.asServiceRole.entities.SystemSetting.filter({ key: convKey });
+    if (existingConv.length) {
+      return Response.json({ ok: true, skipped: 'already_in_bot_conversation' });
+    }
+
     // --- gating ---
     async function getSetting(key) {
       const r = await base44.asServiceRole.entities.SystemSetting.filter({ key });
