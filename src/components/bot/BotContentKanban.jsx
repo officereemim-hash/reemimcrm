@@ -3,13 +3,36 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const ROUTE_MAP = {
+  service_intake: {
+    label: 'קליטת ליד / פתיחה',
+    keys: [
+      'greeting', 'instant_ack', 'new_lead_welcome', 'new_lead_welcome_missing',
+      'new_lead_welcome_shoranss', 'contact_details_confirm', 'welcome', 'menu_services',
+      'next_step_options', 'service_type_clarify', 'after_choice_wait', 'returning_client', 'returning_lead',
+    ],
+  },
   service_a_interested: {
     label: 'מסלול א — מעוניין',
-    keys: ['schedule_intro', 'quote_sent', 'meeting_summary_quote', 'meeting_scheduled', 'meeting_scheduled_zoom', 'meeting_scheduled_modiin', 'meeting_scheduled_petah_tikva', 'meeting_scheduled_phone', 'meeting_scheduled_divorce_split', 'meeting_scheduled_annual_service', 'post_location_photo_prompt', 'questionnaire_request', 'questionnaire_completed_thanks', 'questionnaire_ack_waiting', 'questionnaire_id_request', 'id_details_received_ack', 'id_details_retry', 'documents_request', 'documents_sent_ack', 'documents_received_ack', 'documents_confirmed', 'preparation_complete_closing', 'pre_meeting_reminder', 'reminder_d1', 'reminder_d1_zoom', 'reminder_d1_modiin', 'reminder_d1_petah_tikva', 'reminder_h1', 'meeting_day_reminder'],
+    keys: [
+      'schedule_intro', 'meeting_summary_quote', 'quote_sent',
+      'meeting_scheduled', 'meeting_scheduled_zoom', 'meeting_scheduled_modiin',
+      'meeting_scheduled_petah_tikva', 'meeting_scheduled_phone',
+      'meeting_scheduled_divorce_split', 'meeting_scheduled_annual_service',
+      'post_location_photo_prompt', 'questionnaire_request', 'questionnaire_ack_waiting',
+      'questionnaire_completed_thanks', 'questionnaire_id_request',
+      'id_details_received_ack', 'id_details_retry', 'documents_request',
+      'documents_sent_ack', 'documents_received_ack', 'documents_confirmed',
+      'preparation_complete_closing', 'pre_meeting_reminder', 'reminder_d1',
+      'reminder_d1_zoom', 'reminder_d1_modiin', 'reminder_d1_petah_tikva',
+      'reminder_h1', 'meeting_day_reminder',
+    ],
   },
   service_b_awaiting: {
     label: 'מסלול ב — ממתין להחלטה',
-    keys: ['quote_sent', 'meeting_summary_quote', 'schedule_intro', 'followup_t7', 'followup_t14', 'followup_t21', 'resume_nudge', 'resume_nudge_2'],
+    keys: [
+      'meeting_summary_quote', 'quote_sent', 'schedule_intro',
+      'resume_nudge', 'resume_nudge_2', 'followup_t7', 'followup_t14', 'followup_t21',
+    ],
   },
   service_c_not_interested: {
     label: 'מסלול ג — לא מעוניין',
@@ -17,15 +40,24 @@ const ROUTE_MAP = {
   },
   webinar: {
     label: 'וובינר',
-    keys: ['webinar_lead_intro', 'webinar_type_clarify', 'webinar_confirm', 'webinar_confirm_recording', 'webinar_reminder_1h', 'webinar_reminder_h1', 'webinar_reminder_start', 'webinar_coupon', 'webinar_payment_intro', 'webinar_payment', 'webinar_payment_pending_ack', 'webinar_location_choice', 'webinar_location', 'webinar_schedule', 'webinar_meeting_confirmed', 'webinar_recording'],
-  },
-  service_intake: {
-    label: 'קליטת ליד / פתיחה',
-    keys: ['greeting', 'instant_ack', 'welcome', 'new_lead_welcome', 'new_lead_welcome_missing', 'new_lead_welcome_shoranss', 'contact_details_confirm', 'menu_services', 'next_step_options', 'service_type_clarify', 'after_choice_wait', 'returning_client', 'returning_lead'],
+    keys: [
+      'webinar_lead_intro', 'webinar_type_clarify', 'webinar_confirm', 'webinar_confirm_recording',
+      'webinar_reminder_1h', 'webinar_reminder_h1', 'webinar_reminder_start', 'webinar_coupon',
+      'webinar_payment_intro', 'webinar_payment', 'webinar_payment_pending_ack',
+      'webinar_location_choice', 'webinar_location', 'webinar_schedule',
+      'webinar_meeting_confirmed', 'webinar_recording',
+    ],
   },
   shared_handoff: {
     label: 'משותף — נימוס, הבהרה, נציגה',
-    keys: ['polite_ack', 'patience_message', 'clarification_request', 'off_topic_reply', 'fallback_1', 'fallback_2_escalation', 'escalate_to_agent', 'handoff_message', 'wait_coordinator_ack', 'coordinator_notify', 'coordinator_no_response', 'conversation_closing', 'unsubscribe_confirm', 'birthday_greeting', 'birthday', 'annual_followup', 'shoranss_questionnaire', 'questionnaire_reminder', 'phone_call_summary_block'],
+    keys: [
+      'polite_ack', 'patience_message', 'clarification_request', 'fallback_1',
+      'fallback_2_escalation', 'off_topic_reply', 'wait_coordinator_ack',
+      'coordinator_notify', 'coordinator_no_response', 'escalate_to_agent',
+      'handoff_message', 'conversation_closing', 'shoranss_questionnaire',
+      'questionnaire_reminder', 'phone_call_summary_block', 'birthday',
+      'birthday_greeting', 'annual_followup', 'unsubscribe_confirm',
+    ],
   },
 };
 
@@ -43,9 +75,12 @@ const CATEGORIES_ORDER = [
 export default function BotContentKanban({ items, onEdit }) {
   const [route, setRoute] = useState('all');
 
-  const filteredItems = route === 'all'
-    ? items
-    : items.filter(item => ROUTE_MAP[route]?.keys.includes(item.key));
+  const routeKeys = route !== 'all' ? ROUTE_MAP[route]?.keys || [] : null;
+
+  const filteredItems = routeKeys
+    ? items.filter(item => routeKeys.includes(item.key))
+        .sort((a, b) => routeKeys.indexOf(a.key) - routeKeys.indexOf(b.key))
+    : items;
 
   const grouped = {};
   CATEGORIES_ORDER.forEach(c => { grouped[c.key] = []; });
