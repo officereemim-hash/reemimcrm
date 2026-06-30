@@ -3,7 +3,7 @@ import { base44 } from '@/api/base44Client';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Eraser, Loader2 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/use-toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 
 export default function ResetTestUserCard() {
@@ -13,7 +13,7 @@ export default function ResetTestUserCard() {
 
   const handleReset = async () => {
     if (!phone.trim() && !email.trim()) {
-      toast.error('הזיני מספר טלפון או אימייל של הבדיקה');
+      toast({ title: 'הזיני מספר טלפון או אימייל של הבדיקה', variant: 'destructive' });
       return;
     }
     setLoading(true);
@@ -21,9 +21,9 @@ export default function ResetTestUserCard() {
       const res = await base44.functions.invoke('resetTestUser', { phone: phone.trim(), email: email.trim() });
       const deleted = res.data?.deleted || {};
       const total = Object.values(deleted).reduce((a, b) => a + b, 0);
-      toast.success(total ? `נמחקו ${total} רשומות — אפשר להתחיל נקי` : 'לא נמצאו רשומות למחיקה — כבר נקי');
+      toast({ title: total ? `נמחקו ${total} רשומות — אפשר להתחיל נקי` : 'לא נמצאו רשומות למחיקה — כבר נקי' });
     } catch {
-      toast.error('שגיאה בניקוי הרשומות');
+      toast({ title: 'שגיאה בניקוי הרשומות', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
