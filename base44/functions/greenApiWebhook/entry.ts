@@ -253,6 +253,35 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, unsubscribed: true });
     }
     // ===== סוף הסרה מתפוצה =====
+    // === FP-MissingField: השלמת פרט חסר אחרי ברכת ליד חדש (onNewLeadWelcome) ===
+    const missingFieldKey = 'pending_missing_field_' + phone;
+    const pendingMissingSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: missingFieldKey });
+    if (pendingMissingSettings.length > 0) {
+      const pending = JSON.parse(pendingMissingSettings[0].value);
+      const fieldValue = text.trim();
+      if (fieldValue.length >= 2) {
+        // עדכון הפרט ב-Contact
+        const updateData = { [pending.field]: fieldValue };
+        if (pending.field === 'full_name') updateData.bot_status = 'waiting_user_reply';
+        await base44.asServiceRole.entities.Contact.update(pending.contact_id, updateData);
+        await base44.asServiceRole.entities.SystemSetting.delete(pendingMissingSettings[0].id);
+
+        // עכשיו שולחים את תפריט השירותים
+        const welcomeMsg = await getBotContent(base44, 'new_lead_welcome') || await getBotContent(base44, 'welcome') || 'תודה! במה את/ה מתעניין/ת?\n1. ייעוץ פרישה\n2. היתכנות כלכלית\n3. השקעות\n4. איזון אקטוארי (גירושין)\n5. ייעוץ מס (שכר גבוה)\n6. אחר\n\n👈 השב/י במספר (1-6)';
+        // שלוף רק את חלק התפריט (מ"נשמח לכוון" והלאה), או שלח הכל עם השם
+        const updatedContacts = await base44.asServiceRole.entities.Contact.filter({ id: pending.contact_id });
+        const updatedContact = updatedContacts[0];
+        const menuMsg = `תודה ${updatedContact?.full_name || ''} ✅\n\nנשמח לכוון אותך לתחום הנכון — במה את/ה מתעניין/ת?\n1. ייעוץ פרישה\n2. היתכנות כלכלית\n3. השקעות\n4. איזון אקטוארי (גירושין)\n5. ייעוץ מס (שכר גבוה)\n6. אחר\n\n👈 פשוט השב/י במספר המתאים (1-6)`;
+        const sent = await sendWhatsApp(chatId, menuMsg, botEnabled);
+        await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
+        await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_missing`, phone, menuMsg, chatId, conversationId, outgoingStatus);
+        try {
+          await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${menuMsg}` });
+        } catch (error) {}
+        return Response.json({ ok: true, fast_path: 'fp_missing_field_completed', field: pending.field });
+      }
+    }
+
     if (contact && (!contact.full_name || !contact.phone || !contact.email)) contact = null;
 
     let serviceRequest = null;
@@ -487,8 +516,23 @@ Deno.serve(async (req) => {
     }
 
     const selectedServiceType = detectServiceType(text);
-    if (selectedServiceType && contact && serviceRequest && !serviceRequest.service_type) {
-      await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { service_type: selectedServiceType });
+    if (selectedServiceType && contact) {
+      // אם אין SR פעיל — יוצרים אחד (ליד חדש שבחר שירות ישירות מהתפריט)
+      if (!serviceRequest || ['completed', 'cancelled', 'closed_lost', 'followup_closed'].includes(serviceRequest?.status)) {
+        serviceRequest = await base44.asServiceRole.entities.ServiceRequest.create({
+          contact_id: contact.id,
+          contact_name: contact.full_name,
+          contact_phone: contact.phone,
+          contact_email: contact.email,
+          service_type: selectedServiceType,
+          status: 'new',
+          source: 'bot',
+          conversation_id: conversationId,
+        });
+      } else if (!serviceRequest.service_type) {
+        await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { service_type: selectedServiceType });
+      }
+
       const waitMessageTemplate = await getBotContent(base44, 'after_choice_wait');
       const calendarLink = await getServiceContentUrl(base44, {
         service_type: 'general',
