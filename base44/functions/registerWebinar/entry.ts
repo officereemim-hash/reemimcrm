@@ -62,6 +62,15 @@ async function getZoomToken() {
   return data.access_token;
 }
 
+async function shortenUrl(url) {
+  if (!url) return '';
+  try {
+    const r = await fetch('https://is.gd/create.php?format=simple&url=' + encodeURIComponent(url));
+    if (r.ok) { const s = (await r.text()).trim(); if (s.startsWith('http')) return s; }
+  } catch (_) {}
+  return url;
+}
+
 // Public — webinar landing-page registration (no auth required)
 Deno.serve(async (req) => {
   try {
@@ -171,13 +180,15 @@ Deno.serve(async (req) => {
       ? new Date(page.webinar_date).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', dateStyle: 'full', timeStyle: 'short' })
       : '';
 
-    const calendarAddLink = buildCalendarAddLink(
+    const effectiveLink = hasRecording ? page.recording_url : (zoomJoinUrl || zoomLink);
+
+    const rawCalendarLink = buildCalendarAddLink(
       page.webinar_date,
       page.hero_title || 'וובינר — קרנות ראמים',
-      zoomLink ? `קישור להצטרפות: ${zoomLink}` : ''
+      effectiveLink ? `קישור להצטרפות: ${effectiveLink}` : ''
     );
+    const calendarAddLink = await shortenUrl(rawCalendarLink);
 
-    const effectiveLink = hasRecording ? page.recording_url : (zoomJoinUrl || zoomLink);
     const message = fillTemplate(confirmTemplate, { name: full_name, date: dateStr, zoom_link: effectiveLink, calendar_add_link: calendarAddLink });
 
     // Check bot/green-api enabled
