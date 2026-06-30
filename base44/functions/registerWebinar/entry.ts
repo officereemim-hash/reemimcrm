@@ -65,9 +65,19 @@ async function getZoomToken() {
 async function shortenUrl(url) {
   if (!url) return '';
   try {
-    const r = await fetch('https://is.gd/create.php?format=simple&url=' + encodeURIComponent(url));
-    if (r.ok) { const s = (await r.text()).trim(); if (s.startsWith('http')) return s; }
-  } catch (_) {}
+    const r = await fetch('https://tinyurl.com/api-create.php?url=' + encodeURIComponent(url), {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+    });
+    if (r.ok) {
+      const s = (await r.text()).trim();
+      if (s.startsWith('http')) return s;
+      console.warn('shortenUrl: TinyURL returned non-URL:', s.slice(0, 100));
+    } else {
+      console.warn('shortenUrl: TinyURL HTTP', r.status);
+    }
+  } catch (e) {
+    console.warn('shortenUrl: fetch failed:', e.message);
+  }
   return url;
 }
 

@@ -91,6 +91,7 @@ Deno.serve(async (req) => {
         coupon_sent: true,
         coupon_sent_at: new Date().toISOString().split('T')[0],
         attended: true,
+        pending_payment: true,
       });
       await base44.asServiceRole.entities.Communication.create({
         contact_id: contact.id, type: 'whatsapp', direction: 'outbound',

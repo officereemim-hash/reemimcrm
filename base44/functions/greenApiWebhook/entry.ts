@@ -444,7 +444,10 @@ Deno.serve(async (req) => {
     // אם עדיין לא אושר → שולחים הודעת המתנה. אישור התשלום נעשה ע"י הצוות בלבד.
     if (contact && (normalizeAnswer(text).startsWith('שילמתי') || normalizeAnswer(text) === 'שולם')) {
       const regsByContact = await base44.asServiceRole.entities.WebinarRegistration.filter({ contact_id: contact.id }, '-created_date', 10);
-      const reg = regsByContact.find(r => r.pending_payment === true || r.payment_completed === true);
+      let reg = regsByContact.find(r => r.pending_payment === true || r.payment_completed === true);
+      if (!reg) {
+        reg = regsByContact.find(r => r.coupon_sent === true); // fallback — קופון נשלח אבל pending_payment לא סומן
+      }
       if (reg) {
         let message;
         let fastPath;
@@ -741,7 +744,7 @@ Deno.serve(async (req) => {
 
     // ===== FP-Polite: תגובת נימוס קצרה במצב המתנה — מענה קצר בלי סוכן =====
     const politeAnswers = ['תודה', 'תודה רבה', 'מעולה', 'אחלה', 'סבבה', 'יופי', 'מושלם', 'בסדר', 'בסדר גמור', '👍', '🙏', '❤️', '😊'];
-    const waitingStatuses = ['phone_meeting', 'meeting_scheduled', 'meeting_scheduled_frontal', 'meeting_scheduled_zoom'];
+    const waitingStatuses = ['phone_meeting', 'meeting_scheduled', 'meeting_scheduled_frontal', 'meeting_scheduled_zoom', 'interested', 'in_progress', 'awaiting_client_decision'];
     if (serviceRequest && waitingStatuses.includes(serviceRequest.status) && politeAnswers.includes(normalizeAnswer(text))) {
       const politeReply = await getBotContent(base44, 'polite_ack') || 'בשמחה 🙂';
       const sent = await sendWhatsApp(chatId, politeReply, botEnabled);
