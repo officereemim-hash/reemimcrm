@@ -42,7 +42,16 @@ export default function LandingPageFormDialog({ open, onClose, onSave, editItem 
     if (editItem) {
       setForm({
         ...EMPTY, ...editItem,
-        webinar_date: editItem.webinar_date ? editItem.webinar_date.slice(0, 16) : '',
+        webinar_date: editItem.webinar_date
+          ? (() => {
+              const d = new Date(editItem.webinar_date);
+              return new Intl.DateTimeFormat('sv-SE', {
+                timeZone: 'Asia/Jerusalem',
+                year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit', hour12: false,
+              }).format(d).replace(' ', 'T');
+            })()
+          : '',
         blocks: editItem.blocks || [],
         faqs: editItem.faqs || [],
       });
