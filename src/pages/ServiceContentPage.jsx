@@ -11,6 +11,7 @@ import ServiceContentFormDialog, { CONTENT_TYPES, SERVICE_TYPES } from '@/compon
 import ServiceContentTable from '@/components/bot/ServiceContentTable';
 import ViewToggle from '@/components/shared/ViewToggle';
 import BulkDeleteBar from '@/components/shared/BulkDeleteBar';
+import ServiceContentKanban from '@/components/service-content/ServiceContentKanban';
 import { Pencil, Trash2 } from 'lucide-react';
 
 const ICON_MAP = { video: Video, pdf: FileText, questionnaire: ClipboardList, payment_link: CreditCard, external_link: LinkIcon, agreement: FileCheck, calendar_link: Calendar };
@@ -74,7 +75,7 @@ export default function ServiceContentPage() {
           </div>
         </div>
         <div className="flex gap-2 items-center">
-          <ViewToggle view={viewMode} onViewChange={setViewMode} />
+          <ViewToggle view={viewMode} onViewChange={setViewMode} showKanban />
           <Button onClick={() => { setEditItem(null); setShowForm(true); }} className="gap-2" size="sm"><Plus size={16} />תוכן חדש</Button>
         </div>
       </div>
@@ -104,6 +105,8 @@ export default function ServiceContentPage() {
         <div className="flex justify-center py-12"><div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" /></div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">אין תוכן להצגה</div>
+      ) : viewMode === 'kanban' ? (
+        <ServiceContentKanban items={filtered} onEdit={item => { setEditItem(item); setShowForm(true); }} />
       ) : viewMode === 'table' ? (
         <ServiceContentTable items={filtered} onEdit={item => { setEditItem(item); setShowForm(true); }} onDelete={setDeleteTarget}
           selectedIds={selectedIds} onToggle={toggleId} onToggleAll={toggleAll} />
