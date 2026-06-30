@@ -721,6 +721,24 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, fast_path: 'fp_documents_sent_ack' });
     }
 
+    // ===== FP-QuestionnaireSelfReport: לקוח אומר "מילאתי" — אישור המתנה (האימות בשורנס בלבד) =====
+    const questionnaireStatuses = ['meeting_scheduled', 'meeting_scheduled_frontal', 'meeting_scheduled_zoom'];
+    const filledKeywords = ['מילאתי', 'מלאתי', 'סיימתי את השאלון', 'סיימתי שאלון', 'שלחתי את השאלון', 'מילאתי את השאלון'];
+    if (contact && serviceRequest && questionnaireStatuses.includes(serviceRequest.status) && !serviceRequest.questionnaire_completed) {
+      const normalizedText = normalizeAnswer(text);
+      if (filledKeywords.some(kw => normalizedText.includes(kw))) {
+        const ackTemplate = await getBotContent(base44, 'questionnaire_ack_waiting') || 'תודה {name}! 🙏\nנבדוק שהשאלון אכן התקבל במערכת — זה עשוי לקחת כמה דקות.\nנעדכן אותך ברגע שיתקבל האישור.';
+        const ackMsg = ackTemplate.replaceAll('{name}', contact.full_name || '');
+        const sent = await sendWhatsApp(chatId, ackMsg, botEnabled);
+        await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
+        await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_q_ack`, phone, ackMsg, chatId, conversationId, outgoingStatus);
+        try {
+          await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${ackMsg}` });
+        } catch (error) {}
+        return Response.json({ ok: true, fast_path: 'fp_questionnaire_ack_waiting' });
+      }
+    }
+
     // ===== FP-Polite: תגובת נימוס קצרה במצב המתנה — מענה קצר בלי סוכן =====
     const politeAnswers = ['תודה', 'תודה רבה', 'מעולה', 'אחלה', 'סבבה', 'יופי', 'מושלם', 'בסדר', 'בסדר גמור', '👍', '🙏', '❤️', '😊'];
     const waitingStatuses = ['phone_meeting', 'meeting_scheduled', 'meeting_scheduled_frontal', 'meeting_scheduled_zoom'];

@@ -415,13 +415,7 @@ Deno.serve(async (req) => {
         await logCommunication(questionnaireMessage, 'questionnaire_request', questionnaireResult);
       }
 
-      // הודעת סיום גם במסלול רגיל
-      await new Promise(resolve => setTimeout(resolve, 1200));
-      const closingTemplate = await getContent('conversation_closing');
-      const closingMessage = fillTemplate(closingTemplate || 'תודה רבה {name}, שיהיה לך יום נפלא! 🙏', values);
-      const closingResult = await sendWhatsApp(closingMessage);
-      await logCommunication(closingMessage, 'conversation_closing', closingResult);
-
+      // מסלול רגיל: לא שולחים הודעת סיום — הלקוח צריך למלא שאלון, ת"ז ומסמכים
       await base44.asServiceRole.entities.Contact.update(contact.id, {
         bot_status: 'waiting_user_reply',
         shoranss_questionnaire: 'sent',
