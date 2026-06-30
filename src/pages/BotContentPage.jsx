@@ -8,6 +8,7 @@ import BotContentFilters from '@/components/bot/BotContentFilters';
 import BotContentCard from '@/components/bot/BotContentCard';
 import BotContentTable from '@/components/bot/BotContentTable';
 import BotContentFormDialog from '@/components/bot/BotContentFormDialog';
+import BotContentKanban from '@/components/bot/BotContentKanban';
 import ViewToggle from '@/components/shared/ViewToggle';
 import BulkDeleteBar from '@/components/shared/BulkDeleteBar';
 
@@ -73,7 +74,7 @@ export default function BotContentPage() {
           </div>
         </div>
         <div className="flex gap-2 items-center">
-          <ViewToggle view={viewMode} onViewChange={setViewMode} />
+          <ViewToggle view={viewMode} onViewChange={setViewMode} showKanban />
           <Button onClick={handleNew} className="gap-2" size="sm"><Plus size={16} />הודעה חדשה</Button>
         </div>
       </div>
@@ -91,6 +92,8 @@ export default function BotContentPage() {
       ) : viewMode === 'table' ? (
         <BotContentTable items={filtered} onEdit={handleEdit} onDelete={setDeleteTarget}
           selectedIds={selectedIds} onToggle={toggleId} onToggleAll={toggleAll} />
+      ) : viewMode === 'kanban' ? (
+        <BotContentKanban items={filtered} onEdit={handleEdit} />
       ) : (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map(item => (
