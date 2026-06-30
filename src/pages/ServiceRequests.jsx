@@ -20,7 +20,7 @@ import { FileText, Clock, CalendarCheck, Users, XCircle } from 'lucide-react';
 
 const SR_STATUS_COLUMNS = [
   { key: 'new_inprogress', label: 'פניות חדשות', statuses: ['new', 'in_progress'] },
-  { key: 'quote', label: 'הצעות ומעקב', statuses: ['quote_sent', 'awaiting_client_decision'] },
+  { key: 'quote', label: 'הצעות ומעקב', statuses: ['quote_sent', 'awaiting_client_decision', 'interested'] },
   { key: 'followup', label: 'פולו-אפ', statuses: ['followup_active'] },
   { key: 'meeting', label: 'הכנה לפגישה', statuses: ['meeting_scheduled', 'meeting_scheduled_frontal', 'meeting_scheduled_zoom', 'phone_meeting'] },
   { key: 'done', label: 'סגירה וסיום', statuses: ['completed', 'cancelled', 'followup_closed', 'closed_lost'] },
@@ -31,6 +31,7 @@ const STATUS_FILTER_OPTIONS = [
   { value: 'new', label: 'חדש' },
   { value: 'in_progress', label: 'בטיפול' },
   { value: 'quote_sent', label: 'הצעה נשלחה' },
+  { value: 'interested', label: 'מעוניין' },
   { value: 'awaiting_client_decision', label: 'ממתין להחלטה' },
   { value: 'followup_active', label: 'פולו-אפ פעיל' },
   { value: 'phone_meeting', label: 'נקבעה שיחה טלפונית' },

@@ -567,6 +567,36 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, fast_path: 'fp_wait_coordinator' });
     }
 
+    // ===== FP-AwaitingDecision: ניתוב תגובת לקוח כשהפנייה בסטטוס "ממתין להחלטה" =====
+    if (contact && serviceRequest && serviceRequest.status === 'awaiting_client_decision') {
+      const answer = normalizeAnswer(text);
+      const wantKeywords = ['מעוניין', 'כן', 'רוצה להתקדם', 'להתקדם', 'מעוניינת', 'רוצה', 'בטח', 'כמובן'];
+      const thinkKeywords = ['אחשוב', 'עוד לחשוב', 'צריך לחשוב', 'אחשוב על זה'];
+      const noKeywords = ['לא מעוניין', 'לא מעוניינת', 'לא רוצה', 'לא מתאים'];
+
+      if (wantKeywords.some(k => answer.includes(k) || answer === k)) {
+        await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { status: 'interested' });
+        await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
+        try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'user', content: text }); } catch (e) {}
+        return Response.json({ ok: true, fast_path: 'fp_awaiting_to_interested' });
+      }
+      if (thinkKeywords.some(k => answer.includes(k) || answer === k)) {
+        const thinkMsg = await getBotContent(base44, 'awaiting_think_ack') || 'בסדר גמור, קח/י את הזמן 🙏 ניצור קשר שוב בקרוב.';
+        const sent = await sendWhatsApp(chatId, thinkMsg, botEnabled);
+        await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
+        await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_think`, phone, thinkMsg, chatId, conversationId, outgoingStatus);
+        try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${thinkMsg}` }); } catch (e) {}
+        return Response.json({ ok: true, fast_path: 'fp_awaiting_think' });
+      }
+      if (noKeywords.some(k => answer.includes(k) || answer === k)) {
+        await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { status: 'closed_lost', closed_reason: 'lost_not_interested' });
+        await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
+        try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'user', content: text }); } catch (e) {}
+        return Response.json({ ok: true, fast_path: 'fp_awaiting_to_closed_lost' });
+      }
+      // תשובה לא מוכרת — ממשיכים לסוכן AI
+    }
+
     // ===== FP-MeetingChoice: בחירת מיקום פגישה אחרי שהלקוח מעוניין (interested) =====
     if (contact && serviceRequest && serviceRequest.status === 'interested') {
       const locationMap = {

@@ -214,17 +214,66 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, action: 'send_basmat_schedule' });
     }
 
+    // === מסלול ב: ממתין להחלטה — שליחת סיכום + הצעת מחיר + שאלת "מעוניין/אחשוב" + משימת פולו-אפ ===
+    if (statusChanged && newStatus === 'awaiting_client_decision') {
+      if (await alreadySentRecently('quote_sent')) {
+        return Response.json({ ok: true, skipped: 'duplicate_event' });
+      }
+
+      const phoneSummary = await getPhoneSummaryBlock();
+      const quoteUrl = await getUrl('pdf', 'quote_' + serviceType);
+      const quoteContent = await getContent('quote_sent');
+      let message = fillTemplate(quoteContent || 'שמחתי לדבר! הנה הצעת המחיר כמובקש 📄 {link}\n\nמה תרצה לעשות?\n✅ *מעוניין* — להתקדם לתיאום פגישה\n🤔 *אחשוב* — ניתן לך זמן ונחזור אליך\n❌ *לא מעוניין* — לסגור את הפנייה', {
+        name: contact.full_name || '',
+        link: quoteUrl,
+        summary: phoneSummary,
+      }).replace(/\n{3,}/g, '\n\n');
+
+      const sent = await sendWhatsApp(message);
+      await logCommunication(message, 'quote_sent', sent);
+
+      // שליחת הצעת מחיר כקובץ
+      if (quoteUrl) {
+        const isPdfFile = /\.pdf(\?.*)?$/i.test(quoteUrl);
+        if (isPdfFile) {
+          await new Promise(resolve => setTimeout(resolve, 1200));
+          const fileResult = await sendWhatsAppFile(quoteUrl, `הצעת מחיר - ${contact.full_name || ''}.pdf`);
+          await logCommunication(quoteUrl, 'quote_sent_file', fileResult);
+        }
+      }
+
+      // משימת פולו-אפ ל-7 ימים
+      await base44.asServiceRole.entities.Task.create({
+        contact_id: contact.id,
+        service_request_id: serviceRequest.id,
+        title: `פולו-אפ הצעת מחיר — ${contact.full_name || ''}`,
+        type: 'followup',
+        category: 'sales',
+        assigned_to: 'bar',
+        due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        auto_generated: true,
+      });
+
+      await base44.asServiceRole.entities.Contact.update(contact.id, {
+        bot_status: 'waiting_user_reply',
+        last_bot_interaction_at: new Date().toISOString(),
+      });
+      return Response.json({ ok: true, action: 'route_b_awaiting_decision', whatsapp_sent: sent });
+    }
+
+    // === מסלול א: מעוניין — הזמנת תיאום פגישה ===
     if (statusChanged && newStatus === 'interested') {
       if (await alreadySentRecently('schedule_intro')) {
         return Response.json({ ok: true, skipped: 'duplicate_event' });
       }
 
-      // מסלול וובינר — דילוג על הצעת מחיר/סיכום, שולחים רק בחירת מיקום
       const isWebinar = serviceRequest.source === 'webinar';
+      // אם כבר נשלחה הצעת מחיר (מגיע מ-awaiting_client_decision) — שולחים רק הזמנת פגישה
+      const alreadyGotQuote = await alreadySentRecently('quote_sent');
 
       const intro = await getContent('schedule_intro');
-      const phoneSummary = isWebinar ? '' : await getPhoneSummaryBlock();
-      const quoteUrl = isWebinar ? '' : await getUrl('pdf', 'quote_' + serviceType);
+      const phoneSummary = (isWebinar || alreadyGotQuote) ? '' : await getPhoneSummaryBlock();
+      const quoteUrl = (isWebinar || alreadyGotQuote) ? '' : await getUrl('pdf', 'quote_' + serviceType);
       let message = fillTemplate(intro || 'מעולה, שמחנו לשמוע שתרצה להתקדם. השלב הבא הוא תיאום פגישה עם בשמת.', {
         name: contact.full_name || '',
         summary: phoneSummary,
@@ -240,8 +289,8 @@ Deno.serve(async (req) => {
       const sent = await sendWhatsApp(message);
       await logCommunication(message, 'schedule_intro', sent);
 
-      // שליחת הצעת מחיר כקובץ (מסלול רגיל בלבד)
-      if (!isWebinar && quoteUrl) {
+      // שליחת הצעת מחיר כקובץ (מסלול רגיל בלבד, ורק אם לא נשלחה כבר)
+      if (!isWebinar && !alreadyGotQuote && quoteUrl) {
         const isPdfFile = /\.pdf(\?.*)?$/i.test(quoteUrl);
         if (isPdfFile) {
           await new Promise(resolve => setTimeout(resolve, 1200));
@@ -382,46 +431,9 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, action: 'meeting_scheduled_sequence', template: templateKey });
     }
 
+    // === quote_sent — סימון שקט בלבד, ללא שליחת הודעה/קובץ/משימה ===
     if (statusChanged && newStatus === 'quote_sent') {
-      if (await alreadySentRecently('quote_sent')) {
-        return Response.json({ ok: true, skipped: 'duplicate_event' });
-      }
-      const quoteContent = await getContent('quote_sent');
-      const quoteUrl = await getUrl('pdf', 'quote_' + serviceType);
-      const message = fillTemplate(quoteContent || 'שמחתי לדבר! הנה הצעת המחיר כמובקש 📄 {link}', {
-        name: contact.full_name || '',
-        link: quoteUrl,
-        summary: await getPhoneSummaryBlock(),
-      }).replace(/\n{3,}/g, '\n\n');
-      const sent = await sendWhatsApp(message);
-      if (quoteUrl && !message.includes(quoteUrl)) {
-        // אם הצעת המחיר היא קובץ PDF ישיר — שולחים כקובץ מצורף; אחרת כקישור טקסט
-        const isPdfFile = /\.pdf(\?.*)?$/i.test(quoteUrl);
-        if (isPdfFile) {
-          await new Promise(resolve => setTimeout(resolve, 1200));
-          const fileResult = await sendWhatsAppFile(quoteUrl, `הצעת מחיר - ${contact.full_name || ''}.pdf`);
-          await logCommunication(quoteUrl, 'quote_sent_file', fileResult);
-        } else {
-          const linkResult = await sendWhatsApp(quoteUrl);
-          await logCommunication(quoteUrl, 'quote_sent_link', linkResult);
-        }
-      }
-      await logCommunication(message, 'quote_sent', sent);
-      await base44.asServiceRole.entities.Contact.update(contact.id, {
-        bot_status: 'waiting_user_reply',
-        last_bot_interaction_at: new Date().toISOString(),
-      });
-      await base44.asServiceRole.entities.Task.create({
-        contact_id: contact.id,
-        service_request_id: serviceRequest.id,
-        title: `פולו-אפ הצעת מחיר — ${contact.full_name || ''}`,
-        type: 'followup',
-        category: 'sales',
-        assigned_to: 'bar',
-        due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        auto_generated: true,
-      });
-      return Response.json({ ok: true, action: 'route_b_thinking', whatsapp_sent: sent });
+      return Response.json({ ok: true, action: 'quote_sent_silent' });
     }
 
     if (statusChanged && (newStatus === 'followup_active' || newStatus === 'closed_lost')) {

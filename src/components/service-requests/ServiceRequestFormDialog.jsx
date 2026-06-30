@@ -10,7 +10,7 @@ import { SERVICE_TYPE_LABELS, SOURCE_LABELS } from '@/components/StatusBadge';
 const SR_STATUS_OPTIONS = [
   { value: 'new', label: 'חדש' },
   { value: 'in_progress', label: 'בטיפול' },
-  { value: 'interested', label: 'מעוניין (תיאום פגישה)' },
+  { value: 'interested', label: 'מעוניין' },
   { value: 'quote_sent', label: 'הצעה נשלחה' },
   { value: 'awaiting_client_decision', label: 'ממתין להחלטה' },
   { value: 'followup_active', label: 'פולו-אפ פעיל' },
