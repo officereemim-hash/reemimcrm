@@ -31,14 +31,24 @@ Deno.serve(async (req) => {
 
     if (!c?.id || !c?.phone) return Response.json({ ok: true, skipped: 'no_phone' });
     if (c.status && c.status !== 'new_lead') return Response.json({ ok: true, skipped: 'not_new_lead' });
-    if (c.source === 'webinar') return Response.json({ ok: true, skipped: 'webinar_has_own_intro' });
+
+    async function logSkipped(reason, detailHe) {
+      try {
+        await base44.asServiceRole.entities.Communication.create({
+          contact_id: c.id, type: 'bot_event', direction: 'outbound',
+          content: `דילוג על ברכה אוטומטית — ${detailHe}`,
+          sent_by: 'system', is_automated: true, template_id: 'new_lead_welcome_skipped',
+          status: 'skipped', error_detail: reason,
+        });
+      } catch (_) { /* לא לחסום את ה-return */ }
+    }
+
+    if (c.source === 'webinar') { await logSkipped('webinar_has_own_intro', 'ליד מוובינר — מקבל פתיחה ייעודית'); return Response.json({ ok: true, skipped: 'webinar_has_own_intro' }); }
 
     // אם הליד כבר בשיחת בוט פעילה (כתב ראשון והבוט יצר לו Contact) — לא לשלוח ברכה כפולה
     const convKey = 'phone_conv_' + normalizeIntlPhone(c.phone);
     const existingConv = await base44.asServiceRole.entities.SystemSetting.filter({ key: convKey });
-    if (existingConv.length) {
-      return Response.json({ ok: true, skipped: 'already_in_bot_conversation' });
-    }
+    if (existingConv.length) { await logSkipped('already_in_bot_conversation', 'הליד כבר בשיחה פעילה עם הבוט'); return Response.json({ ok: true, skipped: 'already_in_bot_conversation' }); }
 
     // --- gating ---
     async function getSetting(key) {
@@ -52,23 +62,19 @@ Deno.serve(async (req) => {
       getSetting('test_mode_allowed_numbers'),
     ]);
 
-    if (botEnabledVal !== 'true' || greenEnabledVal !== 'true') {
-      return Response.json({ ok: true, skipped: 'bot_off' });
-    }
+    if (botEnabledVal !== 'true' || greenEnabledVal !== 'true') { await logSkipped('bot_off', 'הבוט/Green API כבוי כרגע'); return Response.json({ ok: true, skipped: 'bot_off' }); }
 
     const allowedTrimmed = String(allowedRaw || '').trim();
     if (allowedTrimmed) {
       const allowed = allowedTrimmed.split(',').map(n => normalizeLocalPhone(n.trim())).filter(Boolean);
-      if (!allowed.includes(normalizeLocalPhone(c.phone))) {
-        return Response.json({ ok: true, skipped: 'test_mode_not_allowed' });
-      }
+      if (!allowed.includes(normalizeLocalPhone(c.phone))) { await logSkipped('test_mode_not_allowed', 'הבוט במצב בדיקות — הליד לא ברשימת המספרים המורשים'); return Response.json({ ok: true, skipped: 'test_mode_not_allowed' }); }
     }
 
     // --- הגנת כפילות ---
     const prior = await base44.asServiceRole.entities.Communication.filter(
       { contact_id: c.id, template_id: 'new_lead_welcome' }, '-created_date', 1
     );
-    if (prior.length) return Response.json({ ok: true, skipped: 'already_welcomed' });
+    if (prior.length) { await logSkipped('already_welcomed', 'ברכה כבר נשלחה בעבר לליד הזה'); return Response.json({ ok: true, skipped: 'already_welcomed' }); }
 
     // --- הכנת תוכן ---
     async function getBotContent(key) {
