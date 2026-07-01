@@ -156,12 +156,12 @@ export default function Webinars() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">וובינרים</h1>
           <p className="text-muted-foreground text-sm mt-0.5">{registrations.length} רישומים</p>
         </div>
-        <div className="flex gap-2 items-center">
+        <div className="flex gap-2 items-center flex-wrap w-full md:w-auto">
           <ViewToggle view={viewMode} onViewChange={setViewMode} />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -189,7 +189,7 @@ export default function Webinars() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         {[
           { label: 'נרשמו', value: stats.total, color: 'text-primary', filterKey: 'all' },
           { label: 'השתתפו', value: stats.attended, color: 'text-gold', filterKey: 'attended' },

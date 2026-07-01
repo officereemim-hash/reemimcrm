@@ -172,12 +172,12 @@ export default function ServiceRequests() {
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">פניות שירות</h1>
           <p className="text-muted-foreground text-sm mt-0.5">{requests.length} פניות במערכת</p>
         </div>
-        <div className="flex gap-2 items-center flex-wrap">
+        <div className="flex gap-2 items-center flex-wrap w-full md:w-auto">
           <ViewToggle view={viewMode} onViewChange={setViewMode} showKanban />
           <Button onClick={() => { setEditItem(null); setShowForm(true); }} className="gap-2" size="sm">
             <Plus size={16} />

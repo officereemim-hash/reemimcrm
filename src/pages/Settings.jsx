@@ -20,7 +20,7 @@ export default function Settings() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 border-b pb-2">
+      <div className="flex gap-2 flex-wrap border-b pb-2">
         <button
           onClick={() => setActiveTab('general')}
           className={`px-4 py-2 rounded-t-lg text-sm font-medium transition-colors ${

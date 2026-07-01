@@ -15,7 +15,8 @@ export default function MeetingsTable({ meetings, contacts, onEdit, onDelete, se
 
   return (
     <div className="border rounded-lg overflow-hidden">
-      <Table>
+      <div className="overflow-x-auto -mx-3 md:mx-0">
+      <Table className="min-w-[720px]">
         <TableHeader>
           <TableRow>
             {onToggle && <TableHead className="w-10"><Checkbox checked={allSelected} onCheckedChange={() => onToggleAll(meetings)} /></TableHead>}
@@ -57,6 +58,7 @@ export default function MeetingsTable({ meetings, contacts, onEdit, onDelete, se
           })}
         </TableBody>
       </Table>
+      </div>
     </div>
   );
 }

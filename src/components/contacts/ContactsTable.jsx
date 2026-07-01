@@ -12,7 +12,8 @@ export default function ContactsTable({ contacts, selectedIds, onToggleSelect, o
 
   return (
     <div className="border rounded-lg overflow-hidden">
-      <Table>
+      <div className="overflow-x-auto -mx-3 md:mx-0">
+      <Table className="min-w-[720px]">
         <TableHeader>
           <TableRow>
             <TableHead className="w-10">
@@ -72,6 +73,7 @@ export default function ContactsTable({ contacts, selectedIds, onToggleSelect, o
           ))}
         </TableBody>
       </Table>
+      </div>
     </div>
   );
 }

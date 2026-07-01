@@ -12,7 +12,8 @@ export default function BotContentTable({ items, onEdit, onDelete, selectedIds =
 
   return (
     <div className="border rounded-lg overflow-hidden">
-      <Table>
+      <div className="overflow-x-auto -mx-3 md:mx-0">
+      <Table className="min-w-[720px]">
         <TableHeader>
           <TableRow>
             {onToggle && <TableHead className="w-10"><Checkbox checked={allSelected} onCheckedChange={() => onToggleAll(items)} /></TableHead>}
@@ -45,6 +46,7 @@ export default function BotContentTable({ items, onEdit, onDelete, selectedIds =
           ))}
         </TableBody>
       </Table>
+      </div>
     </div>
   );
 }

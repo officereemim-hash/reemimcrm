@@ -64,7 +64,7 @@ export default function ServiceContentPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-4">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-accent/20 flex items-center justify-center">
             <LinkIcon size={20} className="text-accent-foreground" />
@@ -74,9 +74,9 @@ export default function ServiceContentPage() {
             <p className="text-sm text-muted-foreground">קישורים, PDFs, שאלונים, תשלומים ויומנים</p>
           </div>
         </div>
-        <div className="flex gap-2 items-center">
+        <div className="flex gap-2 items-center flex-wrap w-full md:w-auto">
           <ViewToggle view={viewMode} onViewChange={setViewMode} showKanban />
-          <Button onClick={() => { setEditItem(null); setShowForm(true); }} className="gap-2" size="sm"><Plus size={16} />תוכן חדש</Button>
+          <Button onClick={() => { setEditItem(null); setShowForm(true); }} className="gap-2 flex-1 md:flex-none" size="sm"><Plus size={16} />תוכן חדש</Button>
         </div>
       </div>
 

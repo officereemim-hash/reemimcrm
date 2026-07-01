@@ -63,7 +63,7 @@ export default function BotContentPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-4">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
             <MessageSquare size={20} className="text-primary" />
@@ -73,9 +73,9 @@ export default function BotContentPage() {
             <p className="text-sm text-muted-foreground">ניהול הודעות, ניסוחים ומסלולים</p>
           </div>
         </div>
-        <div className="flex gap-2 items-center">
+        <div className="flex gap-2 items-center flex-wrap w-full md:w-auto">
           <ViewToggle view={viewMode} onViewChange={setViewMode} showKanban />
-          <Button onClick={handleNew} className="gap-2" size="sm"><Plus size={16} />הודעה חדשה</Button>
+          <Button onClick={handleNew} className="gap-2 flex-1 md:flex-none" size="sm"><Plus size={16} />הודעה חדשה</Button>
         </div>
       </div>
 

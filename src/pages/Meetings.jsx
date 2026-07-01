@@ -114,9 +114,9 @@ export default function Meetings() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <h1 className="text-2xl font-bold">פגישות ומשימות</h1>
-        <div className="flex gap-2 items-center flex-wrap">
+        <div className="flex gap-2 items-center flex-wrap w-full md:w-auto">
           <ViewToggle view={viewMode} onViewChange={setViewMode} />
           {activeTab === 'meetings' && (
             <Button size="sm" className="gap-2" onClick={() => { setEditMeeting(null); setShowMeetingForm(true); }}>
@@ -143,7 +143,7 @@ export default function Meetings() {
           to="/meetings?tab=tasks" />
       </div>
 
-      <div className="flex gap-2 border-b border-border pb-0">
+      <div className="flex gap-2 flex-wrap border-b border-border pb-0">
         {[{ key: 'meetings', label: `פגישות (${meetings.length})` }, { key: 'tasks', label: `משימות (${openTasks.length} פתוחות)` }].map(tab => (
           <button key={tab.key} onClick={() => { setActiveTab(tab.key); setSelectedMeetings([]); setSelectedTasks([]); }}
             className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${activeTab === tab.key ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}

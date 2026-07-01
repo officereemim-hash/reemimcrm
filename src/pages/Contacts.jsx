@@ -86,12 +86,12 @@ export default function Contacts() {
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">לקוחות</h1>
           <p className="text-muted-foreground text-sm mt-0.5">{contacts.length} אנשי קשר במערכת</p>
         </div>
-        <div className="flex gap-2 items-center">
+        <div className="flex gap-2 items-center flex-wrap w-full md:w-auto">
           {selectedIds.length > 0 && (
             <Button variant="destructive" size="sm" className="gap-1" onClick={() => setDeleteTarget(selectedIds)}>
               <Trash2 size={14} />
@@ -121,7 +121,7 @@ export default function Contacts() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 border-b border-border pb-0">
+      <div className="flex gap-2 flex-wrap border-b border-border pb-0">
         {TABS.map(tab => (
           <button
             key={tab.key}

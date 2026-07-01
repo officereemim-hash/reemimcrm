@@ -103,12 +103,12 @@ export default function MarketingHub() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-4">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">מרכז דיוור</h1>
           <p className="text-muted-foreground text-sm mt-0.5">ניהול תקשורת שוטפת, דיוור ופולו-אפ</p>
         </div>
-        <div className="flex gap-2 items-center">
+        <div className="flex gap-2 items-center flex-wrap w-full md:w-auto">
           {activeTab === 'overview' && <ViewToggle view={viewMode} onViewChange={setViewMode} />}
           {isAdmin && (
             <Button onClick={() => setShowCompose(true)} className="gap-2" size="sm">
@@ -120,7 +120,7 @@ export default function MarketingHub() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 border-b pb-2">
+      <div className="flex gap-2 flex-wrap border-b pb-2">
         <button
           onClick={() => setActiveTab('overview')}
           className={`px-4 py-2 rounded-t-lg text-sm font-medium transition-colors ${
@@ -167,7 +167,7 @@ export default function MarketingHub() {
 
       {activeTab === 'overview' && <>
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         {[
           { label: 'סה״כ נשלחו', value: totalSent, icon: Send, color: 'bg-primary/10 text-primary', filterKey: 'all' },
           { label: 'אוטומטי', value: automatedSent, icon: Bell, color: 'bg-gold/20 text-gold', filterKey: 'automated' },
