@@ -228,6 +228,37 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, skipped: true, reason: 'rate_limited' });
     }
 
+    // ===== LOOP GUARD (H11): אותה הודעה נכנסת 3 פעמים ברצף → השתקה + התראה לרכזת =====
+    {
+      const lgIncoming = recentLogs.filter(log => log.direction === 'incoming').slice(0, 2);
+      const lgCurrent = text.substring(0, 500).trim();
+      if (lgIncoming.length === 2 &&
+          String(lgIncoming[0].text || '').trim() === lgCurrent &&
+          String(lgIncoming[1].text || '').trim() === lgCurrent) {
+        await logIncoming(base44, idMessage, phone, text, chatId, cachedConversationSettings[0]?.value || null, 'skipped');
+        try {
+          const lgMarkerKey = 'loop_guard_alerted_' + phone;
+          const lgMarkers = await base44.asServiceRole.entities.SystemSetting.filter({ key: lgMarkerKey });
+          const lgLastAlert = lgMarkers.length > 0 ? new Date(lgMarkers[0].value).getTime() : 0;
+          if (Date.now() - lgLastAlert > 24 * 60 * 60 * 1000) {
+            const lgSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'coordinator_phone' });
+            const lgCoordinator = normalizeIntlPhone(lgSettings[0]?.value || '');
+            if (lgCoordinator) {
+              await sendWhatsApp(`${lgCoordinator}@c.us`, `🔁 *Loop Guard — הבוט הושתק למספר*\nהמספר ${phone} שלח את אותה הודעה 3 פעמים ברצף, ולכן הבוט הפסיק לענות לו.\nההודעה: "${text.substring(0, 200)}"\nאם זה מוקד/מענה אוטומטי — מומלץ להוסיף אותו ל-WhatsAppBlockList.`, botEnabled);
+            }
+            if (lgMarkers.length > 0) {
+              await base44.asServiceRole.entities.SystemSetting.update(lgMarkers[0].id, { value: new Date().toISOString() });
+            } else {
+              await base44.asServiceRole.entities.SystemSetting.create({ key: lgMarkerKey, value: new Date().toISOString(), category: 'flow' });
+            }
+          }
+        } catch (e) { console.error('LOOP_GUARD alert failed:', e.message); }
+        console.log(`LOOP_GUARD: muted ${phone} — identical incoming message x3`);
+        return Response.json({ ok: true, skipped: true, reason: 'loop_guard' });
+      }
+    }
+    // ===== END LOOP GUARD =====
+
     const contacts = contactsByIntl.length > 0 ? contactsByIntl : contactsByLocal.length > 0 ? contactsByLocal : contactsByPlus;
     let contact = contacts[0] || null;
 
