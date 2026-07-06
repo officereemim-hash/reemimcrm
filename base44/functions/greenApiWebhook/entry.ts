@@ -418,6 +418,12 @@ Deno.serve(async (req) => {
       const isIgnored = IGNORE_AS_NAME.includes(normalizeAnswer(nameCandidate)) || /^\d+$/.test(nameCandidate.trim());
       if (isIgnored || nameCandidate.length < 2) nameCandidate = '';
 
+      // שאלה = כל הודעה עם סימן שאלה → עוברת לסוכן (מייל/טלפון שהופיעו בה כבר נקלטו ל-pending)
+      const isQuestion = text.includes('?');
+      // שם מתקבל רק אם: אין סימן שאלה, עד 4 מילים
+      const nameWordCount = nameCandidate ? nameCandidate.split(/\s+/).length : 0;
+      if (isQuestion || nameWordCount > 4) nameCandidate = '';
+
       // מיזוג לתוך ה-pending
       if (emailMatch) pending.email = emailMatch[0].toLowerCase().trim();
       if (phoneMatch) pending.phone = phoneMatch[0];
@@ -432,8 +438,7 @@ Deno.serve(async (req) => {
         await base44.asServiceRole.entities.SystemSetting.create({ key: settingKey, value: settingValue, category: 'flow' });
       }
 
-      // שאלה עם "?" ובלי שם/מייל → להעביר לסוכן (האיסוף ממשיך בהודעה הבאה)
-      const isQuestion = text.includes('?') && !emailMatch && !nameCandidate;
+      // שאלה עם "?" → להעביר לסוכן (מייל/טלפון כבר נקלטו ל-pending, האיסוף ממשיך בהודעה הבאה)
       if (!isQuestion) {
         const missingName = !pending.name;
         const missingEmail = !pending.email;
