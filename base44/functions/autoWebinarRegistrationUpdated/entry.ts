@@ -176,8 +176,19 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, action: 'paid_location_choice', service_request_id: sr.id });
     }
 
-    // ===== פגישה נקבעה → אישור =====
+    // ===== פגישה נקבעה → אישור (עם דדופ — תיקון 4) =====
     if (meetingNow) {
+      const recentConfirms = await base44.asServiceRole.entities.Communication.filter(
+        { contact_id: reg.contact_id }, '-created_date', 10
+      );
+      const confirmTemplates = ['meeting_scheduled_zoom', 'meeting_scheduled_modiin', 'meeting_scheduled_petah_tikva', 'meeting_scheduled_phone', 'meeting_scheduled_divorce_split', 'meeting_scheduled_annual_service', 'conversation_closing', 'webinar_meeting_confirmed'];
+      const justConfirmed = recentConfirms.some(c =>
+        confirmTemplates.includes(c.template_id) &&
+        Date.now() - new Date(c.created_date).getTime() < 5 * 60 * 1000
+      );
+      if (justConfirmed) {
+        return Response.json({ ok: true, skipped: 'meeting_already_confirmed_recently' });
+      }
       const confirmTemplate = await getContent('webinar_meeting_confirmed');
       const confirmMessage = fillTemplate(confirmTemplate || '{name}, הפגישה נקבעה בהצלחה! נשלח לך תזכורת לפני המועד 🙏', values);
       const status = await sendWhatsApp(confirmMessage);

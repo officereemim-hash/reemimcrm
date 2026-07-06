@@ -222,6 +222,66 @@ Deno.serve(async (req) => {
 
     const body = JSON.parse(rawBody);
     const eventType = getEventType(body);
+
+    // === תיקון 3ג: טיפול ב-RESCHEDULED / CANCELLED ===
+    if (eventType === 'BOOKING_RESCHEDULED') {
+      const payload = getPayload(body);
+      const calcomId = payload.uid || payload.id || payload.bookingId || payload.booking?.uid || payload.booking?.id;
+      if (!calcomId) return Response.json({ ok: true, skipped: 'no_calcom_id' });
+      const meetings = await base44.asServiceRole.entities.Meeting.filter({ calcom_event_id: String(calcomId) });
+      if (meetings.length === 0) return Response.json({ ok: true, skipped: 'meeting_not_found' });
+      const meeting = meetings[0];
+      const newStart = payload.startTime || payload.start_time || payload.start || payload.booking?.startTime;
+      if (!newStart) return Response.json({ ok: true, skipped: 'no_start_time' });
+      const newEnd = payload.endTime || payload.end_time || payload.end || payload.booking?.endTime;
+      const newDuration = newStart && newEnd ? Math.max(15, Math.round((new Date(newEnd).getTime() - new Date(newStart).getTime()) / 60000)) : meeting.duration_minutes || 60;
+      await base44.asServiceRole.entities.Meeting.update(meeting.id, { scheduled_at: new Date(newStart).toISOString(), duration_minutes: newDuration });
+      if (meeting.service_request_id) {
+        const srUpdate = { last_appointment_time_str: formatDateTime(newStart) };
+        if (meeting.location === 'zoom' || meeting.location === 'phone') srUpdate.scheduled_date_whatsapp = new Date(newStart).toISOString();
+        else srUpdate.scheduled_date_clinic = new Date(newStart).toISOString();
+        await base44.asServiceRole.entities.ServiceRequest.update(meeting.service_request_id, srUpdate);
+      }
+      const contacts = meeting.contact_id ? await base44.asServiceRole.entities.Contact.filter({ id: meeting.contact_id }) : [];
+      const rContact = contacts[0];
+      if (rContact?.phone) {
+        const reschTemplate = await getTemplate(base44, 'meeting_rescheduled_ack') || 'המועד עודכן בהצלחה ✅ הפגישה החדשה: {time}';
+        const reschMsg = reschTemplate.replaceAll('{time}', formatDateTime(newStart)).replaceAll('{name}', rContact.full_name || '');
+        await sendWhatsApp(rContact.phone, reschMsg);
+        await base44.asServiceRole.entities.Communication.create({
+          contact_id: rContact.id, type: 'whatsapp', direction: 'outbound',
+          content: reschMsg.substring(0, 500), sent_by: 'system', is_automated: true, template_id: 'meeting_rescheduled_ack', status: 'sent',
+        });
+      }
+      return Response.json({ ok: true, action: 'rescheduled', meeting_id: meeting.id });
+    }
+
+    if (eventType === 'BOOKING_CANCELLED') {
+      const payload = getPayload(body);
+      const calcomId = payload.uid || payload.id || payload.bookingId || payload.booking?.uid || payload.booking?.id;
+      if (!calcomId) return Response.json({ ok: true, skipped: 'no_calcom_id' });
+      const meetings = await base44.asServiceRole.entities.Meeting.filter({ calcom_event_id: String(calcomId) });
+      if (meetings.length === 0) return Response.json({ ok: true, skipped: 'meeting_not_found' });
+      const meeting = meetings[0];
+      await base44.asServiceRole.entities.Meeting.update(meeting.id, { status: 'cancelled' });
+      if (meeting.service_request_id) {
+        await base44.asServiceRole.entities.ServiceRequest.update(meeting.service_request_id, { status: 'interested' });
+      }
+      const contacts = meeting.contact_id ? await base44.asServiceRole.entities.Contact.filter({ id: meeting.contact_id }) : [];
+      const cContact = contacts[0];
+      const coordPhone = await getSetting(base44, 'coordinator_phone');
+      if (coordPhone) {
+        await sendWhatsApp(coordPhone, `⚠️ הפגישה של ${cContact?.full_name || 'לקוח'} בוטלה בקלקום. יש לטפל ידנית.`);
+      }
+      if (cContact) {
+        await base44.asServiceRole.entities.Communication.create({
+          contact_id: cContact.id, type: 'system_error', direction: 'inbound',
+          content: `פגישה בוטלה בקלקום (calcom_id=${calcomId}). הסטטוס חזר ל-interested.`, sent_by: 'system', is_automated: true, status: 'sent',
+        });
+      }
+      return Response.json({ ok: true, action: 'cancelled', meeting_id: meeting.id });
+    }
+
     if (eventType && eventType !== 'BOOKING_CREATED') {
       return Response.json({ ok: true, skipped: true, eventType });
     }

@@ -701,7 +701,27 @@ Deno.serve(async (req) => {
       };
       const chosenLocation = locationMap[normalizeAnswer(text)];
       if (chosenLocation) {
-        await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { last_appointment_type: chosenLocation });
+        // === תיקון 2: שאלת הבהרה כשמחליפים מיקום ===
+        const LOCATION_LABEL = { zoom: 'זום', modiin: 'מודיעין', petah_tikva_wednesday: 'פתח תקווה', phone: 'שיחת טלפון' };
+        const prevLocation = serviceRequest.last_appointment_type;
+        const isChange = prevLocation && prevLocation !== chosenLocation && !serviceRequest.pending_location_confirm;
+
+        if (isChange) {
+          await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { pending_location_confirm: true });
+          const clarifyTemplate = await getBotContent(base44, 'location_change_confirm') ||
+            'רק כדי לוודא 😊 קודם בחרת {prev} ועכשיו {new} — איפה נקיים את הפגישה?\nא) זום\nב) מודיעין\nג) פתח תקווה\nד) שיחת טלפון\n\n👈 השב/י באות המתאימה ואשלח את הקישור הנכון';
+          const clarifyMsg = clarifyTemplate
+            .replaceAll('{prev}', LOCATION_LABEL[prevLocation] || prevLocation)
+            .replaceAll('{new}', LOCATION_LABEL[chosenLocation] || chosenLocation);
+          const sent = await sendWhatsApp(chatId, clarifyMsg, botEnabled);
+          await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
+          await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_loc_confirm`, phone, clarifyMsg, chatId, conversationId, outgoingStatus);
+          try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${clarifyMsg}` }); } catch (_) {}
+          return Response.json({ ok: true, fast_path: 'fp_location_change_confirm' });
+        }
+        // === סוף תיקון 2: שאלת הבהרה ===
+
+        await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { last_appointment_type: chosenLocation, pending_location_confirm: false });
 
         let calendarQuery;
         if (serviceRequest.service_type === 'divorce_split') {
@@ -728,6 +748,29 @@ Deno.serve(async (req) => {
           } catch (error) {}
           return Response.json({ ok: true, fast_path: 'fp_meeting_choice', location: chosenLocation });
         }
+      }
+    }
+
+    // ===== FP-Reschedule: בקשת שינוי/ביטול מועד (פגישה או וובינר) → העברה לנציגה =====
+    const rescheduleKeywords = ['להחליף מועד', 'להחליף את המועד', 'לשנות מועד', 'לשנות את המועד', 'שינוי מועד', 'החלפת מועד', 'לדחות את הפגישה', 'להזיז את הפגישה', 'לשנות את הפגישה', 'לבטל את הפגישה', 'לבטל פגישה', 'ביטול פגישה', 'להקדים את הפגישה', 'לדחות את הוובינר', 'להחליף וובינר', 'מועד אחר לוובינר'];
+    if (contact && rescheduleKeywords.some(k => normalizeAnswer(text).includes(k))) {
+      const meetingStatusesForReschedule = ['phone_meeting', 'meeting_scheduled', 'meeting_scheduled_frontal', 'meeting_scheduled_zoom'];
+      const hasMeetingContext = serviceRequest && (serviceRequest.meeting_id || meetingStatusesForReschedule.includes(serviceRequest.status));
+      const regsForReschedule = await base44.asServiceRole.entities.WebinarRegistration.filter({ contact_id: contact.id }, '-created_date', 5);
+      const hasWebinarContext = regsForReschedule.some(r => r.webinar_date && new Date(r.webinar_date).getTime() > Date.now() && r.attended !== true);
+
+      if (hasMeetingContext || hasWebinarContext) {
+        const ackKey = (!hasMeetingContext && hasWebinarContext) ? 'webinar_reschedule_ack' : 'reschedule_request_ack';
+        const ackFallback = (!hasMeetingContext && hasWebinarContext)
+          ? 'מבינה {name} 🙏 מעבירה את הבקשה לנציגה שלנו — היא תחזור אלייך בהקדם עם מועד וובינר חלופי או קישור להקלטה.'
+          : 'אין שום בעיה {name} 🙏\nמעבירה את הבקשה לנציגה שלנו — היא תחזור אלייך בהקדם לתיאום המועד מחדש.';
+        await base44.asServiceRole.entities.Contact.update(contact.id, { bot_status: 'waiting_agent', conversation_owner: 'bar' });
+        const ackMsg = (await getBotContent(base44, ackKey) || ackFallback).replaceAll('{name}', contact.full_name || '');
+        const sent = await sendWhatsApp(chatId, ackMsg, botEnabled);
+        await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
+        await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_reschedule`, phone, ackMsg, chatId, conversationId, outgoingStatus);
+        try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${ackMsg}` }); } catch (_) {}
+        return Response.json({ ok: true, fast_path: 'fp_reschedule_to_agent', context: hasMeetingContext ? 'meeting' : 'webinar' });
       }
     }
 

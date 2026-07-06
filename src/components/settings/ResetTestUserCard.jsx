@@ -20,10 +20,15 @@ export default function ResetTestUserCard() {
     try {
       const res = await base44.functions.invoke('resetTestUser', { phone: phone.trim(), email: email.trim() });
       const deleted = res.data?.deleted || {};
+      const errs = res.data?.errors || [];
       const total = Object.values(deleted).reduce((a, b) => a + b, 0);
-      toast({ title: total ? `נמחקו ${total} רשומות — אפשר להתחיל נקי` : 'לא נמצאו רשומות למחיקה — כבר נקי' });
-    } catch {
-      toast({ title: 'שגיאה בניקוי הרשומות', variant: 'destructive' });
+      if (errs.length > 0) {
+        toast({ title: `נמחקו ${total} רשומות, אבל ${errs.length} שגיאות: ${errs[0]?.error || 'שגיאה לא ידועה'}`, variant: 'destructive' });
+      } else {
+        toast({ title: total ? `נמחקו ${total} רשומות — אפשר להתחיל נקי` : 'לא נמצאו רשומות למחיקה — כבר נקי' });
+      }
+    } catch (err) {
+      toast({ title: `שגיאה בניקוי: ${err?.message || 'שגיאה לא ידועה'}`, variant: 'destructive' });
     } finally {
       setLoading(false);
     }
