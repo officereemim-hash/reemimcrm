@@ -390,32 +390,80 @@ Deno.serve(async (req) => {
       }
     }
 
-    // FP-Details: חילוץ פרטים — גם אם הסוכן יצר Contact במקביל, ה-FP צריך לתפוס
-    if (!contact || !serviceRequest) {
-      const details = extractContactDetails(text);
-      if (details) {
-        const settingKey = 'pending_contact_' + phone;
-        const settingValue = JSON.stringify(details);
-        const existingSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: settingKey });
-        if (existingSettings.length > 0) {
-          await base44.asServiceRole.entities.SystemSetting.update(existingSettings[0].id, { value: settingValue });
+    // ===== FP-PartialDetails: איסוף פרטים הדרגתי (שם + מייל; טלפון ידוע מה-chatId) =====
+    if (!contact) {
+      const settingKey = 'pending_contact_' + phone;
+      const existingPendingSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: settingKey });
+      const pending = existingPendingSettings.length > 0 ? JSON.parse(existingPendingSettings[0].value) : {};
+
+      // חילוץ מה שיש בהודעה הנוכחית
+      const emailMatch = String(text || '').match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
+      const compactText = String(text || '').replace(/[\-\s]/g, '');
+      const phoneMatch = compactText.match(/05\d{8}/);
+
+      // ניקוי טקסט לחילוץ שם — הסרת מייל וטלפון
+      let nameCandidate = String(text || '')
+        .replace(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g, '')
+        .replace(/0[5]\d[\d\-]{7,11}/g, '')
+        .replace(/[,;:]/g, ' ')
+        .replace(/(?:^|\s)שמי?(?=\s|$)\s*/gi, ' ')
+        .replace(/(?:^|\s)מספרי?(?=\s|$)\s*/gi, ' ')
+        .replace(/(?:^|\s)טלפון(?=\s|$)\s*/gi, ' ')
+        .replace(/(?:^|\s)מייל(?=\s|$)\s*/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      // מילות מפתח שאסור לקלוט כשם
+      const IGNORE_AS_NAME = ['1','2','3','4','5','6','כן','לא','בטח','כמובן','אוקי','ok','סבבה','הסר','הסרה','stop','unsubscribe','נציגה','אמתין','שלום','היי','הי'];
+      const isIgnored = IGNORE_AS_NAME.includes(normalizeAnswer(nameCandidate)) || /^\d+$/.test(nameCandidate.trim());
+      if (isIgnored || nameCandidate.length < 2) nameCandidate = '';
+
+      // מיזוג לתוך ה-pending
+      if (emailMatch) pending.email = emailMatch[0].toLowerCase().trim();
+      if (phoneMatch) pending.phone = phoneMatch[0];
+      if (!pending.phone) pending.phone = localPhone; // ברירת מחדל — טלפון השולח
+      if (nameCandidate) pending.name = nameCandidate;
+
+      // שמירה ב-SystemSetting
+      const settingValue = JSON.stringify(pending);
+      if (existingPendingSettings.length > 0) {
+        await base44.asServiceRole.entities.SystemSetting.update(existingPendingSettings[0].id, { value: settingValue });
+      } else {
+        await base44.asServiceRole.entities.SystemSetting.create({ key: settingKey, value: settingValue, category: 'flow' });
+      }
+
+      // שאלה עם "?" ובלי שם/מייל → להעביר לסוכן (האיסוף ממשיך בהודעה הבאה)
+      const isQuestion = text.includes('?') && !emailMatch && !nameCandidate;
+      if (!isQuestion) {
+        const missingName = !pending.name;
+        const missingEmail = !pending.email;
+
+        let askMessage;
+        if (missingName && missingEmail) {
+          askMessage = await getBotContent(base44, 'ask_missing_details') || 'כמעט שם! 😊 כדי שנוכל לפתוח לך תיק, נשמח לשם המלא ולכתובת המייל שלך';
+        } else if (missingEmail) {
+          askMessage = (await getBotContent(base44, 'ask_missing_email') || 'תודה {name}! 😊 נשאר רק פרט אחרון — מה כתובת המייל שלך?')
+            .replaceAll('{name}', pending.name || '');
+        } else if (missingName) {
+          askMessage = await getBotContent(base44, 'ask_missing_name') || 'כמעט סיימנו 😊 מה השם המלא שלך?';
         } else {
-          await base44.asServiceRole.entities.SystemSetting.create({ key: settingKey, value: settingValue, category: 'flow' });
+          // הכל קיים → תבנית אישור
+          const confirmTemplate = await getBotContent(base44, 'contact_details_confirm');
+          askMessage = (confirmTemplate || 'הפרטים שלך:\n📛 שם: {name}\n📱 טלפון: {phone}\n📧 מייל: {email}\n\nהאם הכל נכון? כתוב/י *כן* לאישור.')
+            .replaceAll('{name}', pending.name)
+            .replaceAll('{phone}', pending.phone)
+            .replaceAll('{email}', pending.email);
         }
 
-        const confirmTemplate = await getBotContent(base44, 'contact_details_confirm');
-        const confirmMessage = (confirmTemplate || 'הפרטים שלך:\n📛 שם: {name}\n📱 טלפון: {phone}\n📧 מייל: {email}\n\nהאם הכל נכון? כתוב/י *כן* לאישור.')
-          .replaceAll('{name}', details.name)
-          .replaceAll('{phone}', details.phone)
-          .replaceAll('{email}', details.email);
-        const sent = await sendWhatsApp(chatId, confirmMessage, botEnabled);
+        const sent = await sendWhatsApp(chatId, askMessage, botEnabled);
         await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
-        await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_details`, phone, confirmMessage, chatId, conversationId, outgoingStatus);
+        await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_partial`, phone, askMessage, chatId, conversationId, outgoingStatus);
         try {
-          await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${confirmMessage}` });
+          await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${askMessage}` });
         } catch (error) {}
-        return Response.json({ ok: true, fast_path: 'fp_details_confirm' });
+        return Response.json({ ok: true, fast_path: missingName || missingEmail ? 'fp_partial_details_ask' : 'fp_details_confirm' });
       }
+      // isQuestion=true → ממשיכים לסוכן AI
     }
 
     // FP-Confirm: אישור פרטים ("כן") — בודק pending בלי תלות בקיום Contact (הסוכן עלול ליצור Contact במקביל)
