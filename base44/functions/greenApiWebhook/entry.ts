@@ -27,7 +27,7 @@ function extractText(messageData) {
 }
 
 function normalizeAnswer(text) {
-  return String(text || '').trim().replace(/[*"'״]/g, '').toLowerCase();
+  return String(text || '').trim().replace(/[*"'״]/g, '').replace(/[!?.,;:]+$/g, '').replace(/^[!?.,;:]+/g, '').toLowerCase();
 }
 
 function detectServiceType(text) {
@@ -37,7 +37,9 @@ function detectServiceType(text) {
     'פרישה': 'retirement',
     '2': 'economic_feasibility',
     'התכנות כלכלית': 'economic_feasibility',
+    'היתכנות כלכלית': 'economic_feasibility',
     'התכנות': 'economic_feasibility',
+    'היתכנות': 'economic_feasibility',
     '3': 'investments',
     'השקעות': 'investments',
     '4': 'divorce_split',
@@ -47,9 +49,8 @@ function detectServiceType(text) {
     '5': 'tax_advisory',
     'ייעוץ מס': 'tax_advisory',
     'מס': 'tax_advisory',
-    '6': 'annual_service',
-    'שירות שנתי': 'annual_service',
-    'שירות': 'annual_service',
+    '6': '__other__',
+    'אחר': '__other__',
   };
   const normalized = normalizeAnswer(text);
   return serviceMap[normalized] || serviceMap[String(text || '').trim()] || '';
@@ -224,7 +225,26 @@ Deno.serve(async (req) => {
     ]);
 
     const recentOutgoing = recentLogs.filter(log => log.direction === 'outgoing' && Date.now() - new Date(log.created_date).getTime() < 60 * 60 * 1000);
-    if (botEnabled && recentOutgoing.length >= 10) {
+    if (botEnabled && recentOutgoing.length >= 20) {
+      await logIncoming(base44, idMessage, phone, text, chatId, cachedConversationSettings[0]?.value || null, 'skipped');
+      try {
+        const rlAlertKey = 'rate_limit_alerted_' + phone;
+        const rlMarkers = await base44.asServiceRole.entities.SystemSetting.filter({ key: rlAlertKey });
+        const rlLastAlert = rlMarkers.length > 0 ? new Date(rlMarkers[0].value).getTime() : 0;
+        if (Date.now() - rlLastAlert > 60 * 60 * 1000) {
+          await sendWhatsApp(chatId, 'קיבלנו את הודעתך 🙏 נציגה תחזור אליך בהמשך', botEnabled);
+          const coordSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'coordinator_phone' });
+          const coordPhone = normalizeIntlPhone(coordSettings[0]?.value || '');
+          if (coordPhone) {
+            await sendWhatsApp(`${coordPhone}@c.us`, `⚠️ *Rate Limit*\nהמספר ${phone} שלח מעל 20 הודעות בשעה האחרונה. הבוט הושתק.`, botEnabled);
+          }
+          if (rlMarkers.length > 0) {
+            await base44.asServiceRole.entities.SystemSetting.update(rlMarkers[0].id, { value: new Date().toISOString() });
+          } else {
+            await base44.asServiceRole.entities.SystemSetting.create({ key: rlAlertKey, value: new Date().toISOString(), category: 'flow' });
+          }
+        }
+      } catch (_) {}
       return Response.json({ ok: true, skipped: true, reason: 'rate_limited' });
     }
 
@@ -284,6 +304,13 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, unsubscribed: true });
     }
     // ===== סוף הסרה מתפוצה =====
+
+    // ===== שער waiting_agent: הבוט שותק כשהשיחה אצל נציגה =====
+    if (contact && contact.bot_status === 'waiting_agent') {
+      await logIncoming(base44, idMessage, phone, text, chatId, cachedConversationSettings[0]?.value || null, 'skipped');
+      return Response.json({ ok: true, skipped: true, reason: 'waiting_agent' });
+    }
+
     // === FP-MissingField: השלמת פרט חסר אחרי ברכת ליד חדש (onNewLeadWelcome) ===
     const missingFieldKey = 'pending_missing_field_' + phone;
     const pendingMissingSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: missingFieldKey });
@@ -303,12 +330,10 @@ Deno.serve(async (req) => {
         const updatedContacts = await base44.asServiceRole.entities.Contact.filter({ id: pending.contact_id });
         const updatedContact = updatedContacts[0];
         const menuMsg = `תודה ${updatedContact?.full_name || ''} ✅\n\nנשמח לכוון אותך לתחום הנכון — במה את/ה מתעניין/ת?\n1. ייעוץ פרישה\n2. היתכנות כלכלית\n3. השקעות\n4. איזון אקטוארי (גירושין)\n5. ייעוץ מס (שכר גבוה)\n6. אחר\n\n👈 פשוט השב/י במספר המתאים (1-6)`;
+        const fpConvId = cachedConversationSettings[0]?.value || null;
         const sent = await sendWhatsApp(chatId, menuMsg, botEnabled);
-        await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
-        await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_missing`, phone, menuMsg, chatId, conversationId, outgoingStatus);
-        try {
-          await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${menuMsg}` });
-        } catch (error) {}
+        await logIncoming(base44, idMessage, phone, text, chatId, fpConvId);
+        await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_missing`, phone, menuMsg, chatId, fpConvId, outgoingStatus);
         return Response.json({ ok: true, fast_path: 'fp_missing_field_completed', field: pending.field });
       }
     }
@@ -550,7 +575,38 @@ Deno.serve(async (req) => {
     }
 
     const selectedServiceType = detectServiceType(text);
-    if (selectedServiceType && contact) {
+
+    // "6" / "אחר" → בירור תחום במקום פתיחת שירות שנתי
+    if (selectedServiceType === '__other__' && contact) {
+      if (!serviceRequest || ['completed', 'cancelled', 'closed_lost', 'followup_closed'].includes(serviceRequest?.status)) {
+        serviceRequest = await base44.asServiceRole.entities.ServiceRequest.create({
+          contact_id: contact.id, contact_name: contact.full_name, contact_phone: contact.phone,
+          contact_email: contact.email, status: 'new', source: 'bot', conversation_id: conversationId,
+          pending_service_clarify: true,
+        });
+      } else {
+        await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { pending_service_clarify: true });
+      }
+      const clarifyMsg = await getBotContent(base44, 'service_type_clarify') || 'כדי שנוכל לכוון אותך נכון — מה התחום שמעניין אותך?\n1. ייעוץ פרישה\n2. היתכנות כלכלית\n3. תכנון השקעות\n4. איזון אקטוארי בגירושין\n5. ייעוץ מס';
+      const sent = await sendWhatsApp(chatId, clarifyMsg, botEnabled);
+      await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
+      await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_other`, phone, clarifyMsg, chatId, conversationId, outgoingStatus);
+      try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${clarifyMsg}` }); } catch (_) {}
+      return Response.json({ ok: true, fast_path: 'fp_other_clarify' });
+    }
+
+    // FP-ServiceChoice: "1" כאשר כבר יש SR עם service_type → ניתוב ל-FP-WaitCoordinator
+    if (selectedServiceType && contact && serviceRequest && serviceRequest.service_type && normalizeAnswer(text) === '1') {
+      await base44.asServiceRole.entities.Contact.update(contact.id, { bot_status: 'waiting_agent' });
+      const ackMsg = await getBotContent(base44, 'wait_coordinator_ack') || 'מעולה! נציגה תחזור אלייך בהקדם 🙏';
+      const sent = await sendWhatsApp(chatId, ackMsg, botEnabled);
+      await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
+      await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_1_wait`, phone, ackMsg, chatId, conversationId, outgoingStatus);
+      try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${ackMsg}` }); } catch (_) {}
+      return Response.json({ ok: true, fast_path: 'fp_1_wait_coordinator' });
+    }
+
+    if (selectedServiceType && selectedServiceType !== '__other__' && contact) {
       // אם אין SR פעיל — יוצרים אחד (ליד חדש שבחר שירות ישירות מהתפריט)
       if (!serviceRequest || ['completed', 'cancelled', 'closed_lost', 'followup_closed'].includes(serviceRequest?.status)) {
         serviceRequest = await base44.asServiceRole.entities.ServiceRequest.create({
@@ -604,11 +660,18 @@ Deno.serve(async (req) => {
     // ===== FP-AwaitingDecision: ניתוב תגובת לקוח כשהפנייה בסטטוס "ממתין להחלטה" =====
     if (contact && serviceRequest && serviceRequest.status === 'awaiting_client_decision') {
       const answer = normalizeAnswer(text);
-      const wantKeywords = ['מעוניין', 'כן', 'רוצה להתקדם', 'להתקדם', 'מעוניינת', 'רוצה', 'בטח', 'כמובן'];
+      const noKeywords = ['לא מעוניין', 'לא מעוניינת', 'לא רוצה', 'לא מתאים', 'לא בטוח', 'לא בטוחה', 'לא מוכן', 'לא כרגע', 'לא עכשיו'];
       const thinkKeywords = ['אחשוב', 'עוד לחשוב', 'צריך לחשוב', 'אחשוב על זה'];
-      const noKeywords = ['לא מעוניין', 'לא מעוניינת', 'לא רוצה', 'לא מתאים'];
+      const wantExact = ['כן', 'בטח', 'כמובן'];
+      const wantIncludes = ['מעוניין', 'מעוניינת', 'רוצה להתקדם', 'להתקדם', 'רוצה'];
 
-      if (wantKeywords.some(k => answer.includes(k) || answer === k)) {
+      if (noKeywords.some(k => answer.includes(k))) {
+        await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { status: 'closed_lost', closed_reason: 'lost_not_interested' });
+        await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
+        try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'user', content: text }); } catch (e) {}
+        return Response.json({ ok: true, fast_path: 'fp_awaiting_to_closed_lost' });
+      }
+      if (wantExact.some(k => answer === k) || wantIncludes.some(k => answer.includes(k))) {
         await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { status: 'interested' });
         await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
         try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'user', content: text }); } catch (e) {}
@@ -621,12 +684,6 @@ Deno.serve(async (req) => {
         await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_think`, phone, thinkMsg, chatId, conversationId, outgoingStatus);
         try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${thinkMsg}` }); } catch (e) {}
         return Response.json({ ok: true, fast_path: 'fp_awaiting_think' });
-      }
-      if (noKeywords.some(k => answer.includes(k) || answer === k)) {
-        await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { status: 'closed_lost', closed_reason: 'lost_not_interested' });
-        await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
-        try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'user', content: text }); } catch (e) {}
-        return Response.json({ ok: true, fast_path: 'fp_awaiting_to_closed_lost' });
       }
       // תשובה לא מוכרת — ממשיכים לסוכן AI
     }
@@ -690,13 +747,14 @@ Deno.serve(async (req) => {
     if (serviceRequest && serviceRequest.current_step === 'waiting_id_details' && contact) {
       // חילוץ ת.ז. (9 ספרות) ותאריך לידה (DD/MM/YYYY או DD.MM.YYYY או DD-MM-YYYY)
       const idMatch = text.match(/\b(\d{9})\b/);
-      const dateMatch = text.match(/(\d{1,2})[\/\.\-](\d{1,2})[\/\.\-](\d{4})/);
+      const dateMatch = text.match(/(\d{1,2})[\/\.\-](\d{1,2})[\/\.\-](\d{2,4})/);
 
       if (idMatch && dateMatch) {
         const idNumber = idMatch[1];
         const day = dateMatch[1].padStart(2, '0');
         const month = dateMatch[2].padStart(2, '0');
-        const year = dateMatch[3];
+        let year = dateMatch[3];
+        if (year.length === 2) { year = parseInt(year) >= 30 ? '19' + year : '20' + year; }
         const birthDate = `${year}-${month}-${day}`;
 
         // שמירה ב-Contact
@@ -732,7 +790,27 @@ Deno.serve(async (req) => {
         return Response.json({ ok: true, fast_path: 'fp_id_details_received', id_number: idNumber, birth_date: birthDate });
       }
 
-      // לא הצליח לחלץ — מבקש שוב
+      // לא הצליח לחלץ — בדיקת מספר ניסיונות
+      const retryKey = 'id_retry_' + phone;
+      const retrySettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: retryKey });
+      const retryCount = retrySettings.length > 0 ? parseInt(retrySettings[0].value || '0') : 0;
+      if (retryCount >= 2) {
+        // 2 כישלונות — הסלמה לנציגה
+        if (retrySettings.length > 0) await base44.asServiceRole.entities.SystemSetting.delete(retrySettings[0].id);
+        await base44.asServiceRole.entities.Contact.update(contact.id, { bot_status: 'waiting_agent', conversation_owner: 'bar' });
+        const escalateMsg = await getBotContent(base44, 'escalate_to_agent') || 'מעבירים את הפנייה לנציגת שירות, נחזור אליך בהקדם 🙏';
+        const sent = await sendWhatsApp(chatId, escalateMsg, botEnabled);
+        await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
+        await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_id_esc`, phone, escalateMsg, chatId, conversationId, outgoingStatus);
+        try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${escalateMsg}` }); } catch (_) {}
+        return Response.json({ ok: true, fast_path: 'fp_id_details_escalated' });
+      }
+      // עדכון מונה ניסיונות
+      if (retrySettings.length > 0) {
+        await base44.asServiceRole.entities.SystemSetting.update(retrySettings[0].id, { value: String(retryCount + 1) });
+      } else {
+        await base44.asServiceRole.entities.SystemSetting.create({ key: retryKey, value: '1', category: 'flow' });
+      }
       const retryMessage = await getBotContent(base44, 'id_details_retry') || 'לא הצלחתי לזהות את הפרטים. נא לשלוח בהודעה אחת את מספר תעודת הזהות (9 ספרות) ותאריך לידה (DD/MM/YYYY)';
       const sent = await sendWhatsApp(chatId, retryMessage, botEnabled);
       await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
@@ -744,7 +822,7 @@ Deno.serve(async (req) => {
     }
 
     // ===== FP-DocsSent: "שלחתי" אחרי מילוי שאלון — אישור שקיבלנו, ממתינים לבדיקה =====
-    if (serviceRequest && serviceRequest.questionnaire_completed && !serviceRequest.documents_received && normalizeAnswer(text).startsWith('שלחתי')) {
+    if (serviceRequest && serviceRequest.questionnaire_completed && !serviceRequest.documents_received && normalizeAnswer(text).startsWith('שלחתי') && normalizeAnswer(text).split(/\s+/).length <= 3) {
       const docsAckMessage = await getBotContent(base44, 'documents_sent_ack') || 'תודה ששלחת, אנחנו נעדכן אותך ברגע שיתקבלו המסמכים 🙏';
       const sent = await sendWhatsApp(chatId, docsAckMessage, botEnabled);
       await logIncoming(base44, idMessage, phone, text, chatId, conversationId);

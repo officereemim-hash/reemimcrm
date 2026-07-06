@@ -263,11 +263,14 @@ Deno.serve(async (req) => {
 
     // === מסלול א: מעוניין — הזמנת תיאום פגישה ===
     if (statusChanged && newStatus === 'interested') {
+      if (serviceRequest.source === 'webinar') {
+        return Response.json({ ok: true, skipped: 'webinar_handled_by_webinar_flow' });
+      }
       if (await alreadySentRecently('schedule_intro')) {
         return Response.json({ ok: true, skipped: 'duplicate_event' });
       }
 
-      const isWebinar = serviceRequest.source === 'webinar';
+      const isWebinar = false;
       // אם כבר נשלחה הצעת מחיר (מגיע מ-awaiting_client_decision) — שולחים רק הזמנת פגישה
       const alreadyGotQuote = await alreadySentRecently('quote_sent');
 

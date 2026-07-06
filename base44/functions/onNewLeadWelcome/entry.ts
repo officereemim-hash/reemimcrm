@@ -87,6 +87,8 @@ Deno.serve(async (req) => {
     let messageToSend;
     let templateUsed;
 
+    const missing = [];
+
     if (c.source === 'shoranss') {
       // מסלול שורנס — ברכה ייעודית ללא תפריט שירותים וללא pending
       templateUsed = 'new_lead_welcome';
@@ -95,7 +97,6 @@ Deno.serve(async (req) => {
       messageToSend = template.replaceAll('{name}', c.full_name || '');
     } else {
       // מסלול רגיל — בדיקת פרטים חסרים
-      const missing = [];
       if (!c.full_name || c.full_name.trim().length < 2) missing.push({ field: 'full_name', label: 'מה השם המלא שלך?' });
       if (!c.email) missing.push({ field: 'email', label: 'מה כתובת המייל שלך?' });
 
