@@ -671,7 +671,9 @@ Deno.serve(async (req) => {
         try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'user', content: text }); } catch (e) {}
         return Response.json({ ok: true, fast_path: 'fp_awaiting_to_closed_lost' });
       }
-      if (wantExact.some(k => answer === k) || wantIncludes.some(k => answer.includes(k))) {
+      const isShort = answer.split(/\s+/).length <= 3;
+      const hasQuestion = text.includes('?');
+      if (wantExact.some(k => answer === k) || (isShort && !hasQuestion && wantIncludes.some(k => answer.includes(k)))) {
         await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { status: 'interested' });
         await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
         try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'user', content: text }); } catch (e) {}
