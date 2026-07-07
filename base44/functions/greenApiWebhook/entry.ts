@@ -418,7 +418,10 @@ Deno.serve(async (req) => {
       const IGNORE_AS_NAME = ['1','2','3','4','5','6','כן','לא','בטח','כמובן','אוקי','ok','סבבה','הסר','הסרה','stop','unsubscribe','נציגה','אמתין','שלום','היי','הי'];
       const isIgnored = IGNORE_AS_NAME.includes(normalizeAnswer(nameCandidate)) || /^\d+$/.test(nameCandidate.trim());
       const hasHebrew = /[\u0590-\u05FF]/.test(nameCandidate);
-      if (isIgnored || nameCandidate.length < 2 || !hasHebrew) nameCandidate = '';
+      // מילות פונקציה — משפט דיבור שמכיל מילה כזו לא יכול להיות שם
+      const FUNCTIONAL_WORDS = ['מה','למה','איך','מתי','קורה','כתבתי','אמרתי','שלחתי','אני','אתה','זה','רוצה','צריך','אפשר','תודה','בסדר','שוב','כבר','נתקע','עובד'];
+      const hasFunctionalWord = nameCandidate && FUNCTIONAL_WORDS.some(w => nameCandidate.split(/\s+/).includes(w));
+      if (isIgnored || nameCandidate.length < 2 || !hasHebrew || hasFunctionalWord) nameCandidate = '';
 
       // שאלה = כל הודעה עם סימן שאלה → עוברת לסוכן (מייל/טלפון שהופיעו בה כבר נקלטו ל-pending)
       const isQuestion = text.includes('?');
@@ -469,17 +472,22 @@ Deno.serve(async (req) => {
               .replaceAll('{phone}', pending.phone)
               .replaceAll('{email}', pending.email);
           } else {
-            // לא השתנה כלום — בודקים אם כבר שלחנו הכוונה (confirm_nudge)
-            const lastOutgoing = await base44.asServiceRole.entities.WhatsAppMessageLog.filter(
-              { phone, direction: 'outgoing' }, '-created_date', 1
-            );
-            const lastOutText = String(lastOutgoing[0]?.text || '');
-            const alreadySentNudge = lastOutText.startsWith('רק כדי לוודא');
-            if (!alreadySentNudge) {
-              // שליחת הכוונה דטרמיניסטית (פעם אחת)
-              askMessage = await getBotContent(base44, 'confirm_nudge') || 'רק כדי לוודא 😊\nאם הפרטים שמופיעים למעלה נכונים — כתוב/י *כן*.\nאם יש טעות — פשוט שלח/י את הפרט המתוקן (שם או מייל).';
+            // מעקף: תשובות פונקציונליות (כן/לא/נציגה) עוברות ישירות לשרשרת — לא נתפסות כאן
+            const PASSTHROUGH_ANSWERS = ['כן','כ','נכון','הכל נכון','בטח','כמובן','אוקי','ok','סבבה','👍','✅','לא','נציגה'];
+            if (!PASSTHROUGH_ANSWERS.includes(normalizeAnswer(text))) {
+              // לא השתנה כלום — בודקים אם כבר שלחנו הכוונה (confirm_nudge)
+              const lastOutgoing = await base44.asServiceRole.entities.WhatsAppMessageLog.filter(
+                { phone, direction: 'outgoing' }, '-created_date', 1
+              );
+              const lastOutText = String(lastOutgoing[0]?.text || '');
+              const alreadySentNudge = lastOutText.startsWith('רק כדי לוודא');
+              if (!alreadySentNudge) {
+                // שליחת הכוונה דטרמיניסטית (פעם אחת)
+                askMessage = await getBotContent(base44, 'confirm_nudge') || 'רק כדי לוודא 😊\nאם הפרטים שמופיעים למעלה נכונים — כתוב/י *כן*.\nאם יש טעות — פשוט שלח/י את הפרט המתוקן (שם או מייל).';
+              }
+              // אם כבר שלחנו הכוונה → askMessage נשאר undefined → fall-through לשרשרת
             }
-            // אם כבר שלחנו הכוונה → askMessage נשאר undefined → fall-through לשרשרת
+            // PASSTHROUGH → askMessage נשאר undefined → fall-through לשרשרת (FP-Confirm / סוכן)
           }
         }
 
