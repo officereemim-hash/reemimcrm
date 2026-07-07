@@ -71,10 +71,17 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 3) WhatsApp logs — שאילתות ממוקדות לפי טלפון
+    // 3) WhatsApp logs — שאילתות ממוקדות לפי טלפון + chat_id
     for (const v of variants) {
       const logs = await svc.entities.WhatsAppMessageLog.filter({ phone: v });
       if (logs.length) await del('WhatsAppMessageLog', logs);
+      // גם לפי chat_id (פורמט 972...@c.us)
+      const intlDigits = v.replace(/\D/g, '');
+      if (intlDigits) {
+        const byChatId = await svc.entities.WhatsAppMessageLog.filter({ chat_id: intlDigits + '@c.us' });
+        const newLogs = byChatId.filter(l => !logs.some(existing => existing.id === l.id));
+        if (newLogs.length) await del('WhatsAppMessageLog', newLogs);
+      }
     }
 
     // 4) חסימות — שאילתות ממוקדות לפי טלפון
