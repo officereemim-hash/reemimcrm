@@ -426,10 +426,12 @@ Deno.serve(async (req) => {
       const nameWordCount = nameCandidate ? nameCandidate.split(/\s+/).length : 0;
       if (isQuestion || nameWordCount > 4) nameCandidate = '';
 
-      // מיזוג לתוך ה-pending
+      // מיזוג לתוך ה-pending — טלפון השולח תמיד קובע
       if (emailMatch) pending.email = emailMatch[0].toLowerCase().trim();
-      if (phoneMatch) pending.phone = phoneMatch[0];
-      if (!pending.phone) pending.phone = localPhone; // ברירת מחדל — טלפון השולח
+      if (phoneMatch && phoneMatch[0] !== localPhone) {
+        pending.extra_phone = phoneMatch[0]; // טלפון שונה שהוקלד — נשמר להערות
+      }
+      pending.phone = localPhone; // תמיד מספר השולח
       if (nameCandidate) pending.name = nameCandidate;
 
       // שמירה ב-SystemSetting
@@ -466,8 +468,19 @@ Deno.serve(async (req) => {
               .replaceAll('{name}', pending.name)
               .replaceAll('{phone}', pending.phone)
               .replaceAll('{email}', pending.email);
+          } else {
+            // לא השתנה כלום — בודקים אם כבר שלחנו הכוונה (confirm_nudge)
+            const lastOutgoing = await base44.asServiceRole.entities.WhatsAppMessageLog.filter(
+              { phone, direction: 'outgoing' }, '-created_date', 1
+            );
+            const lastOutText = String(lastOutgoing[0]?.text || '');
+            const alreadySentNudge = lastOutText.startsWith('רק כדי לוודא');
+            if (!alreadySentNudge) {
+              // שליחת הכוונה דטרמיניסטית (פעם אחת)
+              askMessage = await getBotContent(base44, 'confirm_nudge') || 'רק כדי לוודא 😊\nאם הפרטים שמופיעים למעלה נכונים — כתוב/י *כן*.\nאם יש טעות — פשוט שלח/י את הפרט המתוקן (שם או מייל).';
+            }
+            // אם כבר שלחנו הכוונה → askMessage נשאר undefined → fall-through לשרשרת
           }
-          // אם לא השתנה כלום → askMessage נשאר undefined → fall-through לשרשרת
         }
 
         if (askMessage) {
@@ -494,18 +507,23 @@ Deno.serve(async (req) => {
         let existingContacts = await base44.asServiceRole.entities.Contact.filter({ phone: details.phone });
         if (existingContacts.length === 0) existingContacts = await base44.asServiceRole.entities.Contact.filter({ phone });
         if (existingContacts.length === 0) existingContacts = await base44.asServiceRole.entities.Contact.filter({ phone: '+' + phone });
+        const contactPhone = localPhone; // תמיד מספר השולח
+        const extraPhoneNote = details.extra_phone && details.extra_phone !== contactPhone
+          ? `מספר נוסף שנמסר בצ'אט: ${details.extra_phone}`
+          : '';
         const createdContact = existingContacts[0] || await base44.asServiceRole.entities.Contact.create({
           full_name: details.name,
-          phone: details.phone,
+          phone: contactPhone,
           email: details.email,
           source: 'manual',
           status: 'new_lead',
+          ...(extraPhoneNote ? { notes: extraPhoneNote } : {}),
         });
 
         const serviceRequestData = {
           contact_id: createdContact.id,
           contact_name: details.name,
-          contact_phone: details.phone,
+          contact_phone: contactPhone,
           contact_email: details.email,
           status: 'new',
           source: 'bot',
@@ -991,9 +1009,12 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, fast_path: 'fp_goodbye' });
     }
 
-    const messageCountBefore = (conversation.messages || []).length;
     const incomingLog = await logIncoming(base44, idMessage, phone, text, chatId, conversationId, 'pending_reply');
     await base44.asServiceRole.agents.addMessage(conversation, { role: 'user', content: text });
+    // שמירת מספר ההודעות *אחרי* הוספת הודעת המשתמש — למניעת שליחת הד ישן ע"י processWhatsAppReplies
+    const freshConvForCount = await base44.asServiceRole.agents.getConversation(conversationId);
+    const messageCountBefore = (freshConvForCount.messages || []).length;
+    await base44.asServiceRole.entities.WhatsAppMessageLog.update(incomingLog.id, { message_count_at_send: messageCountBefore });
 
     let agentReply = '';
     const pollStart = Date.now();
@@ -1034,7 +1055,12 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, conversationId, replied: true });
     }
 
-    return Response.json({ ok: true, conversationId, queued: true });
+    // ===== Agent Timeout Fallback: הסוכן לא ענה תוך 25 שניות =====
+    const timeoutMsg = await getBotContent(base44, 'agent_timeout_fallback') || 'מצטערת על ההמתנה 🙏 אני בודקת את זה ואחזור אלייך ממש בקרוב.\nאם זה דחוף — אפשר לכתוב "נציגה" ואדאג שיחזרו אלייך.';
+    const timeoutSent = await sendWhatsApp(chatId, timeoutMsg, botEnabled);
+    await base44.asServiceRole.entities.WhatsAppMessageLog.update(incomingLog.id, { status: 'timeout_fallback' });
+    await logOutgoing(base44, timeoutSent?.idMessage || `out_${Date.now()}_timeout`, phone, timeoutMsg, chatId, conversationId, outgoingStatus);
+    return Response.json({ ok: true, conversationId, timeout_fallback: true });
   } catch (error) {
     console.error('greenApiWebhook error:', error.message);
     return Response.json({ error: error.message }, { status: 500 });
