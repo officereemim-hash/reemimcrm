@@ -395,6 +395,7 @@ Deno.serve(async (req) => {
       const settingKey = 'pending_contact_' + phone;
       const existingPendingSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: settingKey });
       const pending = existingPendingSettings.length > 0 ? JSON.parse(existingPendingSettings[0].value) : {};
+      const oldPending = { ...pending };
 
       // חילוץ מה שיש בהודעה הנוכחית
       const emailMatch = String(text || '').match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
@@ -416,7 +417,8 @@ Deno.serve(async (req) => {
       // מילות מפתח שאסור לקלוט כשם
       const IGNORE_AS_NAME = ['1','2','3','4','5','6','כן','לא','בטח','כמובן','אוקי','ok','סבבה','הסר','הסרה','stop','unsubscribe','נציגה','אמתין','שלום','היי','הי'];
       const isIgnored = IGNORE_AS_NAME.includes(normalizeAnswer(nameCandidate)) || /^\d+$/.test(nameCandidate.trim());
-      if (isIgnored || nameCandidate.length < 2) nameCandidate = '';
+      const hasHebrew = /[\u0590-\u05FF]/.test(nameCandidate);
+      if (isIgnored || nameCandidate.length < 2 || !hasHebrew) nameCandidate = '';
 
       // שאלה = כל הודעה עם סימן שאלה → עוברת לסוכן (מייל/טלפון שהופיעו בה כבר נקלטו ל-pending)
       const isQuestion = text.includes('?');
@@ -452,27 +454,37 @@ Deno.serve(async (req) => {
         } else if (missingName) {
           askMessage = await getBotContent(base44, 'ask_missing_name') || 'כמעט סיימנו 😊 מה השם המלא שלך?';
         } else {
-          // הכל קיים → תבנית אישור
-          const confirmTemplate = await getBotContent(base44, 'contact_details_confirm');
-          askMessage = (confirmTemplate || 'הפרטים שלך:\n📛 שם: {name}\n📱 טלפון: {phone}\n📧 מייל: {email}\n\nהאם הכל נכון? כתוב/י *כן* לאישור.')
-            .replaceAll('{name}', pending.name)
-            .replaceAll('{phone}', pending.phone)
-            .replaceAll('{email}', pending.email);
+          // הכל קיים — בדיקה: האם השתנה פרט ב-pending?
+          const changedSomething =
+            (emailMatch && pending.email !== oldPending.email) ||
+            (phoneMatch && pending.phone !== oldPending.phone) ||
+            (nameCandidate && pending.name !== oldPending.name);
+          if (changedSomething) {
+            // השתנה פרט → שולחים תבנית אישור מעודכנת
+            const confirmTemplate = await getBotContent(base44, 'contact_details_confirm');
+            askMessage = (confirmTemplate || 'הפרטים שלך:\n📛 שם: {name}\n📱 טלפון: {phone}\n📧 מייל: {email}\n\nהאם הכל נכון? כתוב/י *כן* לאישור.')
+              .replaceAll('{name}', pending.name)
+              .replaceAll('{phone}', pending.phone)
+              .replaceAll('{email}', pending.email);
+          }
+          // אם לא השתנה כלום → askMessage נשאר undefined → fall-through לשרשרת
         }
 
-        const sent = await sendWhatsApp(chatId, askMessage, botEnabled);
-        await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
-        await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_partial`, phone, askMessage, chatId, conversationId, outgoingStatus);
-        try {
-          await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${askMessage}` });
-        } catch (error) {}
-        return Response.json({ ok: true, fast_path: missingName || missingEmail ? 'fp_partial_details_ask' : 'fp_details_confirm' });
+        if (askMessage) {
+          const sent = await sendWhatsApp(chatId, askMessage, botEnabled);
+          await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
+          await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_partial`, phone, askMessage, chatId, conversationId, outgoingStatus);
+          try {
+            await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${askMessage}` });
+          } catch (error) {}
+          return Response.json({ ok: true, fast_path: missingName || missingEmail ? 'fp_partial_details_ask' : 'fp_details_confirm' });
+        }
       }
       // isQuestion=true → ממשיכים לסוכן AI
     }
 
     // FP-Confirm: אישור פרטים ("כן") — בודק pending בלי תלות בקיום Contact (הסוכן עלול ליצור Contact במקביל)
-    const positiveAnswers = ['כן', 'נכון', 'הכל נכון', 'בטח', 'כמובן', 'אוקי', 'ok', 'סבבה', '👍', '✅'];
+    const positiveAnswers = ['כן', 'כ', 'נכון', 'הכל נכון', 'בטח', 'כמובן', 'אוקי', 'ok', 'סבבה', '👍', '✅'];
     if (positiveAnswers.includes(normalizeAnswer(text))) {
       const settingKey = 'pending_contact_' + phone;
       const pendingSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: settingKey });
