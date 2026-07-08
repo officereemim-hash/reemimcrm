@@ -63,46 +63,18 @@ async function getZoomToken() {
   return data.access_token;
 }
 
-async function shortenUrl(url) {
-  if (!url) return '';
-  // ניסיון 1: cleanuri.com
+async function createShortLink(base44, targetUrl, purpose = '') {
+  if (!targetUrl) return '';
+  const code = Array.from(crypto.getRandomValues(new Uint8Array(6)))
+    .map(b => 'abcdefghijkmnpqrstuvwxyz23456789'[b % 32]).join('');
   try {
-    const r = await fetch('https://cleanuri.com/api/v1/shorten', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: 'url=' + encodeURIComponent(url),
-    });
-    if (r.ok) {
-      const data = await r.json();
-      if (data?.result_url && data.result_url.startsWith('http')) {
-        console.log('shortenUrl: cleanuri OK →', data.result_url);
-        return data.result_url;
-      }
-      console.warn('shortenUrl: cleanuri bad response:', JSON.stringify(data).slice(0, 200));
-    } else {
-      console.warn('shortenUrl: cleanuri HTTP', r.status, (await r.text()).slice(0, 200));
-    }
+    await base44.asServiceRole.entities.ShortLink.create({ code, target_url: targetUrl, purpose, click_count: 0 });
+    const appUrl = Deno.env.get('BASE44_APP_URL') || 'https://reemim-crm.base44.app';
+    return `${appUrl}/api/redirectShortLink?code=${code}`;
   } catch (e) {
-    console.warn('shortenUrl: cleanuri threw:', e.message);
+    console.warn('createShortLink failed:', e.message);
+    return targetUrl;
   }
-  // ניסיון 2 (גיבוי): is.gd
-  try {
-    const r = await fetch('https://is.gd/create.php?format=simple&url=' + encodeURIComponent(url));
-    if (r.ok) {
-      const s = (await r.text()).trim();
-      if (s.startsWith('http')) {
-        console.log('shortenUrl: is.gd OK →', s);
-        return s;
-      }
-      console.warn('shortenUrl: is.gd bad response:', s.slice(0, 200));
-    } else {
-      console.warn('shortenUrl: is.gd HTTP', r.status);
-    }
-  } catch (e) {
-    console.warn('shortenUrl: is.gd threw:', e.message);
-  }
-  console.warn('shortenUrl: ALL services failed, returning full URL');
-  return url;
 }
 
 // Public — webinar landing-page registration (no auth required)
@@ -208,14 +180,14 @@ Deno.serve(async (req) => {
 
     // קישור ישיר מ-Zoom API (join_url אישי שחוזר מרישום ה-registrant)
     const rawEffectiveLink = hasRecording ? page.recording_url : zoomJoinUrl;
-    const effectiveLink = rawEffectiveLink ? await shortenUrl(rawEffectiveLink) : '';
+    const effectiveLink = rawEffectiveLink ? await createShortLink(base44, rawEffectiveLink, 'zoom_join') : '';
 
     const rawCalendarAddLink = buildCalendarAddLink(
       page.webinar_date,
       page.hero_title || 'וובינר — קרנות ראמים',
       rawEffectiveLink ? `קישור להצטרפות: ${rawEffectiveLink}` : ''
     );
-    const calendarAddLink = rawCalendarAddLink ? await shortenUrl(rawCalendarAddLink) : '';
+    const calendarAddLink = rawCalendarAddLink ? await createShortLink(base44, rawCalendarAddLink, 'calendar') : '';
 
     const message = fillTemplate(confirmTemplate, { name: full_name, date: dateStr, zoom_link: effectiveLink, calendar_add_link: calendarAddLink, webinar_title: page.hero_title || '' });
 
