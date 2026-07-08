@@ -57,7 +57,8 @@ export default function WebinarRegistrationForm({ slug, page }) {
       </h3>
       <input
         type="text"
-        placeholder="שם מלא"
+        placeholder="שם מלא *"
+        required
         value={form.full_name}
         onChange={e => setForm({ ...form, full_name: e.target.value })}
         className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2"
@@ -65,7 +66,8 @@ export default function WebinarRegistrationForm({ slug, page }) {
       />
       <input
         type="tel"
-        placeholder="טלפון נייד"
+        placeholder="טלפון נייד *"
+        required
         value={form.phone}
         onChange={e => setForm({ ...form, phone: e.target.value })}
         className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2"
@@ -73,7 +75,7 @@ export default function WebinarRegistrationForm({ slug, page }) {
       />
       <input
         type="email"
-        placeholder="אימייל"
+        placeholder="אימייל *"
         required
         value={form.email}
         onChange={e => setForm({ ...form, email: e.target.value })}
