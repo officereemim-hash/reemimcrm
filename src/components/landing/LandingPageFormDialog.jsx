@@ -175,6 +175,10 @@ export default function LandingPageFormDialog({ open, onClose, onSave, editItem 
                 <Input value={form.accessibility_url} onChange={e => set('accessibility_url', e.target.value)} placeholder="https://..." dir="ltr" />
               </div>
             </div>
+            <div>
+              <Label className="text-xs text-muted-foreground">קישור להצהרה לאישור דיוור ושימוש במידע</Label>
+              <Input value={form.consent_url || ''} onChange={e => set('consent_url', e.target.value)} placeholder="https://..." dir="ltr" />
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
