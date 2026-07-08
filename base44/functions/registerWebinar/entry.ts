@@ -207,13 +207,15 @@ Deno.serve(async (req) => {
       : '';
 
     // קישור ישיר מ-Zoom API (join_url אישי שחוזר מרישום ה-registrant)
-    const effectiveLink = hasRecording ? page.recording_url : zoomJoinUrl;
+    const rawEffectiveLink = hasRecording ? page.recording_url : zoomJoinUrl;
+    const effectiveLink = rawEffectiveLink ? await shortenUrl(rawEffectiveLink) : '';
 
-    const calendarAddLink = buildCalendarAddLink(
+    const rawCalendarAddLink = buildCalendarAddLink(
       page.webinar_date,
       page.hero_title || 'וובינר — קרנות ראמים',
-      effectiveLink ? `קישור להצטרפות: ${effectiveLink}` : ''
+      rawEffectiveLink ? `קישור להצטרפות: ${rawEffectiveLink}` : ''
     );
+    const calendarAddLink = rawCalendarAddLink ? await shortenUrl(rawCalendarAddLink) : '';
 
     const message = fillTemplate(confirmTemplate, { name: full_name, date: dateStr, zoom_link: effectiveLink, calendar_add_link: calendarAddLink, webinar_title: page.hero_title || '' });
 
