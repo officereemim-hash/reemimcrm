@@ -214,8 +214,7 @@ Deno.serve(async (req) => {
       ? new Date(page.webinar_date).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', dateStyle: 'full', timeStyle: 'short' })
       : '';
 
-    const rawEffectiveLink = hasRecording ? page.recording_url : (zoomJoinUrl || zoomLink);
-    const effectiveLink = await shortenUrl(rawEffectiveLink);
+    const effectiveLink = hasRecording ? page.recording_url : (zoomJoinUrl || zoomLink);
 
     const rawCalendarLink = buildCalendarAddLink(
       page.webinar_date,
@@ -270,7 +269,7 @@ Deno.serve(async (req) => {
         const htmlBody = `<div dir="rtl" style="font-family:Arial;font-size:16px;color:#333">
           <h2 style="color:#4B2E83">נרשמת בהצלחה לוובינר! 🎓</h2>
           <p>שלום ${full_name},</p>
-          <p>${dateStr ? `📅 מועד: ${dateStr}<br/>` : ''}${effectiveLink ? `🔗 קישור להצטרפות: <a href="${effectiveLink}">${effectiveLink}</a>` : ''}</p>
+          <p>${dateStr ? `📅 מועד: ${dateStr}<br/>` : ''}${effectiveLink ? `🔗 <a href="${effectiveLink}" style="color:#4B2E83;font-weight:bold">לחצו כאן להצטרפות לוובינר</a>` : ''}</p>
           ${calendarAddLink ? `<p><a href="${calendarAddLink}" style="display:inline-block;background:#4B2E83;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none">📅 הוסף ליומן Google</a></p>` : ''}
           <p>נתראה! צוות קרנות ראמים</p>
         </div>`;
