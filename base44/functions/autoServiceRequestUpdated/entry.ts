@@ -23,7 +23,8 @@ function fillTemplate(template, values) {
     .replaceAll('{meeting_link}', values.meeting_link || '')
     .replaceAll('{questionnaire_link}', values.questionnaire_link || '')
     .replaceAll('{quote_link}', values.quote_link || '')
-    .replaceAll('{summary}', values.summary || '');
+    .replaceAll('{summary}', values.summary || '')
+    .replaceAll('{car_plate}', values.car_plate || '');
 }
 
 Deno.serve(async (req) => {
@@ -379,16 +380,20 @@ Deno.serve(async (req) => {
       const confirmResult = await sendWhatsApp(confirmMessage);
       await logCommunication(confirmMessage, templateKey, confirmResult);
 
-      // === מסלול וובינר: דילוג על שאלון שורנס, שליחת הודעת סיום ===
+      // === מסלול וובינר: דילוג על שאלון שורנס ===
+      // פגישות מודיעין: לא שולחים closing כאן — ה-closing יישלח אחרי מסלול החניה (FP-CarPlate)
       if (isWebinar) {
-        await new Promise(resolve => setTimeout(resolve, 1200));
-        const closingTemplate = await getContent('conversation_closing');
-        const closingMessage = fillTemplate(closingTemplate || 'תודה רבה {name}, שיהיה לך יום נפלא! 🙏', values);
-        const closingResult = await sendWhatsApp(closingMessage);
-        await logCommunication(closingMessage, 'conversation_closing', closingResult);
+        const isModiinMeeting = templateKey === 'meeting_scheduled_modiin' || apptType === 'modiin';
+        if (!isModiinMeeting) {
+          await new Promise(resolve => setTimeout(resolve, 1200));
+          const closingTemplate = await getContent('conversation_closing');
+          const closingMessage = fillTemplate(closingTemplate || 'תודה רבה {name}, שיהיה לך יום נפלא! 🙏', values);
+          const closingResult = await sendWhatsApp(closingMessage);
+          await logCommunication(closingMessage, 'conversation_closing', closingResult);
+        }
 
         await base44.asServiceRole.entities.Contact.update(contact.id, {
-          bot_status: 'closed',
+          bot_status: isModiinMeeting ? 'waiting_user_reply' : 'closed',
           last_bot_interaction_at: new Date().toISOString(),
         });
         return Response.json({ ok: true, action: 'webinar_meeting_scheduled', template: templateKey });

@@ -91,6 +91,17 @@ async function sendWhatsApp(chatId, message, botEnabled) {
   return await response.json();
 }
 
+async function sendWhatsAppFileByUrl(chatId, fileUrl, fileName, caption, botEnabled) {
+  if (!chatId || !fileUrl || !botEnabled) return null;
+  const response = await fetch(`https://api.green-api.com/waInstance${INSTANCE_ID}/sendFileByUrl/${API_TOKEN}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chatId, urlFile: fileUrl, fileName: fileName || 'image.png', caption: caption || '' }),
+  });
+  if (!response.ok) return null;
+  return await response.json();
+}
+
 async function sendTyping(chatId, seconds = 15, botEnabled = false) {
   if (!botEnabled) return;
   fetch(`https://api.green-api.com/waInstance${INSTANCE_ID}/sendTyping/${API_TOKEN}`, {
@@ -984,6 +995,113 @@ Deno.serve(async (req) => {
           await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${ackMsg}` });
         } catch (error) {}
         return Response.json({ ok: true, fast_path: 'fp_questionnaire_ack_waiting' });
+      }
+    }
+
+    // ===== FP-CarPlate: קליטת מספר רכב או "אין צורך" לפגישה במודיעין =====
+    const MODIIN_MEETING_STATUSES = ['meeting_scheduled_frontal'];
+    if (contact && serviceRequest && MODIIN_MEETING_STATUSES.includes(serviceRequest.status) && serviceRequest.last_appointment_type === 'modiin' && !contact.car_plate) {
+      const normalized = normalizeAnswer(text);
+      const isNoCar = ['אין צורך', 'אין', 'לא צריך', 'לא', 'לא מגיע עם רכב', 'בלי רכב', 'אין רכב'].includes(normalized);
+      const carPlateMatch = text.match(/\b\d{5,8}\b/);
+
+      if (isNoCar || carPlateMatch) {
+        const officeImageUrl = await getServiceContentUrl(base44, { content_type: 'image', sub_type: 'modiin_office_image' });
+
+        if (carPlateMatch && !isNoCar) {
+          // מסלול 1: יש מספר רכב
+          const plateNumber = carPlateMatch[0];
+          await base44.asServiceRole.entities.Contact.update(contact.id, { car_plate: plateNumber });
+
+          // תודה ללקוח
+          const thanksMsg = await getBotContent(base44, 'car_plate_thanks') || 'תודה! צוות ראמים עודכן במספר הרכב ✅';
+          const thanksSent = await sendWhatsApp(chatId, thanksMsg, botEnabled);
+          await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
+          await logOutgoing(base44, thanksSent?.idMessage || `out_${Date.now()}_fp_car_thanks`, phone, thanksMsg, chatId, conversationId, outgoingStatus);
+
+          // התראה לרכזת — וואטסאפ למספר הבוט
+          const alertTemplate = await getBotContent(base44, 'car_plate_admin_alert') || '🚗 *יש לארגן חניה*\nשם לקוח: {name}\nמספר רכב: {car_plate}\nמועד פגישה: {time}';
+          const alertMsg = alertTemplate
+            .replaceAll('{name}', contact.full_name || '')
+            .replaceAll('{car_plate}', plateNumber)
+            .replaceAll('{time}', serviceRequest.last_appointment_time_str || '');
+          const botPhoneSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'coordinator_phone' });
+          const botPhone = normalizeIntlPhone(botPhoneSettings[0]?.value || '');
+          if (botPhone) {
+            await sendWhatsApp(`${botPhone}@c.us`, alertMsg, botEnabled);
+          }
+
+          // התראה במייל
+          try {
+            const BREVO_API_KEY = Deno.env.get('BREVO_API_KEY') || '';
+            if (BREVO_API_KEY) {
+              const senderSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'mailing_sender_email' });
+              const senderEmail = senderSettings[0]?.value || '';
+              if (senderEmail) {
+                await fetch('https://api.brevo.com/v3/smtp/email', {
+                  method: 'POST',
+                  headers: { 'api-key': BREVO_API_KEY, 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    sender: { name: 'קרנות ראמים — בוט', email: senderEmail },
+                    to: [{ email: 'office.reemim@gmail.com', name: 'משרד ראמים' }],
+                    subject: `🚗 חניה לארגן — ${contact.full_name || ''} — רכב ${plateNumber}`,
+                    htmlContent: `<div dir="rtl" style="font-family:Arial;font-size:16px">${alertMsg.replace(/\n/g, '<br/>')}</div>`,
+                  }),
+                });
+              }
+            }
+          } catch (e) { console.error('Car plate email error:', e.message); }
+
+          // שליחת תמונת המשרד
+          if (officeImageUrl) {
+            await new Promise(resolve => setTimeout(resolve, 1500));
+            await sendWhatsAppFileByUrl(chatId, officeImageUrl, 'modiin_office.png', '', botEnabled);
+          }
+
+          // הנחיות חניה
+          await new Promise(resolve => setTimeout(resolve, 1500));
+          const parkingMsg = await getBotContent(base44, 'parking_instructions_modiin') || '';
+          if (parkingMsg) {
+            const parkingSent = await sendWhatsApp(chatId, parkingMsg, botEnabled);
+            await logOutgoing(base44, parkingSent?.idMessage || `out_${Date.now()}_fp_car_parking`, phone, parkingMsg, chatId, conversationId, outgoingStatus);
+          }
+
+          // הודעת סיום
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          const closingMsg = await getBotContent(base44, 'conversation_closing') || '';
+          if (closingMsg) {
+            const closingFilled = closingMsg.replaceAll('{name}', contact.full_name || '');
+            const closingSent = await sendWhatsApp(chatId, closingFilled, botEnabled);
+            await logOutgoing(base44, closingSent?.idMessage || `out_${Date.now()}_fp_car_closing`, phone, closingFilled, chatId, conversationId, outgoingStatus);
+          }
+
+          try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${thanksMsg}` }); } catch (_) {}
+          return Response.json({ ok: true, fast_path: 'fp_car_plate_saved', plate: plateNumber });
+        }
+
+        if (isNoCar) {
+          // מסלול 2: אין צורך בחניה — סימון car_plate כ"אין" למניעת חזרה
+          await base44.asServiceRole.entities.Contact.update(contact.id, { car_plate: 'אין' });
+
+          await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
+
+          // שליחת תמונת המשרד
+          if (officeImageUrl) {
+            await sendWhatsAppFileByUrl(chatId, officeImageUrl, 'modiin_office.png', '', botEnabled);
+          }
+
+          // הודעת סיום
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          const closingMsg = await getBotContent(base44, 'conversation_closing') || '';
+          if (closingMsg) {
+            const closingFilled = closingMsg.replaceAll('{name}', contact.full_name || '');
+            const closingSent = await sendWhatsApp(chatId, closingFilled, botEnabled);
+            await logOutgoing(base44, closingSent?.idMessage || `out_${Date.now()}_fp_nocar_closing`, phone, closingFilled, chatId, conversationId, outgoingStatus);
+          }
+
+          try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n[תמונת משרד + הודעת סיום]` }); } catch (_) {}
+          return Response.json({ ok: true, fast_path: 'fp_car_plate_not_needed' });
+        }
       }
     }
 
