@@ -198,8 +198,9 @@ Deno.serve(async (req) => {
     });
     const zoomLink = zoomRecords[0]?.url || '';
 
-    // אם יש קישור הקלטה — שולחים אותו במקום קישור הזום
-    const hasRecording = !!page.recording_url;
+    // שליחת הקלטה מושבתת זמנית — hasRecording תמיד false עד שנחליט אחרת
+    // const hasRecording = !!page.recording_url;
+    const hasRecording = false;
 
     const confirmKey = hasRecording ? 'webinar_confirm_recording' : 'webinar_confirm';
     const confirmRecords = await base44.asServiceRole.entities.BotContent.filter({ key: confirmKey, is_active: true });
