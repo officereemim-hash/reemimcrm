@@ -63,14 +63,13 @@ async function getZoomToken() {
   return data.access_token;
 }
 
-async function createShortLink(base44, targetUrl, purpose = '') {
+async function createShortLink(base44, functionsBase, targetUrl, purpose = '') {
   if (!targetUrl) return '';
   const code = Array.from(crypto.getRandomValues(new Uint8Array(6)))
     .map(b => 'abcdefghijkmnpqrstuvwxyz23456789'[b % 32]).join('');
   try {
     await base44.asServiceRole.entities.ShortLink.create({ code, target_url: targetUrl, purpose, click_count: 0 });
-    const appUrl = Deno.env.get('BASE44_APP_URL') || 'https://reemim-crm.base44.app';
-    return `${appUrl}/api/redirectShortLink?code=${code}`;
+    return `${functionsBase}/redirectShortLink?code=${code}`;
   } catch (e) {
     console.warn('createShortLink failed:', e.message);
     return targetUrl;
@@ -81,6 +80,8 @@ async function createShortLink(base44, targetUrl, purpose = '') {
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
+    const reqUrl = new URL(req.url);
+    const FUNCTIONS_BASE = `${reqUrl.origin}${reqUrl.pathname.replace(/\/registerWebinar$/, '')}`;
     const body = await req.json();
     const { slug, full_name, phone, email } = body;
 
@@ -180,14 +181,14 @@ Deno.serve(async (req) => {
 
     // קישור ישיר מ-Zoom API (join_url אישי שחוזר מרישום ה-registrant)
     const rawEffectiveLink = hasRecording ? page.recording_url : zoomJoinUrl;
-    const effectiveLink = rawEffectiveLink ? await createShortLink(base44, rawEffectiveLink, 'zoom_join') : '';
+    const effectiveLink = rawEffectiveLink ? await createShortLink(base44, FUNCTIONS_BASE, rawEffectiveLink, 'zoom_join') : '';
 
     const rawCalendarAddLink = buildCalendarAddLink(
       page.webinar_date,
       page.hero_title || 'וובינר — קרנות ראמים',
       rawEffectiveLink ? `קישור להצטרפות: ${rawEffectiveLink}` : ''
     );
-    const calendarAddLink = rawCalendarAddLink ? await createShortLink(base44, rawCalendarAddLink, 'calendar') : '';
+    const calendarAddLink = rawCalendarAddLink ? await createShortLink(base44, FUNCTIONS_BASE, rawCalendarAddLink, 'calendar') : '';
 
     const message = fillTemplate(confirmTemplate, { name: full_name, date: dateStr, zoom_link: effectiveLink, calendar_add_link: calendarAddLink, webinar_title: page.hero_title || '' });
 
