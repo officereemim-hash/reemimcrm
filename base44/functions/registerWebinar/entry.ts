@@ -214,7 +214,8 @@ Deno.serve(async (req) => {
       ? new Date(page.webinar_date).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', dateStyle: 'full', timeStyle: 'short' })
       : '';
 
-    const effectiveLink = hasRecording ? page.recording_url : (zoomJoinUrl || zoomLink);
+    const rawEffectiveLink = hasRecording ? page.recording_url : (zoomJoinUrl || zoomLink);
+    const effectiveLink = await shortenUrl(rawEffectiveLink);
 
     const rawCalendarLink = buildCalendarAddLink(
       page.webinar_date,
