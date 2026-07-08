@@ -28,10 +28,14 @@ export default function LandingPagesAdmin() {
   useEffect(() => { load(); }, []);
 
   const handleSave = async (data) => {
-    if (editItem) await base44.entities.LandingPage.update(editItem.id, data);
-    else await base44.entities.LandingPage.create(data);
-    setShowForm(false); setEditItem(null); load();
-    toast.success('דף הנחיתה נשמר');
+    try {
+      if (editItem) await base44.entities.LandingPage.update(editItem.id, data);
+      else await base44.entities.LandingPage.create(data);
+      setShowForm(false); setEditItem(null); load();
+      toast.success('דף הנחיתה נשמר');
+    } catch (err) {
+      toast.error('שגיאה בשמירת הדף: ' + (err?.message || 'נסי שוב'));
+    }
   };
 
   const handleDelete = async () => {

@@ -71,14 +71,15 @@ export default function LandingPageFormDialog({ open, onClose, onSave, editItem 
   };
 
   const handleSubmit = () => {
-    if (!form.slug.trim()) return;
     if (!form.webinar_date) {
       setDateError(true);
       return;
     }
     setDateError(false);
+    const slug = form.slug.trim() || form.webinar_type;
     const payload = {
       ...form,
+      slug,
       webinar_date: new Date(form.webinar_date).toISOString(),
     };
     onSave(payload);
@@ -94,11 +95,6 @@ export default function LandingPageFormDialog({ open, onClose, onSave, editItem 
         <div className="space-y-4 py-2">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label>כתובת (slug)</Label>
-              <Input value={form.slug} onChange={e => set('slug', e.target.value)} placeholder="retirement" dir="ltr" />
-              <p className="text-xs text-muted-foreground mt-1">הכתובת: /webinar/{form.slug || '...'}</p>
-            </div>
-            <div>
               <Label>סוג וובינר</Label>
               <Select value={form.webinar_type} onValueChange={v => set('webinar_type', v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
@@ -106,6 +102,7 @@ export default function LandingPageFormDialog({ open, onClose, onSave, editItem 
                   {TYPE_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground mt-1">כתובת הדף: /webinar/{form.slug || form.webinar_type}</p>
             </div>
           </div>
 
