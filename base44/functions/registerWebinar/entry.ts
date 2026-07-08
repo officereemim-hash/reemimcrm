@@ -190,16 +190,7 @@ Deno.serve(async (req) => {
       } catch (e) { console.error('Zoom registrant error:', e.message); }
     }
 
-    // Resolve content
-    const zoomRecords = await base44.asServiceRole.entities.ServiceContent.filter({
-      content_type: 'external_link',
-      sub_type: ZOOM_SUBTYPE[page.webinar_type],
-      is_active: true,
-    });
-    const zoomLink = zoomRecords[0]?.url || '';
-
     // שליחת הקלטה מושבתת זמנית — hasRecording תמיד false עד שנחליט אחרת
-    // const hasRecording = !!page.recording_url;
     const hasRecording = false;
 
     const confirmKey = hasRecording ? 'webinar_confirm_recording' : 'webinar_confirm';
@@ -215,7 +206,8 @@ Deno.serve(async (req) => {
       ? new Date(page.webinar_date).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', dateStyle: 'full', timeStyle: 'short' })
       : '';
 
-    const effectiveLink = hasRecording ? page.recording_url : (zoomJoinUrl || zoomLink);
+    // קישור ישיר מ-Zoom API (join_url אישי שחוזר מרישום ה-registrant)
+    const effectiveLink = hasRecording ? page.recording_url : zoomJoinUrl;
 
     const calendarAddLink = buildCalendarAddLink(
       page.webinar_date,
