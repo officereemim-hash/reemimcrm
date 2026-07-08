@@ -216,12 +216,11 @@ Deno.serve(async (req) => {
 
     const effectiveLink = hasRecording ? page.recording_url : (zoomJoinUrl || zoomLink);
 
-    const rawCalendarLink = buildCalendarAddLink(
+    const calendarAddLink = buildCalendarAddLink(
       page.webinar_date,
       page.hero_title || 'וובינר — קרנות ראמים',
       effectiveLink ? `קישור להצטרפות: ${effectiveLink}` : ''
     );
-    const calendarAddLink = await shortenUrl(rawCalendarLink);
 
     const message = fillTemplate(confirmTemplate, { name: full_name, date: dateStr, zoom_link: effectiveLink, calendar_add_link: calendarAddLink, webinar_title: page.hero_title || '' });
 
