@@ -22,7 +22,8 @@ function fillTemplate(template, values) {
     .replaceAll('{name}', values.name || '')
     .replaceAll('{date}', values.date || '')
     .replaceAll('{zoom_link}', values.zoom_link || '')
-    .replaceAll('{calendar_add_link}', values.calendar_add_link || '');
+    .replaceAll('{calendar_add_link}', values.calendar_add_link || '')
+    .replaceAll('{webinar_title}', values.webinar_title || '');
 }
 
 // בונה קישור "הוסף ליומן Google" אוטומטי מתאריך הוובינר (לא דורש OAuth — עובד לכל אחד)
@@ -222,7 +223,7 @@ Deno.serve(async (req) => {
     );
     const calendarAddLink = await shortenUrl(rawCalendarLink);
 
-    const message = fillTemplate(confirmTemplate, { name: full_name, date: dateStr, zoom_link: effectiveLink, calendar_add_link: calendarAddLink });
+    const message = fillTemplate(confirmTemplate, { name: full_name, date: dateStr, zoom_link: effectiveLink, calendar_add_link: calendarAddLink, webinar_title: page.hero_title || '' });
 
     // Check bot/green-api enabled
     const botSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' });
