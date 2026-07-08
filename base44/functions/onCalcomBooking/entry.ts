@@ -120,17 +120,29 @@ async function sendWhatsApp(phone, message) {
 }
 
 async function findContact(base44, attendee) {
+  // 1. חיפוש לפי מייל
   if (attendee.email) {
-    const byEmail = await base44.asServiceRole.entities.Contact.filter({ email: attendee.email });
+    const byEmail = await base44.asServiceRole.entities.Contact.filter({ email: attendee.email.toLowerCase().trim() });
     if (byEmail[0]) return byEmail[0];
   }
 
+  // 2. חיפוש לפי טלפון — בכל הפורמטים
   if (attendee.phone) {
     const clean = normalizePhone(attendee.phone);
-    const byPhone = await base44.asServiceRole.entities.Contact.filter({ phone: clean });
-    if (byPhone[0]) return byPhone[0];
-    const byPlusPhone = await base44.asServiceRole.entities.Contact.filter({ phone: `+${clean}` });
-    if (byPlusPhone[0]) return byPlusPhone[0];
+    const local = clean.startsWith('972') ? '0' + clean.substring(3) : clean;
+    for (const variant of [clean, `+${clean}`, local]) {
+      const found = await base44.asServiceRole.entities.Contact.filter({ phone: variant });
+      if (found[0]) return found[0];
+    }
+  }
+
+  // 3. Fallback — חיפוש לפי שם מלא (רק התאמה מדויקת)
+  if (attendee.name) {
+    const trimmedName = attendee.name.trim();
+    if (trimmedName.length >= 3) {
+      const byName = await base44.asServiceRole.entities.Contact.filter({ full_name: trimmedName });
+      if (byName.length === 1) return byName[0]; // רק אם יש התאמה יחידה — למנוע בלבול
+    }
   }
 
   return null;
