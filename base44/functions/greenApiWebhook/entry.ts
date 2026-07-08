@@ -562,38 +562,30 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ===== FP-WebinarCoupon: זיהוי קוד קופון וובינר → קישור תשלום (דמו) =====
-    if (contact) {
-      const couponText = String(text || '').trim().toUpperCase();
-      const couponMatch = couponText.match(/\b(INV|DIV|RET|WEB)-[A-Z0-9]{4,6}\b/);
-      if (couponMatch) {
-        const code = couponMatch[0];
-        const regsByContact = await base44.asServiceRole.entities.WebinarRegistration.filter({ contact_id: contact.id }, '-created_date', 20);
-        const reg = regsByContact.find(r => String(r.coupon_code || '').toUpperCase() === code);
-        if (reg) {
-          const PAYMENT_SUBTYPE = {
-            investments: 'payment_webinar_investments',
-            divorce: 'payment_webinar_divorce',
-            retirement: 'payment_webinar_retirement',
-          };
-          const paymentUrl = await getServiceContentUrl(base44, { content_type: 'payment_link', sub_type: PAYMENT_SUBTYPE[reg.webinar_type] });
-          const couponCfgRecords = await base44.asServiceRole.entities.WebinarCouponSetting.filter({ webinar_type: reg.webinar_type });
-          const couponCfg = couponCfgRecords[0] || {};
-          const intro = await getBotContent(base44, 'webinar_payment_intro') || 'מעולה {name}! קישור לתשלום: {payment_link}';
-          const message = intro
-            .replaceAll('{name}', contact.full_name || '')
-            .replaceAll('{payment_link}', paymentUrl)
-            .replaceAll('{discount}', couponCfg.discount_percent != null ? String(couponCfg.discount_percent) : '')
-            .replaceAll('{amount}', couponCfg.amount != null ? String(couponCfg.amount) : '');
-          const sent = await sendWhatsApp(chatId, message, botEnabled);
-          await base44.asServiceRole.entities.WebinarRegistration.update(reg.id, { pending_payment: true });
-          await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
-          await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_coupon`, phone, message, chatId, conversationId, outgoingStatus);
-          try {
-            await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${message}` });
-          } catch (error) {}
-          return Response.json({ ok: true, fast_path: 'fp_webinar_coupon', webinar_type: reg.webinar_type });
+    // ===== FP-WebinarPostMeeting: לקוח וובינר כותב "פגישה" → ניתוב לתיאום פגישה =====
+    if (contact && normalizeAnswer(text) === 'פגישה') {
+      const webinarRegs = await base44.asServiceRole.entities.WebinarRegistration.filter({ contact_id: contact.id }, '-created_date', 5);
+      const activeReg = webinarRegs.find(r => r.coupon_sent === true);
+      if (activeReg) {
+        // יצירת/עדכון SR לסטטוס interested כדי להפעיל את מסלול בחירת מיקום פגישה
+        let sr = serviceRequest;
+        if (!sr || ['completed', 'cancelled', 'closed_lost', 'followup_closed'].includes(sr?.status)) {
+          sr = await base44.asServiceRole.entities.ServiceRequest.create({
+            contact_id: contact.id, contact_name: contact.full_name, contact_phone: contact.phone,
+            contact_email: contact.email, status: 'interested', source: 'webinar', conversation_id: conversationId,
+            service_type: activeReg.webinar_type === 'retirement' ? 'retirement' : activeReg.webinar_type === 'investments' ? 'investments' : 'divorce_split',
+          });
+        } else {
+          await base44.asServiceRole.entities.ServiceRequest.update(sr.id, { status: 'interested', source: 'webinar' });
         }
+        // שליחת בחירת מיקום פגישה
+        const locationMsg = await getBotContent(base44, 'webinar_location_choice') || 'איפה תרצו לקיים את הפגישה?\nא) זום\nב) מודיעין\nג) פתח תקווה\nד) שיחת טלפון';
+        const locationFilled = locationMsg.replaceAll('{name}', contact.full_name || '');
+        const sent = await sendWhatsApp(chatId, locationFilled, botEnabled);
+        await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
+        await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_webinar_meeting`, phone, locationFilled, chatId, conversationId, outgoingStatus);
+        try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${locationFilled}` }); } catch (_) {}
+        return Response.json({ ok: true, fast_path: 'fp_webinar_post_meeting' });
       }
     }
 

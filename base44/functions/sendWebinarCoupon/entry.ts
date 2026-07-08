@@ -9,12 +9,7 @@ function toChatId(localPhone) {
   return `${clean}@c.us`;
 }
 
-function genCoupon(type, customPrefix) {
-  const prefix = customPrefix || { investments: 'INV', divorce: 'DIV', retirement: 'RET' }[type] || 'WEB';
-  return `${prefix}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
-}
-
-// Sends webinar coupon — automatic (by webinar_type) or manual (by registration_ids)
+// Sends post-webinar follow-up messages (intro + options with links)
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
@@ -31,12 +26,21 @@ Deno.serve(async (req) => {
     const botEnabled = botSettings[0]?.value === 'true';
     const greenEnabled = greenSettings[0]?.value === 'true';
 
-    const couponRecords = await base44.asServiceRole.entities.BotContent.filter({ key: 'webinar_coupon', is_active: true });
-    const template = couponRecords[0]?.content || 'תודה {name}! קוד ההטבה שלך: {coupon_code}';
+    // שליפת תבניות הודעה
+    const introRecords = await base44.asServiceRole.entities.BotContent.filter({ key: 'webinar_post_intro', is_active: true });
+    const optionsRecords = await base44.asServiceRole.entities.BotContent.filter({ key: 'webinar_post_options', is_active: true });
+    const introTemplate = introRecords[0]?.content || 'היי {name}, שמחנו לראות אותך בהדרכה!';
+    const optionsTemplate = optionsRecords[0]?.content || '';
 
-    // הגדרות קופון לפי סוג וובינר — אחוז הטבה / סכום / קידומת קוד
-    const couponSettings = await base44.asServiceRole.entities.WebinarCouponSetting.list();
-    const settingFor = (type) => couponSettings.find(s => s.webinar_type === type) || {};
+    // שליפת קישורים מ-ServiceContent
+    const [sc1, sc2, sc3] = await Promise.all([
+      base44.asServiceRole.entities.ServiceContent.filter({ sub_type: 'webinar_option1_digital', is_active: true }),
+      base44.asServiceRole.entities.ServiceContent.filter({ sub_type: 'webinar_option2_meeting_program', is_active: true }),
+      base44.asServiceRole.entities.ServiceContent.filter({ sub_type: 'webinar_option3_full_personal', is_active: true }),
+    ]);
+    const option1Link = sc1[0]?.url || '';
+    const option2Link = sc2[0]?.url || '';
+    const option3Link = sc3[0]?.url || '';
 
     // Select target registrations
     let regs = [];
@@ -46,9 +50,7 @@ Deno.serve(async (req) => {
         if (r[0]) regs.push(r[0]);
       }
     } else if (webinar_type) {
-      const filterQuery = { webinar_type };
-      const all = await base44.asServiceRole.entities.WebinarRegistration.filter(filterQuery);
-      // If webinar_date provided, filter to matching date (same day)
+      const all = await base44.asServiceRole.entities.WebinarRegistration.filter({ webinar_type });
       let filtered = all;
       if (webinar_date) {
         const targetDay = webinar_date.substring(0, 10);
@@ -66,37 +68,53 @@ Deno.serve(async (req) => {
       const contact = contacts[0];
       if (!contact?.phone) { skipped++; continue; }
 
-      const cfg = settingFor(reg.webinar_type);
-      const couponCode = reg.coupon_code || genCoupon(reg.webinar_type, cfg.coupon_prefix);
-      const message = template
-        .replaceAll('{name}', contact.full_name || '')
-        .replaceAll('{coupon_code}', couponCode)
-        .replaceAll('{discount}', cfg.discount_percent != null ? String(cfg.discount_percent) : '')
-        .replaceAll('{amount}', cfg.amount != null ? String(cfg.amount) : '');
+      const chatId = toChatId(contact.phone);
+      const name = contact.full_name || '';
+
+      // הודעה 1: ברכה
+      const introMessage = introTemplate.replaceAll('{name}', name);
+
+      // הודעה 2: מסלולים עם קישורים
+      const optionsMessage = optionsTemplate
+        .replaceAll('{name}', name)
+        .replaceAll('{option1_link}', option1Link)
+        .replaceAll('{option2_link}', option2Link)
+        .replaceAll('{option3_link}', option3Link);
 
       let status = 'skipped';
       if (botEnabled && greenEnabled) {
-        const res = await fetch(`https://api.green-api.com/waInstance${INSTANCE_ID}/sendMessage/${API_TOKEN}`, {
+        // שליחת הודעה 1
+        const res1 = await fetch(`https://api.green-api.com/waInstance${INSTANCE_ID}/sendMessage/${API_TOKEN}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chatId: toChatId(contact.phone), message }),
+          body: JSON.stringify({ chatId, message: introMessage }),
         });
-        status = res.ok ? 'sent' : 'failed';
+
+        // השהיה של 1.5 שניות
+        await new Promise(resolve => setTimeout(resolve, 1500));
+
+        // שליחת הודעה 2
+        const res2 = await fetch(`https://api.green-api.com/waInstance${INSTANCE_ID}/sendMessage/${API_TOKEN}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chatId, message: optionsMessage }),
+        });
+
+        status = (res1.ok && res2.ok) ? 'sent' : 'failed';
       } else if (botEnabled) {
         status = 'sent';
       }
 
       await base44.asServiceRole.entities.WebinarRegistration.update(reg.id, {
-        coupon_code: couponCode,
         coupon_sent: true,
         coupon_sent_at: new Date().toISOString().split('T')[0],
         attended: true,
-        pending_payment: true,
       });
       await base44.asServiceRole.entities.Communication.create({
         contact_id: contact.id, type: 'whatsapp', direction: 'outbound',
-        content: message.substring(0, 500), sent_by: 'system', is_automated: true,
-        template_id: 'webinar_coupon', status,
+        content: (introMessage + '\n---\n' + optionsMessage).substring(0, 500),
+        sent_by: 'system', is_automated: true,
+        template_id: 'webinar_post_options', status,
       });
       sent++;
     }
