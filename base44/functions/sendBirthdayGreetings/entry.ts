@@ -18,7 +18,7 @@ async function sendWhatsApp(phone, message) {
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chatId, message }),
+      body: JSON.stringify({ chatId, message, typingTime: 3000 }),
     }
   );
   return res.ok;

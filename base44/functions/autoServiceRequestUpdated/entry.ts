@@ -135,7 +135,7 @@ Deno.serve(async (req) => {
       const response = await fetch(sendMessageUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chatId, message }),
+        body: JSON.stringify({ chatId, message, typingTime: 3000 }),
       });
       const responseText = await response.text();
       return {
@@ -237,7 +237,7 @@ Deno.serve(async (req) => {
       if (quoteUrl) {
         const isPdfFile = /\.pdf(\?.*)?$/i.test(quoteUrl);
         if (isPdfFile) {
-          await new Promise(resolve => setTimeout(resolve, 1200));
+          await new Promise(resolve => setTimeout(resolve, 3000));
           const fileResult = await sendWhatsAppFile(quoteUrl, `הצעת מחיר - ${contact.full_name || ''}.pdf`);
           await logCommunication(quoteUrl, 'quote_sent_file', fileResult);
         }
@@ -297,7 +297,7 @@ Deno.serve(async (req) => {
       if (!isWebinar && !alreadyGotQuote && quoteUrl) {
         const isPdfFile = /\.pdf(\?.*)?$/i.test(quoteUrl);
         if (isPdfFile) {
-          await new Promise(resolve => setTimeout(resolve, 1200));
+          await new Promise(resolve => setTimeout(resolve, 3000));
           const fileResult = await sendWhatsAppFile(quoteUrl, `הצעת מחיר - ${contact.full_name || ''}.pdf`);
           await logCommunication(quoteUrl, 'interested_quote_file', fileResult);
         }
@@ -385,7 +385,7 @@ Deno.serve(async (req) => {
       if (isWebinar) {
         const isModiinMeeting = templateKey === 'meeting_scheduled_modiin' || apptType === 'modiin';
         if (!isModiinMeeting) {
-          await new Promise(resolve => setTimeout(resolve, 1200));
+          await new Promise(resolve => setTimeout(resolve, 3000));
           const closingTemplate = await getContent('conversation_closing');
           const closingMessage = fillTemplate(closingTemplate || 'תודה רבה {name}, שיהיה לך יום נפלא! 🙏', values);
           const closingResult = await sendWhatsApp(closingMessage);
@@ -404,7 +404,7 @@ Deno.serve(async (req) => {
       if (!questionnaireUrl) {
         const clarifyTemplate = await getContent('service_type_clarify');
         const clarifyMessage = fillTemplate(clarifyTemplate || 'לאיזה תחום הפנייה? 1) ייעוץ פרישה 2) היתכנות כלכלית 3) תכנון השקעות 4) איזון אקטוארי בגירושין 5) זכויות מס', values);
-        await new Promise(resolve => setTimeout(resolve, 1200));
+        await new Promise(resolve => setTimeout(resolve, 3000));
         const clarifyResult = await sendWhatsApp(clarifyMessage);
         await logCommunication(clarifyMessage, 'service_type_clarify', clarifyResult);
         await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { pending_service_clarify: true });
@@ -417,7 +417,7 @@ Deno.serve(async (req) => {
 
       const questionnaireTemplate = await getContent('questionnaire_request');
       if (questionnaireTemplate) {
-        await new Promise(resolve => setTimeout(resolve, 1200));
+        await new Promise(resolve => setTimeout(resolve, 3000));
         const questionnaireMessage = fillTemplate(questionnaireTemplate, { ...values, questionnaire_link: questionnaireUrl });
         const questionnaireResult = await sendWhatsApp(questionnaireMessage);
         await logCommunication(questionnaireMessage, 'questionnaire_request', questionnaireResult);
@@ -452,12 +452,12 @@ Deno.serve(async (req) => {
       const thirdMessage = fillTemplate(optInTemplate, { name: contact.full_name || '' });
       const sent = await sendWhatsApp(firstMessage);
       if (secondMessage) {
-        await new Promise(resolve => setTimeout(resolve, 1200));
+        await new Promise(resolve => setTimeout(resolve, 3000));
         const secondResult = await sendWhatsApp(secondMessage);
         await logCommunication(secondMessage, 'value_proposition', secondResult);
       }
       if (thirdMessage) {
-        await new Promise(resolve => setTimeout(resolve, 1200));
+        await new Promise(resolve => setTimeout(resolve, 3000));
         const thirdResult = await sendWhatsApp(thirdMessage);
         await logCommunication(thirdMessage, 'opt_in_future', thirdResult);
       }
@@ -483,7 +483,7 @@ Deno.serve(async (req) => {
       // הודעת סיום ההכנה לפגישה (רק במסלול רגיל; וובינר מקבל סיום בנקודה אחרת)
       const isWebinar = serviceRequest.source === 'webinar';
       if (!isWebinar) {
-        await new Promise(resolve => setTimeout(resolve, 1200));
+        await new Promise(resolve => setTimeout(resolve, 3000));
         const closingTemplate = await getContent('preparation_complete_closing')
           || 'תודה רבה {name}! 🌿\nההכנה לפגישה הושלמה — את/ה מוזמן/ת להגיע מוכן/ה ורגוע/ה.\nנשמח לראותך בפגישה עם בשמת! 💜';
         const closingMessage = fillTemplate(closingTemplate, { name: contact.full_name || '' });
@@ -508,7 +508,7 @@ Deno.serve(async (req) => {
       // 2. בקשת ת.ז. + תאריך לידה (לפני בקשת מסמכים)
       const idRequestTemplate = await getContent('questionnaire_id_request');
       if (idRequestTemplate) {
-        await new Promise(resolve => setTimeout(resolve, 1200));
+        await new Promise(resolve => setTimeout(resolve, 3000));
         const idRequestMessage = fillTemplate(idRequestTemplate, values);
         const idRequestResult = await sendWhatsApp(idRequestMessage);
         await logCommunication(idRequestMessage, 'questionnaire_id_request', idRequestResult);

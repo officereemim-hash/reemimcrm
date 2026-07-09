@@ -71,7 +71,7 @@ Deno.serve(async (req) => {
         const response = await fetch(`https://api.green-api.com/waInstance${INSTANCE_ID}/sendMessage/${API_TOKEN}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chatId, message }),
+          body: JSON.stringify({ chatId, message, typingTime: 3000 }),
         });
         const responseText = await response.text();
         result = { status: response.ok ? 'sent' : 'failed', errorDetail: response.ok ? '' : responseText.substring(0, 500) };

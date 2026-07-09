@@ -107,7 +107,7 @@ Deno.serve(async (req) => {
           const sendResponse = await fetch(sendUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chatId: msg.chat_id, message: botReply }),
+            body: JSON.stringify({ chatId: msg.chat_id, message: botReply, typingTime: 3000 }),
           });
           sentOk = sendResponse.ok;
           if (!sentOk) console.error('Failed to send WhatsApp:', await sendResponse.text());

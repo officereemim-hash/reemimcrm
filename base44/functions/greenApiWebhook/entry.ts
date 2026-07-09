@@ -85,7 +85,7 @@ async function sendWhatsApp(chatId, message, botEnabled) {
   const response = await fetch(`https://api.green-api.com/waInstance${INSTANCE_ID}/sendMessage/${API_TOKEN}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chatId, message }),
+    body: JSON.stringify({ chatId, message, typingTime: 3000 }),
   });
   if (!response.ok) return null;
   return await response.json();

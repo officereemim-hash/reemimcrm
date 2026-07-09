@@ -13,7 +13,7 @@ async function sendWhatsApp(phone: string, message: string): Promise<boolean> {
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chatId, message }),
+      body: JSON.stringify({ chatId, message, typingTime: 3000 }),
     }
   );
   return res.ok;

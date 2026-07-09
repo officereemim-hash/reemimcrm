@@ -56,7 +56,7 @@ async function sendViaGreenApi({ instanceId, token, phone, message }) {
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chatId: `${phone}@c.us`, message }),
+      body: JSON.stringify({ chatId: `${phone}@c.us`, message, typingTime: 3000 }),
     },
   );
   const data = await res.json().catch(() => ({}));

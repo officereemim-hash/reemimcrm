@@ -87,17 +87,17 @@ Deno.serve(async (req) => {
         const res1 = await fetch(`https://api.green-api.com/waInstance${INSTANCE_ID}/sendMessage/${API_TOKEN}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chatId, message: introMessage }),
+          body: JSON.stringify({ chatId, message: introMessage, typingTime: 3000 }),
         });
 
-        // השהיה של 1.5 שניות
-        await new Promise(resolve => setTimeout(resolve, 1500));
+        // השהיה של 3 שניות בין הודעות ברצף
+        await new Promise(resolve => setTimeout(resolve, 3000));
 
         // שליחת הודעה 2
         const res2 = await fetch(`https://api.green-api.com/waInstance${INSTANCE_ID}/sendMessage/${API_TOKEN}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chatId, message: optionsMessage }),
+          body: JSON.stringify({ chatId, message: optionsMessage, typingTime: 3000 }),
         });
 
         status = (res1.ok && res2.ok) ? 'sent' : 'failed';
