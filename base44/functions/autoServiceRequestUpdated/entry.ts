@@ -505,13 +505,20 @@ Deno.serve(async (req) => {
         await logCommunication(thanksMessage, 'questionnaire_completed_thanks', thanksResult);
       }
 
-      // 2. בקשת ת.ז. + תאריך לידה (לפני בקשת מסמכים)
-      const idRequestTemplate = await getContent('questionnaire_id_request');
+      // 2. בקשת ת.ז. + תאריך לידה (+ מייל אם חסר)
+      const needsEmail = !contact.email;
+      const idRequestKey = needsEmail ? 'questionnaire_id_email_request' : 'questionnaire_id_request';
+      let idRequestTemplate = await getContent(idRequestKey);
+      // Fallback אם אין תבנית ייעודית עם מייל
+      if (!idRequestTemplate && needsEmail) {
+        idRequestTemplate = await getContent('questionnaire_id_request');
+        if (idRequestTemplate) idRequestTemplate += '\n\n📧 וגם — מה כתובת המייל שלך?';
+      }
       if (idRequestTemplate) {
         await new Promise(resolve => setTimeout(resolve, 3000));
         const idRequestMessage = fillTemplate(idRequestTemplate, values);
         const idRequestResult = await sendWhatsApp(idRequestMessage);
-        await logCommunication(idRequestMessage, 'questionnaire_id_request', idRequestResult);
+        await logCommunication(idRequestMessage, idRequestKey, idRequestResult);
       }
 
       await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, {

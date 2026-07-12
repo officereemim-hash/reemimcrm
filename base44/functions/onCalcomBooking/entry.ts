@@ -317,6 +317,13 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Contact not found' }, { status: 404 });
     }
 
+    // שמירת מייל מ-Cal.com אם חסר ב-Contact
+    if (attendee.email && !contact.email) {
+      const cleanEmail = attendee.email.toLowerCase().trim();
+      await base44.asServiceRole.entities.Contact.update(contact.id, { email: cleanEmail });
+      contact.email = cleanEmail;
+    }
+
     const serviceRequest = await findServiceRequest(base44, contact.id, detected.serviceType || contact.service_type);
     const finalServiceType = detected.serviceType || serviceRequest.service_type || contact.service_type;
     const startTime = payload.startTime || payload.start_time || payload.start || payload.booking?.startTime;

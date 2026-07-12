@@ -95,7 +95,7 @@ Deno.serve(async (req) => {
     // האם סוג הוובינר ברור? אם detectWebinarType בסנכרון נפל ל-retirement כברירת מחדל,
     // עדיין נשלח את הקישור לדף הנחיתה המתאים. בירור יישלח רק אם אין כלל סוג.
     const webinarType = reg.webinar_type;
-    const landingLink = landingBase ? `${landingBase.replace(/\/$/, '')}/${webinarType}` : '';
+    const landingLink = landingBase ? `${landingBase.replace(/\/$/, '')}/${webinarType}?t=${reg.id}` : '';
 
     // בירור סוג וובינר — נשלח רק אם הסוג לא הוגדר כלל (מקרה קצה)
     if (!webinarType) {

@@ -98,7 +98,6 @@ Deno.serve(async (req) => {
     } else {
       // מסלול רגיל — בדיקת פרטים חסרים
       if (!c.full_name || c.full_name.trim().length < 2) missing.push({ field: 'full_name', label: 'מה השם המלא שלך?' });
-      if (!c.email) missing.push({ field: 'email', label: 'מה כתובת המייל שלך?' });
 
       if (missing.length === 0) {
         templateUsed = 'new_lead_welcome';

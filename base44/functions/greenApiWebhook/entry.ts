@@ -896,13 +896,20 @@ Deno.serve(async (req) => {
         if (year.length === 2) { year = parseInt(year) >= 30 ? '19' + year : '20' + year; }
         const birthDate = `${year}-${month}-${day}`;
 
-        // שמירה ב-Contact
-        await base44.asServiceRole.entities.Contact.update(contact.id, {
+        // חילוץ מייל מהטקסט (אם חסר ב-Contact)
+        const idEmailMatch = text.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
+        const contactUpdate = {
           id_number: idNumber,
           birth_date: birthDate,
           bot_status: 'waiting_user_reply',
           last_bot_interaction_at: new Date().toISOString(),
-        });
+        };
+        if (idEmailMatch && !contact.email) {
+          contactUpdate.email = idEmailMatch[0].toLowerCase().trim();
+        }
+
+        // שמירה ב-Contact
+        await base44.asServiceRole.entities.Contact.update(contact.id, contactUpdate);
 
         // אישור קבלה + שליחת בקשת מסמכים
         const ackMessage = await getBotContent(base44, 'id_details_received_ack') || 'תודה רבה! קיבלנו את הפרטים ✅';

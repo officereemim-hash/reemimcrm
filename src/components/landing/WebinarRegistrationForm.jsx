@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Loader2, CheckCircle } from 'lucide-react';
 
@@ -8,9 +8,31 @@ export default function WebinarRegistrationForm({ slug, page }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [done, setDone] = useState(false);
+  const [prefilling, setPrefilling] = useState(false);
 
   const primary = page.primary_color || '#4B2E83';
   const accent = page.accent_color || '#D4A53C';
+
+  // מילוי מראש מטוקן בקישור
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('t');
+    if (!token) return;
+    setPrefilling(true);
+    base44.functions.invoke('getWebinarPrefill', { t: token })
+      .then(res => {
+        const data = res.data;
+        if (data && !data.error) {
+          setForm(prev => ({
+            full_name: data.full_name || prev.full_name,
+            phone: data.phone || prev.phone,
+            email: data.email || prev.email,
+          }));
+        }
+      })
+      .catch(() => {})
+      .finally(() => setPrefilling(false));
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -55,6 +77,12 @@ export default function WebinarRegistrationForm({ slug, page }) {
       <h3 className="text-lg font-bold text-center mb-2" style={{ color: primary }}>
         {page.form_title || 'הרשמה לוובינר'}
       </h3>
+      {prefilling && (
+        <div className="flex items-center justify-center gap-2 text-sm text-gray-500 py-2">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          <span>טוען פרטים...</span>
+        </div>
+      )}
       <input
         type="text"
         placeholder="שם מלא *"
