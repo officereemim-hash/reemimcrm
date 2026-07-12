@@ -30,6 +30,14 @@ Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
 
+    const [botRow, greenRow] = await Promise.all([
+      base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' }),
+      base44.asServiceRole.entities.SystemSetting.filter({ key: 'green_api_enabled' }),
+    ]);
+    if (botRow[0]?.value !== 'true' || greenRow[0]?.value !== 'true') {
+      return Response.json({ ok: true, skipped: 'bot_or_green_disabled' });
+    }
+
     const template = 'בעוד שעה הפגישה שלנו! 🌿 {location}\nנתראה, קרנות ראמים';
 
     const now = new Date();

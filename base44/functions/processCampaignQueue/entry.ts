@@ -102,6 +102,15 @@ async function refreshCampaigns(base44, campaignIds) {
 
 Deno.serve(async (req) => {
   const base44 = createClientFromRequest(req);
+
+  // בדיקת מתגי כיבוי — וואטסאפ ומיילים נבדקים בנפרד
+  const [botRow, greenRow] = await Promise.all([
+    base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' }),
+    base44.asServiceRole.entities.SystemSetting.filter({ key: 'green_api_enabled' }),
+  ]);
+  const botEnabled = botRow[0]?.value === 'true';
+  const greenEnabled = greenRow[0]?.value === 'true';
+
   const summary = { email_sent: 0, email_failed: 0, whatsapp_sent: 0, whatsapp_failed: 0, whatsapp_delayed: false };
   const touchedCampaigns = new Set();
 
@@ -154,7 +163,10 @@ Deno.serve(async (req) => {
     }
 
     // ===== 2. וואטסאפ ממתינים =====
-    if (!isWithinWindow() && !forceWindow) {
+    if (!botEnabled || !greenEnabled) {
+      summary.whatsapp_delayed = true;
+      summary.whatsapp_delay_reason = 'בוט או Green API כבויים';
+    } else if (!isWithinWindow() && !forceWindow) {
       summary.whatsapp_delayed = true;
       summary.whatsapp_delay_reason = 'מחוץ לחלון השליחה (09:00-20:00)';
     } else {
