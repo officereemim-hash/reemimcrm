@@ -3,6 +3,54 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 const INSTANCE_ID = Deno.env.get('GREEN_API_INSTANCE_ID');
 const API_TOKEN = Deno.env.get('GREEN_API_TOKEN');
 
+// ─── ספק שליחה: Green ↔ uChat ───
+const WHATSAPP_PROVIDER = Deno.env.get('WHATSAPP_PROVIDER') || 'green';
+const UCHAT_TOKEN = Deno.env.get('UCHAT_API_TOKEN');
+const UCHAT_BASE = 'https://www.uchat.com.au/api';
+async function getUchatTemplateName(base44, key) {
+  const r = await base44.asServiceRole.entities.SystemSetting.filter({ key: `uchat_tpl_${key}` });
+  return r[0]?.value || '';
+}
+async function uchatTemplateNamespace(templateName) {
+  const listOnce = async () => {
+    try {
+      const r = await fetch(`${UCHAT_BASE}/whatsapp-template/list`, { method: 'POST', headers: { Authorization: `Bearer ${UCHAT_TOKEN}` } });
+      if (!r.ok) return null;
+      const j = await r.json();
+      const arr = j?.data || j?.templates || j || [];
+      const t = (Array.isArray(arr) ? arr : []).find(x => x?.name === templateName || x?.template_name === templateName);
+      return t?.namespace || null;
+    } catch { return null; }
+  };
+  let ns = await listOnce();
+  if (!ns) { try { await fetch(`${UCHAT_BASE}/whatsapp-template/sync`, { method: 'POST', headers: { Authorization: `Bearer ${UCHAT_TOKEN}` } }); } catch {} ns = await listOnce(); }
+  return ns;
+}
+async function uchatSendTemplate(phone972, firstName, templateName, bodyParams) {
+  const namespace = await uchatTemplateNamespace(templateName);
+  if (!namespace) { console.error(`uchat: template '${templateName}' not found/synced`); return null; }
+  const params = {};
+  (bodyParams || []).forEach((v, i) => { params[`BODY_{{${i + 1}}}`] = String(v ?? ''); });
+  const res = await fetch(`${UCHAT_BASE}/subscriber/send-whatsapp-template-by-user-id`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${UCHAT_TOKEN}` },
+    body: JSON.stringify({ user_id: phone972, create_if_not_found: 'yes', contact: { first_name: firstName || '' }, content: { namespace, name: templateName, lang: 'he', params } }),
+  });
+  if (!res.ok) { console.error('uchat template http', res.status, await res.text().catch(() => '')); return null; }
+  const j = await res.json().catch(() => ({}));
+  const mid = j?.mid || j?.data?.mid || null;
+  if (j?.status === 'ok' && mid) return { ...j, mid };
+  console.error('uchat template not ok:', JSON.stringify(j));
+  return null;
+}
+async function uchatSend(base44, phone, tplKey, firstName, params) {
+  let p = String(phone || '').replace(/[\s\-\+\(\)]/g, '');
+  if (p.startsWith('0')) p = '972' + p.substring(1);
+  const tplName = await getUchatTemplateName(base44, tplKey);
+  if (!tplName) { console.log(`uchat: שם תבנית ל-'${tplKey}' לא מוגדר (uchat_tpl_${tplKey})`); return false; }
+  return !!(await uchatSendTemplate(p, firstName, tplName, params || []));
+}
+
 function normalizePhone(phone) {
   let cleanPhone = String(phone || '').replace(/[\s\-\+\(\)]/g, '');
   if (cleanPhone.startsWith('0')) cleanPhone = '972' + cleanPhone.substring(1);
@@ -61,13 +109,13 @@ Deno.serve(async (req) => {
     const chatId = `${phone}@c.us`;
     const serviceType = serviceRequest.service_type || '';
     const sendMessageUrl = `https://api.green-api.com/waInstance${INSTANCE_ID}/sendMessage/${API_TOKEN}`;
+    const firstName = (contact.full_name || '').split(' ')[0];
 
     async function getContent(key) {
       const records = await base44.asServiceRole.entities.BotContent.filter({ key, is_active: true });
       return records[0]?.content || '';
     }
 
-    // מיפוי תחום → sub_type של שאלון שורנס המתאים
     const SHORANSS_SUBTYPE = {
       retirement: 'shoranss_retirement',
       economic_feasibility: 'shoranss_economic',
@@ -89,7 +137,6 @@ Deno.serve(async (req) => {
         const records = await base44.asServiceRole.entities.ServiceContent.filter({ content_type: contentType, sub_type: subType, is_active: true });
         if (records[0]) return records[0].url || '';
       }
-
       const fallbackRecords = await base44.asServiceRole.entities.ServiceContent.filter({ content_type: contentType, service_type: serviceType, is_active: true });
       return fallbackRecords[0]?.url || '';
     }
@@ -99,7 +146,6 @@ Deno.serve(async (req) => {
       return records[0]?.value || '';
     }
 
-    // הגנה מכפילות: אם אותה הודעה כבר נשלחה לאיש הקשר ב-2 הדקות האחרונות — מדלגים
     async function alreadySentRecently(templateId) {
       const recent = await base44.asServiceRole.entities.Communication.filter(
         { contact_id: serviceRequest.contact_id, template_id: templateId },
@@ -108,7 +154,6 @@ Deno.serve(async (req) => {
       return !!(recent[0] && Date.now() - new Date(recent[0].created_date).getTime() < 2 * 60 * 1000);
     }
 
-    // שליפת הסיכום שמילאה המתאמת בשיחת המכירה הטלפונית — אם אין סיכום, מוחזר ריק ולא נשלח
     async function getPhoneSummaryBlock() {
       const meetings = await base44.asServiceRole.entities.Meeting.filter(
         { contact_id: serviceRequest.contact_id, type: 'intro_sale' },
@@ -123,10 +168,14 @@ Deno.serve(async (req) => {
     const botEnabled = (await getSetting('whatsapp_bot_enabled')) === 'true';
     const greenApiEnabled = (await getSetting('green_api_enabled')) === 'true';
 
-    async function sendWhatsApp(message) {
+    async function sendWhatsApp(message, uchatTplKey, uchatParams) {
       if (!message) return { status: 'skipped', errorDetail: 'empty_message' };
       if (!botEnabled) {
         return { status: 'skipped', errorDetail: 'log_only_whatsapp_bot_disabled' };
+      }
+      if (WHATSAPP_PROVIDER === 'uchat' && uchatTplKey) {
+        const ok = await uchatSend(base44, contact.phone, uchatTplKey, firstName, uchatParams || []);
+        return { status: ok ? 'sent' : 'failed', errorDetail: ok ? '' : 'uchat_send_failed' };
       }
       if (!greenApiEnabled) {
         return { status: 'sent', errorDetail: 'simulated_green_api_disabled' };
@@ -144,10 +193,10 @@ Deno.serve(async (req) => {
       };
     }
 
-    // שליחת קובץ (PDF/תמונה/וידאו) דרך Green API — לפי URL קבוע מ-ServiceContent
     async function sendWhatsAppFile(fileUrl, fileName) {
       if (!fileUrl) return { status: 'skipped', errorDetail: 'empty_file' };
       if (!botEnabled) return { status: 'skipped', errorDetail: 'log_only_whatsapp_bot_disabled' };
+      if (WHATSAPP_PROVIDER === 'uchat') return { status: 'skipped', errorDetail: 'uchat_no_file_support_yet' };
       if (!greenApiEnabled) return { status: 'sent', errorDetail: 'simulated_green_api_disabled' };
 
       const fileApiUrl = `https://api.green-api.com/waInstance${INSTANCE_ID}/sendFileByUrl/${API_TOKEN}`;
@@ -165,24 +214,15 @@ Deno.serve(async (req) => {
 
     async function addMessageToConversation(content, result) {
       if (!content || result?.status === 'skipped') return;
-
       const conversationId = serviceRequest.conversation_id;
-      if (!conversationId) {
-        console.log('conversation_injection_skipped: no_conversation_id');
-        return;
-      }
-
+      if (!conversationId) { console.log('conversation_injection_skipped: no_conversation_id'); return; }
       try {
         const conv = await base44.asServiceRole.agents.getConversation(conversationId);
         const hasUserMessage = (conv.messages || []).some((m) => m.role === 'user');
-        if (!hasUserMessage) {
-          console.log('conversation_injection_skipped: no_user_message');
-          return;
-        }
+        if (!hasUserMessage) { console.log('conversation_injection_skipped: no_user_message'); return; }
         await base44.asServiceRole.agents.addMessage(conv, { role: 'assistant', content });
         console.log('message_added_to_conversation');
       } catch (err) {
-        // Simulator conversations belong to the app user — injection blocked, Communication record already saved
         console.warn('conversation_injection_skipped:', err.message);
       }
     }
@@ -205,7 +245,7 @@ Deno.serve(async (req) => {
     if (pendingChanged && newPending === 'send_basmat_schedule') {
       const intro = await getContent('schedule_intro');
       const message = intro || 'מעולה, השלב הבא הוא תיאום פגישה עם בשמת. איך תרצה לקיים את הפגישה? זום / מודיעין / פתח תקווה / טלפון';
-      const sent = await sendWhatsApp(message);
+      const sent = await sendWhatsApp(message, 'schedule_intro', [contact.full_name || '']);
       await logCommunication(message, 'schedule_intro', sent);
       await base44.asServiceRole.entities.Contact.update(contact.id, {
         bot_status: 'waiting_user_reply',
@@ -215,7 +255,6 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, action: 'send_basmat_schedule' });
     }
 
-    // === מסלול ב: ממתין להחלטה — שליחת סיכום + הצעת מחיר + שאלת "מעוניין/אחשוב" + משימת פולו-אפ ===
     if (statusChanged && newStatus === 'awaiting_client_decision') {
       if (await alreadySentRecently('quote_sent')) {
         return Response.json({ ok: true, skipped: 'duplicate_event' });
@@ -230,10 +269,9 @@ Deno.serve(async (req) => {
         summary: phoneSummary,
       }).replace(/\n{3,}/g, '\n\n');
 
-      const sent = await sendWhatsApp(message);
+      const sent = await sendWhatsApp(message, 'quote_sent', [contact.full_name || '', quoteUrl]);
       await logCommunication(message, 'quote_sent', sent);
 
-      // שליחת הצעת מחיר כקובץ
       if (quoteUrl) {
         const isPdfFile = /\.pdf(\?.*)?$/i.test(quoteUrl);
         if (isPdfFile) {
@@ -243,7 +281,6 @@ Deno.serve(async (req) => {
         }
       }
 
-      // משימת פולו-אפ ל-7 ימים
       await base44.asServiceRole.entities.Task.create({
         contact_id: contact.id,
         service_request_id: serviceRequest.id,
@@ -262,7 +299,6 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, action: 'route_b_awaiting_decision', whatsapp_sent: sent });
     }
 
-    // === מסלול א: מעוניין — הזמנת תיאום פגישה ===
     if (statusChanged && newStatus === 'interested') {
       if (serviceRequest.source === 'webinar') {
         return Response.json({ ok: true, skipped: 'webinar_handled_by_webinar_flow' });
@@ -272,7 +308,6 @@ Deno.serve(async (req) => {
       }
 
       const isWebinar = false;
-      // אם כבר נשלחה הצעת מחיר (מגיע מ-awaiting_client_decision) — שולחים רק הזמנת פגישה
       const alreadyGotQuote = await alreadySentRecently('quote_sent');
 
       const intro = await getContent('schedule_intro');
@@ -290,10 +325,9 @@ Deno.serve(async (req) => {
         message = message.split('\n').filter(line => !line.includes('סיכום') && !line.includes('{summary}')).join('\n');
       }
       message = message.replace(/\n{3,}/g, '\n\n');
-      const sent = await sendWhatsApp(message);
+      const sent = await sendWhatsApp(message, 'schedule_intro', [contact.full_name || '']);
       await logCommunication(message, 'schedule_intro', sent);
 
-      // שליחת הצעת מחיר כקובץ (מסלול רגיל בלבד, ורק אם לא נשלחה כבר)
       if (!isWebinar && !alreadyGotQuote && quoteUrl) {
         const isPdfFile = /\.pdf(\?.*)?$/i.test(quoteUrl);
         if (isPdfFile) {
@@ -324,7 +358,7 @@ Deno.serve(async (req) => {
       if (!serviceRequest.last_appointment_time_str) {
         message = message.replace(/\s*במועד:\s*\n\s*/g, '\n');
       }
-      const sent = await sendWhatsApp(message);
+      const sent = await sendWhatsApp(message, 'meeting_scheduled_phone', [contact.full_name || '', serviceRequest.last_appointment_time_str || '', callerPhone]);
       await logCommunication(message, 'meeting_scheduled_phone', sent);
       await base44.asServiceRole.entities.Contact.update(contact.id, {
         bot_status: 'waiting_agent',
@@ -345,14 +379,12 @@ Deno.serve(async (req) => {
       else if (newStatus === 'meeting_scheduled_zoom') templateKey = 'meeting_scheduled_zoom';
       else if (apptType === 'modiin') templateKey = 'meeting_scheduled_modiin';
       else if (apptType.includes('petah_tikva')) templateKey = 'meeting_scheduled_petah_tikva';
-      // מסלול וובינר: פגישת טלפון נחשבת כפגישה רגילה (לא שיחת מתאמת)
       else if (apptType === 'phone' && !isWebinar) templateKey = 'meeting_scheduled_phone';
 
       if (await alreadySentRecently(templateKey)) {
         return Response.json({ ok: true, skipped: 'duplicate_event' });
       }
 
-      // קישור הפגישה האמיתי (אם נשמר ע"י Cal.com), אחרת חדר הזום הקבוע
       let meetingLink = '';
       if (serviceRequest.meeting_id) {
         const meetings = await base44.asServiceRole.entities.Meeting.filter({ id: serviceRequest.meeting_id });
@@ -374,21 +406,18 @@ Deno.serve(async (req) => {
         caller_phone: await getSetting('coordinator_phone'),
       };
 
-      // 1. אישור פגישה + הנחיות הגעה
       const confirmTemplate = await getContent(templateKey);
       const confirmMessage = fillTemplate(confirmTemplate || '{name}, הפגישה עם בשמת נקבעה בהצלחה במועד: {time}', values);
-      const confirmResult = await sendWhatsApp(confirmMessage);
+      const confirmResult = await sendWhatsApp(confirmMessage, templateKey, [contact.full_name || '', serviceRequest.last_appointment_time_str || '', zoomLink || wazeLink || '']);
       await logCommunication(confirmMessage, templateKey, confirmResult);
 
-      // === מסלול וובינר: דילוג על שאלון שורנס ===
-      // פגישות מודיעין: לא שולחים closing כאן — ה-closing יישלח אחרי מסלול החניה (FP-CarPlate)
       if (isWebinar) {
         const isModiinMeeting = templateKey === 'meeting_scheduled_modiin' || apptType === 'modiin';
         if (!isModiinMeeting) {
           await new Promise(resolve => setTimeout(resolve, 3000));
           const closingTemplate = await getContent('conversation_closing');
           const closingMessage = fillTemplate(closingTemplate || 'תודה רבה {name}, שיהיה לך יום נפלא! 🙏', values);
-          const closingResult = await sendWhatsApp(closingMessage);
+          const closingResult = await sendWhatsApp(closingMessage, 'conversation_closing', [contact.full_name || '']);
           await logCommunication(closingMessage, 'conversation_closing', closingResult);
         }
 
@@ -399,13 +428,12 @@ Deno.serve(async (req) => {
         return Response.json({ ok: true, action: 'webinar_meeting_scheduled', template: templateKey });
       }
 
-      // === מסלול רגיל: שאלון שורנס + הודעת סיום ===
       const questionnaireUrl = await getQuestionnaireUrl();
       if (!questionnaireUrl) {
         const clarifyTemplate = await getContent('service_type_clarify');
         const clarifyMessage = fillTemplate(clarifyTemplate || 'לאיזה תחום הפנייה? 1) ייעוץ פרישה 2) היתכנות כלכלית 3) תכנון השקעות 4) איזון אקטוארי בגירושין 5) זכויות מס', values);
         await new Promise(resolve => setTimeout(resolve, 3000));
-        const clarifyResult = await sendWhatsApp(clarifyMessage);
+        const clarifyResult = await sendWhatsApp(clarifyMessage, 'service_type_clarify', [contact.full_name || '']);
         await logCommunication(clarifyMessage, 'service_type_clarify', clarifyResult);
         await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { pending_service_clarify: true });
         await base44.asServiceRole.entities.Contact.update(contact.id, {
@@ -419,11 +447,10 @@ Deno.serve(async (req) => {
       if (questionnaireTemplate) {
         await new Promise(resolve => setTimeout(resolve, 3000));
         const questionnaireMessage = fillTemplate(questionnaireTemplate, { ...values, questionnaire_link: questionnaireUrl });
-        const questionnaireResult = await sendWhatsApp(questionnaireMessage);
+        const questionnaireResult = await sendWhatsApp(questionnaireMessage, 'questionnaire_request', [contact.full_name || '', questionnaireUrl]);
         await logCommunication(questionnaireMessage, 'questionnaire_request', questionnaireResult);
       }
 
-      // מסלול רגיל: לא שולחים הודעת סיום — הלקוח צריך למלא שאלון, ת"ז ומסמכים
       await base44.asServiceRole.entities.Contact.update(contact.id, {
         bot_status: 'waiting_user_reply',
         shoranss_questionnaire: 'sent',
@@ -433,7 +460,6 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, action: 'meeting_scheduled_sequence', template: templateKey });
     }
 
-    // === quote_sent — סימון שקט בלבד, ללא שליחת הודעה/קובץ/משימה ===
     if (statusChanged && newStatus === 'quote_sent') {
       return Response.json({ ok: true, action: 'quote_sent_silent' });
     }
@@ -450,15 +476,15 @@ Deno.serve(async (req) => {
       const firstMessage = fillTemplate(reasonTemplate || 'מבינים לגמרי 🙏 נשמח לדעת בקצרה מה הסיבה שהשירות פחות מתאים כרגע.', { name: contact.full_name || '' });
       const secondMessage = fillTemplate(valueTemplate, { reviews_link: reviewsUrl, qa_link: qaUrl });
       const thirdMessage = fillTemplate(optInTemplate, { name: contact.full_name || '' });
-      const sent = await sendWhatsApp(firstMessage);
+      const sent = await sendWhatsApp(firstMessage, 'not_interested_reason', [contact.full_name || '']);
       if (secondMessage) {
         await new Promise(resolve => setTimeout(resolve, 3000));
-        const secondResult = await sendWhatsApp(secondMessage);
+        const secondResult = await sendWhatsApp(secondMessage, 'value_proposition', [reviewsUrl, qaUrl]);
         await logCommunication(secondMessage, 'value_proposition', secondResult);
       }
       if (thirdMessage) {
         await new Promise(resolve => setTimeout(resolve, 3000));
-        const thirdResult = await sendWhatsApp(thirdMessage);
+        const thirdResult = await sendWhatsApp(thirdMessage, 'opt_in_future', [contact.full_name || '']);
         await logCommunication(thirdMessage, 'opt_in_future', thirdResult);
       }
       await logCommunication(firstMessage, 'not_interested_reason', sent);
@@ -471,23 +497,21 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, action: 'route_c_not_interested', whatsapp_sent: sent });
     }
 
-    // === documents_received סומן ידנית ע"י הצוות → שליחת אישור ללקוח ===
     if (documentsJustReceived) {
       const confirmedTemplate = await getContent('documents_confirmed');
       if (confirmedTemplate) {
         const confirmedMessage = fillTemplate(confirmedTemplate, { name: contact.full_name || '' });
-        const confirmedResult = await sendWhatsApp(confirmedMessage);
+        const confirmedResult = await sendWhatsApp(confirmedMessage, 'documents_confirmed', [contact.full_name || '']);
         await logCommunication(confirmedMessage, 'documents_confirmed', confirmedResult);
       }
 
-      // הודעת סיום ההכנה לפגישה (רק במסלול רגיל; וובינר מקבל סיום בנקודה אחרת)
       const isWebinar = serviceRequest.source === 'webinar';
       if (!isWebinar) {
         await new Promise(resolve => setTimeout(resolve, 3000));
         const closingTemplate = await getContent('preparation_complete_closing')
           || 'תודה רבה {name}! 🌿\nההכנה לפגישה הושלמה — את/ה מוזמן/ת להגיע מוכן/ה ורגוע/ה.\nנשמח לראותך בפגישה עם בשמת! 💜';
         const closingMessage = fillTemplate(closingTemplate, { name: contact.full_name || '' });
-        const closingResult = await sendWhatsApp(closingMessage);
+        const closingResult = await sendWhatsApp(closingMessage, 'preparation_complete_closing', [contact.full_name || '']);
         await logCommunication(closingMessage, 'preparation_complete_closing', closingResult);
       }
 
@@ -497,19 +521,16 @@ Deno.serve(async (req) => {
     if (questionnaireFilled) {
       const values = { name: contact.full_name || '' };
 
-      // 1. תודה על מילוי השאלון
       const thanksTemplate = await getContent('questionnaire_completed_thanks');
       if (thanksTemplate) {
         const thanksMessage = fillTemplate(thanksTemplate, values);
-        const thanksResult = await sendWhatsApp(thanksMessage);
+        const thanksResult = await sendWhatsApp(thanksMessage, 'questionnaire_completed_thanks', [contact.full_name || '']);
         await logCommunication(thanksMessage, 'questionnaire_completed_thanks', thanksResult);
       }
 
-      // 2. בקשת ת.ז. + תאריך לידה (+ מייל אם חסר)
       const needsEmail = !contact.email;
       const idRequestKey = needsEmail ? 'questionnaire_id_email_request' : 'questionnaire_id_request';
       let idRequestTemplate = await getContent(idRequestKey);
-      // Fallback אם אין תבנית ייעודית עם מייל
       if (!idRequestTemplate && needsEmail) {
         idRequestTemplate = await getContent('questionnaire_id_request');
         if (idRequestTemplate) idRequestTemplate += '\n\n📧 וגם — מה כתובת המייל שלך?';
@@ -517,7 +538,7 @@ Deno.serve(async (req) => {
       if (idRequestTemplate) {
         await new Promise(resolve => setTimeout(resolve, 3000));
         const idRequestMessage = fillTemplate(idRequestTemplate, values);
-        const idRequestResult = await sendWhatsApp(idRequestMessage);
+        const idRequestResult = await sendWhatsApp(idRequestMessage, idRequestKey, [contact.full_name || '']);
         await logCommunication(idRequestMessage, idRequestKey, idRequestResult);
       }
 
