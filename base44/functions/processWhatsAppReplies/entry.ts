@@ -2,6 +2,26 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 
 const INTERNAL_SECRET = 'pwr_scheduled_run_2026';
 
+// ─── ספק שליחה: Green ↔ uChat (רדום תחת WHATSAPP_PROVIDER) ───
+const WHATSAPP_PROVIDER = Deno.env.get('WHATSAPP_PROVIDER') || 'green';
+const UCHAT_TOKEN = Deno.env.get('UCHAT_API_TOKEN');
+const UCHAT_BASE = 'https://www.uchat.com.au/api';
+const _uchatNsCache = {};
+async function uchatResolveNs(phone972) {
+  if (!phone972) return null;
+  if (_uchatNsCache[phone972]) return _uchatNsCache[phone972];
+  try {
+    const r = await fetch(`${UCHAT_BASE}/subscriber/get-info-by-user-id?user_id=${phone972}`, {
+      headers: { Authorization: `Bearer ${UCHAT_TOKEN}` },
+    });
+    if (!r.ok) return null;
+    const j = await r.json();
+    const ns = j?.user_ns || j?.data?.user_ns || null;
+    if (ns) _uchatNsCache[phone972] = ns;
+    return ns;
+  } catch { return null; }
+}
+
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
@@ -103,14 +123,31 @@ Deno.serve(async (req) => {
 
         let sentOk = false;
         if (botEnabled) {
-          const sendUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
-          const sendResponse = await fetch(sendUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chatId: msg.chat_id, message: botReply, typingTime: 3000 }),
-          });
-          sentOk = sendResponse.ok;
-          if (!sentOk) console.error('Failed to send WhatsApp:', await sendResponse.text());
+          if (WHATSAPP_PROVIDER === 'uchat') {
+            const phone972 = String(msg.chat_id).replace('@c.us', '');
+            const ns = await uchatResolveNs(phone972);
+            if (ns) {
+              const r = await fetch(`${UCHAT_BASE}/subscriber/send-text`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${UCHAT_TOKEN}` },
+                body: JSON.stringify({ user_ns: ns, text: botReply }),
+              });
+              const j = r.ok ? await r.json().catch(() => ({})) : {};
+              sentOk = j?.status === 'ok';
+              if (!sentOk) console.error('uchat send-text failed:', JSON.stringify(j));
+            } else {
+              console.log(`uchat: no subscriber for ${phone972} (reply skipped)`);
+            }
+          } else {
+            const sendUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+            const sendResponse = await fetch(sendUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chatId: msg.chat_id, message: botReply, typingTime: 3000 }),
+            });
+            sentOk = sendResponse.ok;
+            if (!sentOk) console.error('Failed to send WhatsApp:', await sendResponse.text());
+          }
         }
 
         await base44.asServiceRole.entities.WhatsAppMessageLog.update(msg.id, { status: botEnabled && sentOk ? 'replied' : 'skipped' });
