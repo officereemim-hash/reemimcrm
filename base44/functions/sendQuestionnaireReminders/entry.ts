@@ -5,6 +5,54 @@ const API_TOKEN = Deno.env.get('GREEN_API_TOKEN');
 
 const MEETING_STATUSES = ['meeting_scheduled', 'meeting_scheduled_frontal', 'meeting_scheduled_zoom'];
 
+// ─── ספק שליחה: Green ↔ uChat (רדום תחת WHATSAPP_PROVIDER) ───
+const WHATSAPP_PROVIDER = Deno.env.get('WHATSAPP_PROVIDER') || 'green';
+const UCHAT_TOKEN = Deno.env.get('UCHAT_API_TOKEN');
+const UCHAT_BASE = 'https://www.uchat.com.au/api';
+async function getUchatTemplateName(base44, key) {
+  const r = await base44.asServiceRole.entities.SystemSetting.filter({ key: `uchat_tpl_${key}` });
+  return r[0]?.value || '';
+}
+async function uchatTemplateNamespace(templateName) {
+  const listOnce = async () => {
+    try {
+      const r = await fetch(`${UCHAT_BASE}/whatsapp-template/list`, { method: 'POST', headers: { Authorization: `Bearer ${UCHAT_TOKEN}` } });
+      if (!r.ok) return null;
+      const j = await r.json();
+      const arr = j?.data || j?.templates || j || [];
+      const t = (Array.isArray(arr) ? arr : []).find(x => x?.name === templateName || x?.template_name === templateName);
+      return t?.namespace || null;
+    } catch { return null; }
+  };
+  let ns = await listOnce();
+  if (!ns) { try { await fetch(`${UCHAT_BASE}/whatsapp-template/sync`, { method: 'POST', headers: { Authorization: `Bearer ${UCHAT_TOKEN}` } }); } catch {} ns = await listOnce(); }
+  return ns;
+}
+async function uchatSendTemplate(phone972, firstName, templateName, bodyParams) {
+  const namespace = await uchatTemplateNamespace(templateName);
+  if (!namespace) { console.error(`uchat: template '${templateName}' not found/synced`); return null; }
+  const params = {};
+  (bodyParams || []).forEach((v, i) => { params[`BODY_{{${i + 1}}}`] = String(v ?? ''); });
+  const res = await fetch(`${UCHAT_BASE}/subscriber/send-whatsapp-template-by-user-id`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${UCHAT_TOKEN}` },
+    body: JSON.stringify({ user_id: phone972, create_if_not_found: 'yes', contact: { first_name: firstName || '' }, content: { namespace, name: templateName, lang: 'he', params } }),
+  });
+  if (!res.ok) { console.error('uchat template http', res.status, await res.text().catch(() => '')); return null; }
+  const j = await res.json().catch(() => ({}));
+  const mid = j?.mid || j?.data?.mid || null;
+  if (j?.status === 'ok' && mid) return { ...j, mid };
+  console.error('uchat template not ok:', JSON.stringify(j));
+  return null;
+}
+async function uchatSend(base44, phone, tplKey, firstName, params) {
+  let p = String(phone || '').replace(/[\s\-\+\(\)]/g, '');
+  if (p.startsWith('0')) p = '972' + p.substring(1);
+  const tplName = await getUchatTemplateName(base44, tplKey);
+  if (!tplName) { console.log(`uchat: שם תבנית ל-'${tplKey}' לא מוגדר (uchat_tpl_${tplKey})`); return false; }
+  return !!(await uchatSendTemplate(p, firstName, tplName, params || []));
+}
+
 function normalizePhone(phone) {
   let cleanPhone = String(phone || '').replace(/[\s\-\+\(\)]/g, '');
   if (cleanPhone.startsWith('0')) cleanPhone = '972' + cleanPhone.substring(1);
@@ -82,7 +130,10 @@ Deno.serve(async (req) => {
           .replaceAll('{questionnaire_link}', questionnaireUrl);
 
         let result = { status: 'skipped', errorDetail: 'log_only_whatsapp_bot_disabled' };
-        if (botEnabled && !greenApiEnabled) {
+        if (botEnabled && WHATSAPP_PROVIDER === 'uchat') {
+          const ok = await uchatSend(base44, contact.phone, 'questionnaire_reminder', contact.full_name || '', [contact.full_name || '', questionnaireUrl]);
+          result = { status: ok ? 'sent' : 'failed', errorDetail: ok ? '' : 'uchat_send_failed' };
+        } else if (botEnabled && !greenApiEnabled) {
           result = { status: 'sent', errorDetail: 'simulated_green_api_disabled' };
         } else if (botEnabled && greenApiEnabled) {
           const chatId = `${normalizePhone(contact.phone)}@c.us`;
