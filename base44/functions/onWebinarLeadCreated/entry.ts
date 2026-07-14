@@ -98,7 +98,7 @@ Deno.serve(async (req) => {
       introTemplate || 'שלום {name}! 🎓\nראינו שהתעניינת בוובינר {webinar_label} של קרנות ראמים.\nלהשלמת ההרשמה ושמירת מקומך — הירשמו כאן:\n{landing_link}\n\nנתראה בוובינר! 🙏',
       { name: contact.full_name, landing_link: landingLink }
     ).replaceAll('{webinar_label}', TYPE_LABELS[webinarType] || '');
-    const status = await sendWhatsApp(message, 'webinar_lead_welcome', [contact.full_name || '', landingLink]);
+    const status = await sendWhatsApp(message, 'webinar_lead_welcome', [contact.full_name || '', TYPE_LABELS[webinarType] || webinarType || '', landingLink]);
     await log(message, 'webinar_lead_intro', status);
 
     await base44.asServiceRole.entities.Contact.update(contact.id, { last_bot_interaction_at: new Date().toISOString() });
