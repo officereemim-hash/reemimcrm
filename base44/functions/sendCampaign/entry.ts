@@ -229,6 +229,13 @@ Deno.serve(async (req) => {
       status: stillPending ? 'in_progress' : (emailFailedNow > 0 ? 'partial' : 'completed'),
     });
 
+    // טריגר לא-חוסם ל-processCampaignQueue — מתחיל שליחה מיידית
+    try {
+      const u = new URL(req.url);
+      const triggerUrl = `${u.origin}${u.pathname.replace(/\/sendCampaign$/, '')}/processCampaignQueue`;
+      await Promise.race([fetch(triggerUrl, { method: 'POST' }), new Promise(r => setTimeout(r, 5000))]);
+    } catch (e) { console.error('processCampaignQueue trigger failed:', e.message); }
+
     return Response.json({
       success: true,
       campaign_id: campaign.id,

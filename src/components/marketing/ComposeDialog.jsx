@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import SingleContactPicker from './SingleContactPicker';
+import MultiContactPicker from './MultiContactPicker';
 import EmojiPicker from './EmojiPicker';
 import buildEmailHtml from './buildEmailHtml';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -40,6 +41,7 @@ export default function ComposeDialog({ open, onClose, contacts, onDone }) {
     whatsappMessage: '',
   });
   const [singleRecipient, setSingleRecipient] = useState(null);
+  const [multiRecipients, setMultiRecipients] = useState([]);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState(null);
   const [liveMode, setLiveMode] = useState({ email: false, whatsapp: false });
@@ -82,6 +84,9 @@ export default function ComposeDialog({ open, onClose, contacts, onDone }) {
   const getRecipients = () => {
     if (form.sendMode === 'single') {
       return singleRecipient ? [singleRecipient] : [];
+    }
+    if (form.sendMode === 'multi') {
+      return multiRecipients;
     }
     const option = AUDIENCE_OPTIONS.find(o => o.key === form.audience);
     return option ? eligible.filter(option.filter) : [];
@@ -138,8 +143,12 @@ export default function ComposeDialog({ open, onClose, contacts, onDone }) {
       const res = await base44.functions.invoke('sendCampaign', {
         type: form.type,
         channel: form.channel,
-        audience: form.sendMode === 'single' ? 'single' : form.audience,
-        contact_ids: form.sendMode === 'single' ? [singleRecipient.id] : undefined,
+        audience: (form.sendMode === 'single' || form.sendMode === 'multi') ? 'single' : form.audience,
+        contact_ids: form.sendMode === 'single'
+          ? [singleRecipient.id]
+          : form.sendMode === 'multi'
+            ? multiRecipients.map(c => c.id)
+            : undefined,
         subject: toServerPlaceholders(form.subject),
         email_html: emailHtml,
         whatsapp_message: toServerPlaceholders(form.whatsappMessage),
@@ -164,7 +173,11 @@ export default function ComposeDialog({ open, onClose, contacts, onDone }) {
     }
   };
 
-  const recipientCount = form.sendMode === 'single' ? (singleRecipient ? 1 : 0) : getAudienceCount(form.audience);
+  const recipientCount = form.sendMode === 'single'
+    ? (singleRecipient ? 1 : 0)
+    : form.sendMode === 'multi'
+      ? multiRecipients.length
+      : getAudienceCount(form.audience);
   const canSend = recipientCount > 0 && (
     (form.channel === 'whatsapp' && form.whatsappMessage) ||
     (form.channel === 'email' && form.content && form.subject) ||
@@ -209,7 +222,7 @@ export default function ComposeDialog({ open, onClose, contacts, onDone }) {
             <Label>מצב שליחה</Label>
             <div className="flex gap-2">
               <button
-                onClick={() => { setForm(f => ({ ...f, sendMode: 'group' })); setSingleRecipient(null); }}
+                onClick={() => { setForm(f => ({ ...f, sendMode: 'group' })); setSingleRecipient(null); setMultiRecipients([]); }}
                 className={`flex-1 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
                   form.sendMode === 'group' ? 'bg-primary text-primary-foreground border-primary' : 'bg-card border-border hover:bg-muted'
                 }`}
@@ -217,7 +230,15 @@ export default function ComposeDialog({ open, onClose, contacts, onDone }) {
                 קבוצה
               </button>
               <button
-                onClick={() => setForm(f => ({ ...f, sendMode: 'single' }))}
+                onClick={() => { setForm(f => ({ ...f, sendMode: 'multi' })); setSingleRecipient(null); }}
+                className={`flex-1 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                  form.sendMode === 'multi' ? 'bg-primary text-primary-foreground border-primary' : 'bg-card border-border hover:bg-muted'
+                }`}
+              >
+                בחירה מרשימה
+              </button>
+              <button
+                onClick={() => { setForm(f => ({ ...f, sendMode: 'single' })); setMultiRecipients([]); }}
                 className={`flex-1 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
                   form.sendMode === 'single' ? 'bg-primary text-primary-foreground border-primary' : 'bg-card border-border hover:bg-muted'
                 }`}
@@ -242,6 +263,15 @@ export default function ComposeDialog({ open, onClose, contacts, onDone }) {
               <p className="text-xs text-muted-foreground">
                 יישלח ל-{getAudienceCount(form.audience)} אנשי קשר (לא כולל מי שהוסרו מהתפוצה)
               </p>
+            </div>
+          ) : form.sendMode === 'multi' ? (
+            <div className="space-y-1">
+              <Label>בחירת נמענים</Label>
+              <MultiContactPicker
+                contacts={eligible}
+                selected={multiRecipients}
+                onSelectedChange={setMultiRecipients}
+              />
             </div>
           ) : (
             <div className="space-y-1">

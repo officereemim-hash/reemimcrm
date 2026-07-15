@@ -50,18 +50,15 @@ async function uchatSend(base44, phone, tplKey, firstName, params) {
 
 const EMAIL_BATCH = 40;
 const EMAIL_DELAY_MS = 250;
-const WHATSAPP_BATCH = 8;
-const WHATSAPP_DELAY_MS = 12000;
+const WHATSAPP_BATCH = 40;
+const WHATSAPP_DELAY_MS = 2000;
 const TIME_ZONE = 'Asia/Jerusalem';
-const SEND_WINDOW_START = 9;
-const SEND_WINDOW_END = 20;
 
 function israelParts(date = new Date()) {
   const parts = new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hour12: false }).formatToParts(date);
   return Object.fromEntries(parts.map((p) => [p.type, p.value]));
 }
 function israelDateKey(date = new Date()) { const p = israelParts(date); return `${p.year}-${p.month}-${p.day}`; }
-function isWithinWindow() { const hour = Number(israelParts().hour); return hour >= SEND_WINDOW_START && hour < SEND_WINDOW_END; }
 
 async function getSetting(base44, key, fallback = '') {
   const rows = await base44.asServiceRole.entities.SystemSetting.filter({ key });
@@ -128,9 +125,6 @@ Deno.serve(async (req) => {
   const summary = { email_sent: 0, email_failed: 0, whatsapp_sent: 0, whatsapp_failed: 0, whatsapp_delayed: false };
   const touchedCampaigns = new Set();
 
-  let forceWindow = false;
-  try { const body = await req.json(); forceWindow = body?.force_window === true; } catch (_) {}
-
   try {
     const senderName = await getSetting(base44, 'mailing_sender_name', 'קרנות ראמים');
     const senderEmail = await getSetting(base44, 'mailing_sender_email', '');
@@ -164,11 +158,8 @@ Deno.serve(async (req) => {
     if (!whatsappAllowed) {
       summary.whatsapp_delayed = true;
       summary.whatsapp_delay_reason = 'בוט או ספק WhatsApp כבויים';
-    } else if (!isWithinWindow() && !forceWindow) {
-      summary.whatsapp_delayed = true;
-      summary.whatsapp_delay_reason = 'מחוץ לחלון השליחה (09:00-20:00)';
     } else {
-      const dailyLimit = Number(await getSetting(base44, 'whatsapp_daily_limit', '100')) || 100;
+      const dailyLimit = Number(await getSetting(base44, 'whatsapp_daily_limit', '250')) || 250;
       const recentSent = await base44.asServiceRole.entities.CampaignQueue.filter({ channel: 'whatsapp', status: 'sent' }, '-sent_at', 500);
       const todayKey = israelDateKey();
       const sentToday = (recentSent || []).filter((i) => i.sent_at && israelDateKey(new Date(i.sent_at)) === todayKey).length;
