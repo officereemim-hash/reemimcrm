@@ -197,6 +197,17 @@ Deno.serve(async (req) => {
     }
 
     await refreshCampaigns(base44, touchedCampaigns);
+
+    // שרשור עצמי אם נשארו רשומות pending
+    const stillPending = await base44.asServiceRole.entities.CampaignQueue.filter({ status: 'pending' }, 'created_date', 1);
+    if (stillPending.length > 0) {
+      console.log('processCampaignQueue: still pending items, triggering self-chain...');
+      try {
+        const u = new URL(req.url);
+        await Promise.race([fetch(`${u.origin}${u.pathname}`, { method: 'POST' }), new Promise(r => setTimeout(r, 5000))]);
+      } catch (e) { console.error('self-chain trigger failed:', e.message); }
+    }
+
     return Response.json({ success: true, ...summary });
   } catch (error) {
     console.error('processCampaignQueue error:', error);

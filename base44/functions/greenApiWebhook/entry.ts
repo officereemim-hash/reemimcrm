@@ -1248,6 +1248,14 @@ Deno.serve(async (req) => {
     const timeoutSent = await sendWhatsApp(chatId, timeoutMsg, botEnabled);
     await base44.asServiceRole.entities.WhatsAppMessageLog.update(incomingLog.id, { status: 'timeout_fallback' });
     await logOutgoing(base44, timeoutSent?.idMessage || `out_${Date.now()}_timeout`, phone, timeoutMsg, chatId, conversationId, outgoingStatus);
+
+    // טריגר לא-חוסם ל-processWhatsAppReplies — איסוף תשובת הסוכן שתגיע בהמשך
+    try {
+      const u = new URL(req.url);
+      const sweepUrl = `${u.origin}${u.pathname.replace(/\/greenApiWebhook$/, '')}/processWhatsAppReplies?secret=pwr_scheduled_run_2026&chain=1`;
+      await Promise.race([fetch(sweepUrl, { method: 'POST' }), new Promise(r => setTimeout(r, 5000))]);
+    } catch (e) { console.error('sweep trigger failed:', e.message); }
+
     return Response.json({ ok: true, conversationId, timeout_fallback: true });
   } catch (error) {
     console.error('greenApiWebhook error:', error.message);

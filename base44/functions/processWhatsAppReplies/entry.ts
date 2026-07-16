@@ -26,9 +26,10 @@ Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
 
-    // אימות: או admin או secret פנימי (scheduled task)
+    // אימות: או admin או secret פנימי (scheduled task / chain)
     const url = new URL(req.url);
     const secretParam = url.searchParams.get('secret') || '';
+    const chain = parseInt(url.searchParams.get('chain') || '1', 10) || 1;
     if (secretParam !== INTERNAL_SECRET) {
       const user = await base44.auth.me();
       if (user?.role !== 'admin') {
@@ -89,8 +90,8 @@ Deno.serve(async (req) => {
       try {
         const createdAt = new Date(msg.created_date);
         const ageMs = Date.now() - createdAt.getTime();
-        // pending_reply: חלון 15 דקות; timeout_fallback: חלון 30 דקות
-        const maxAgeMs = msg.status === 'timeout_fallback' ? 30 * 60 * 1000 : 15 * 60 * 1000;
+        // pending_reply ו-timeout_fallback: חלון 15 דקות
+        const maxAgeMs = 15 * 60 * 1000;
         if (ageMs > maxAgeMs) {
           console.log(`Message ${msg.id_message} timed out (${Math.round(ageMs / 1000)}s old, status=${msg.status})`);
           await base44.asServiceRole.entities.WhatsAppMessageLog.update(msg.id, { status: 'timeout' });
@@ -167,7 +168,27 @@ Deno.serve(async (req) => {
       }
     }
 
-    return Response.json({ ok: true, processed, errors, total: pending.length });
+    // שרשור עצמי: אם נשארו ממתינות בתוך החלון ו-chain < 20
+    if (chain < 20) {
+      const [stillPending, stillTimeout] = await Promise.all([
+        base44.asServiceRole.entities.WhatsAppMessageLog.filter({ status: 'pending_reply' }, '-created_date', 1),
+        base44.asServiceRole.entities.WhatsAppMessageLog.filter({ status: 'timeout_fallback' }, '-created_date', 1),
+      ]);
+      const remaining = [...stillPending, ...stillTimeout].filter(m => {
+        const age = Date.now() - new Date(m.created_date).getTime();
+        return age < 15 * 60 * 1000;
+      });
+      if (remaining.length > 0) {
+        console.log(`Chain ${chain}: ${remaining.length} still pending, waiting 40s then chaining...`);
+        await new Promise(r => setTimeout(r, 40000));
+        try {
+          const nextUrl = `${url.origin}${url.pathname}?secret=${INTERNAL_SECRET}&chain=${chain + 1}`;
+          await Promise.race([fetch(nextUrl, { method: 'POST' }), new Promise(r => setTimeout(r, 5000))]);
+        } catch (e) { console.error('self-chain trigger failed:', e.message); }
+      }
+    }
+
+    return Response.json({ ok: true, processed, errors, total: pending.length, chain });
   } catch (error) {
     console.error('processWhatsAppReplies error:', error);
     return Response.json({ error: error.message }, { status: 500 });
