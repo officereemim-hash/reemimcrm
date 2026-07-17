@@ -363,6 +363,13 @@ Deno.serve(async (req) => {
       const unsubContact = contacts[0] || null;
       if (unsubContact) {
         await base44.asServiceRole.entities.Contact.update(unsubContact.id, { mailing_opt_out: true });
+        // ביטול תזכורות וובינר עתידיות
+        const futureRegs = await base44.asServiceRole.entities.WebinarRegistration.filter({ contact_id: unsubContact.id });
+        for (const reg of futureRegs) {
+          if (reg.webinar_date && new Date(reg.webinar_date).getTime() > Date.now() && reg.attended !== true) {
+            await base44.asServiceRole.entities.WebinarRegistration.update(reg.id, { reminder_1h_sent: true, reminder_start_sent: true });
+          }
+        }
         await base44.asServiceRole.entities.Communication.create({
           contact_id: unsubContact.id,
           type: 'whatsapp',

@@ -28,7 +28,7 @@ async function uchatSend(base44, phone, tplKey, firstName, params) {
 function toChatId(localPhone) { let clean = String(localPhone || '').replace(/[^\d]/g, ''); if (clean.startsWith('0')) clean = '972' + clean.substring(1); return `${clean}@c.us`; }
 
 function fillTemplate(template, values) {
-  return String(template || '').replaceAll('{name}', values.name || '').replaceAll('{zoom_link}', values.zoom_link || '');
+  return String(template || '').replaceAll('{name}', values.name || '').replaceAll('{zoom_link}', values.zoom_link || '').replaceAll('{webinar_title}', values.webinar_title || '');
 }
 
 const ZOOM_SUBTYPE = { investments: 'zoom_webinar_investments', divorce: 'zoom_webinar_divorce', retirement: 'zoom_webinar_retirement' };
@@ -53,6 +53,7 @@ Deno.serve(async (req) => {
     const tpl1h = await getContent('webinar_reminder_1h');
     const tplStart = await getContent('webinar_reminder_start');
     const zoomCache = {};
+    const titleCache = {};
 
     let sent1h = 0, sentStart = 0;
 
@@ -74,14 +75,25 @@ Deno.serve(async (req) => {
       const zoomLink = reg.zoom_join_url || zoomCache[reg.webinar_type];
       const contactFirstName = (contact.full_name || '').split(' ')[0];
 
+      // שליפת כותרת הוובינר מדף הנחיתה (cache פר-סוג)
+      if (titleCache[reg.webinar_type] === undefined) {
+        const lps = await base44.asServiceRole.entities.LandingPage.filter({ webinar_type: reg.webinar_type, is_active: true }, '-created_date', 1);
+        const TYPE_LABEL = { investments: 'וובינר השקעות', divorce: 'וובינר גירושין', retirement: 'וובינר פרישה' };
+        titleCache[reg.webinar_type] = lps[0]?.hero_title || TYPE_LABEL[reg.webinar_type] || 'וובינר — קרנות ראמים';
+      }
+      const webinarTitle = titleCache[reg.webinar_type];
+
       const template = phase === '1h' ? tpl1h : tplStart;
-      const message = fillTemplate(template, { name: contact.full_name, zoom_link: zoomLink });
+      const message = fillTemplate(template, { name: contact.full_name, zoom_link: zoomLink, webinar_title: webinarTitle });
       if (!message) continue;
 
       const uchatTplKey = phase === '1h' ? 'webinar_reminder_1h' : 'webinar_reminder_start';
       let status = 'skipped';
       if (botEnabled && WHATSAPP_PROVIDER === 'uchat') {
-        const ok = await uchatSend(base44, contact.phone, uchatTplKey, contactFirstName, [contact.full_name || '', zoomLink]);
+        const uchatParams = phase === '1h'
+          ? [contact.full_name || '', webinarTitle, zoomLink]
+          : [zoomLink];
+        const ok = await uchatSend(base44, contact.phone, uchatTplKey, contactFirstName, uchatParams);
         status = ok ? 'sent' : 'failed';
       } else if (botEnabled && greenEnabled) {
         const res = await fetch(`https://api.green-api.com/waInstance${INSTANCE_ID}/sendMessage/${API_TOKEN}`, {

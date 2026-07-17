@@ -164,7 +164,14 @@ Deno.serve(async (req) => {
     const fallbackRecords = confirmRecords.length === 0 && hasRecording ? await base44.asServiceRole.entities.BotContent.filter({ key: 'webinar_confirm', is_active: true }) : confirmRecords;
     const confirmTemplate = fallbackRecords[0]?.content || (hasRecording ? 'שלום {name}, נרשמת בהצלחה! צפה בהקלטת הוובינר: {zoom_link}' : 'שלום {name}, נרשמת בהצלחה לוובינר! קישור: {zoom_link}');
 
-    const dateStr = page.webinar_date ? new Date(page.webinar_date).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', dateStyle: 'full', timeStyle: 'short' }) : '';
+    let dateStr = '';
+    if (page.webinar_date) {
+      const wd = new Date(page.webinar_date);
+      const weekday = new Intl.DateTimeFormat('he-IL', { timeZone: 'Asia/Jerusalem', weekday: 'long' }).format(wd);
+      const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem', year: '2-digit', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(wd);
+      const p = Object.fromEntries(parts.filter(x => x.type !== 'literal').map(x => [x.type, x.value]));
+      dateStr = `${weekday}, ${p.day}/${p.month}/${p.year} בשעה ${p.hour}:${p.minute}`;
+    }
     const rawEffectiveLink = hasRecording ? page.recording_url : zoomJoinUrl;
     const effectiveLink = rawEffectiveLink ? await createShortLink(base44, FUNCTIONS_BASE, rawEffectiveLink, 'zoom_join') : '';
     const rawCalendarAddLink = buildCalendarAddLink(page.webinar_date, page.hero_title || 'וובינר — קרנות ראמים', rawEffectiveLink ? `קישור להצטרפות: ${rawEffectiveLink}` : '');
@@ -177,9 +184,17 @@ Deno.serve(async (req) => {
     const greenEnabled = greenSettings[0]?.value === 'true';
     const regFirstName = String(full_name).trim().split(' ')[0];
 
+    const landingLink = `${appBaseUrl}/webinar/${page.slug}`;
+
     let waStatus = 'skipped';
     if (botEnabled && WHATSAPP_PROVIDER === 'uchat') {
-      const ok = await uchatSend(base44, localPhone, 'webinar_registration', regFirstName, [full_name, dateStr, effectiveLink]);
+      const ok = await uchatSend(base44, localPhone, 'webinar_registration', regFirstName, [
+        full_name || '',
+        page.hero_title || 'וובינר — קרנות ראמים',
+        dateStr || 'יעודכן בהמשך',
+        effectiveLink || landingLink,
+        calendarAddLink || effectiveLink || landingLink,
+      ]);
       waStatus = ok ? 'sent' : 'failed';
     } else if (botEnabled && greenEnabled) {
       const res = await fetch(`https://api.green-api.com/waInstance${INSTANCE_ID}/sendMessage/${API_TOKEN}`, {
