@@ -1,11 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 
-const INSTANCE_ID = Deno.env.get('GREEN_API_INSTANCE_ID');
-const API_TOKEN = Deno.env.get('GREEN_API_TOKEN');
 const WEBHOOK_SECRET = Deno.env.get('CALCOM_WEBHOOK_SECRET');
 
-// ─── ספק שליחה: Green ↔ uChat ───
-const WHATSAPP_PROVIDER = Deno.env.get('WHATSAPP_PROVIDER') || 'green';
 const UCHAT_TOKEN = Deno.env.get('UCHAT_API_TOKEN');
 const UCHAT_BASE = 'https://www.uchat.com.au/api';
 async function getUchatTemplateName(base44, key) {
@@ -119,16 +115,10 @@ function fillTemplate(template, values) {
 
 async function sendWhatsApp(base44Instance, phone, message, uchatTplKey, uchatFirstName, uchatParams) {
   if (!phone || !message) return false;
-  if (WHATSAPP_PROVIDER === 'uchat' && uchatTplKey) {
+  if (uchatTplKey) {
     return await uchatSend(base44Instance, phone, uchatTplKey, uchatFirstName || '', uchatParams || []);
   }
-  const chatId = `${normalizePhone(phone)}@c.us`;
-  const response = await fetch(`https://api.green-api.com/waInstance${INSTANCE_ID}/sendMessage/${API_TOKEN}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chatId, message }),
-  });
-  return response.ok;
+  return false;
 }
 
 async function findContact(base44, attendee) {

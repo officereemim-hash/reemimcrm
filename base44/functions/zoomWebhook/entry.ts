@@ -1,11 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 
-const INSTANCE_ID = Deno.env.get('GREEN_API_INSTANCE_ID');
-const API_TOKEN_GREEN = Deno.env.get('GREEN_API_TOKEN');
 const SECRET = Deno.env.get('ZOOM_WEBHOOK_SECRET_TOKEN') || '';
 
-// ─── ספק שליחה: Green ↔ uChat ───
-const WHATSAPP_PROVIDER = Deno.env.get('WHATSAPP_PROVIDER') || 'green';
 const UCHAT_TOKEN = Deno.env.get('UCHAT_API_TOKEN');
 const UCHAT_BASE = 'https://www.uchat.com.au/api';
 async function getUchatTemplateName(base44, key) { const r = await base44.asServiceRole.entities.SystemSetting.filter({ key: `uchat_tpl_${key}` }); return r[0]?.value || ''; }
@@ -39,7 +35,6 @@ async function getZoomToken() {
   return (await res.json()).access_token;
 }
 
-function toChatId(localPhone) { let clean = String(localPhone || '').replace(/[^\d]/g, ''); if (clean.startsWith('0')) clean = '972' + clean.substring(1); return `${clean}@c.us`; }
 
 Deno.serve(async (req) => {
   try {
@@ -92,7 +87,6 @@ Deno.serve(async (req) => {
       const tplRecords = await base44.asServiceRole.entities.BotContent.filter({ key: 'webinar_recording', is_active: true });
       const template = tplRecords[0]?.content || 'הנה הקלטת הוובינר לצפייה חוזרת:\n{recording_link}';
       const botEnabled = ((await base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' }))[0]?.value) === 'true';
-      const greenEnabled = ((await base44.asServiceRole.entities.SystemSetting.filter({ key: 'green_api_enabled' }))[0]?.value) === 'true';
 
       let sent = 0;
       const processedEmails = new Set();
@@ -119,16 +113,10 @@ Deno.serve(async (req) => {
         const contactFirstName = (contact.full_name || '').split(' ')[0];
 
         let status = 'skipped';
-        if (botEnabled && WHATSAPP_PROVIDER === 'uchat') {
+        if (botEnabled) {
           const ok = await uchatSend(base44, contact.phone, 'webinar_recording', contactFirstName, [contact.full_name || '', shareLink]);
           status = ok ? 'sent' : 'failed';
-        } else if (botEnabled && greenEnabled) {
-          const waRes = await fetch(`https://api.green-api.com/waInstance${INSTANCE_ID}/sendMessage/${API_TOKEN_GREEN}`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chatId: toChatId(contact.phone), message }),
-          });
-          status = waRes.ok ? 'sent' : 'failed';
-        } else if (botEnabled) { status = 'sent'; }
+        }
 
         await base44.asServiceRole.entities.Communication.create({
           contact_id: contact.id, type: 'whatsapp', direction: 'outbound',

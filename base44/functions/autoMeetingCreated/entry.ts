@@ -1,10 +1,5 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 
-const INSTANCE_ID = Deno.env.get('GREEN_API_INSTANCE_ID');
-const API_TOKEN = Deno.env.get('GREEN_API_TOKEN');
-
-// ─── ספק שליחה: Green ↔ uChat (רדום תחת WHATSAPP_PROVIDER) ───
-const WHATSAPP_PROVIDER = Deno.env.get('WHATSAPP_PROVIDER') || 'green';
 const UCHAT_TOKEN = Deno.env.get('UCHAT_API_TOKEN');
 const UCHAT_BASE = 'https://www.uchat.com.au/api';
 async function getUchatTemplateName(base44, key) {
@@ -59,22 +54,9 @@ function normalizePhone(phone) {
 
 async function sendWhatsApp(base44, phone, message, tplKey, firstName, params) {
   const cleanP = normalizePhone(phone);
-  if (WHATSAPP_PROVIDER === 'uchat') {
-    const tplName = await getUchatTemplateName(base44, tplKey);
-    if (!tplName) { console.log(`uchat: שם תבנית ל-'${tplKey}' לא מוגדר (uchat_tpl_${tplKey})`); return false; }
-    return !!(await uchatSendTemplate(cleanP, firstName, tplName, params || []));
-  }
-  const chatId = `${cleanP}@c.us`;
-  const greenSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'green_api_enabled' });
-  const greenApiEnabled = greenSettings.length > 0 && greenSettings[0].value === 'true';
-  if (!greenApiEnabled) return true;
-
-  const response = await fetch(`https://api.green-api.com/waInstance${INSTANCE_ID}/sendMessage/${API_TOKEN}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chatId, message }),
-  });
-  return response.ok;
+  const tplName = await getUchatTemplateName(base44, tplKey);
+  if (!tplName) { console.log(`uchat: שם תבנית ל-'${tplKey}' לא מוגדר (uchat_tpl_${tplKey})`); return false; }
+  return !!(await uchatSendTemplate(cleanP, firstName, tplName, params || []));
 }
 
 Deno.serve(async (req) => {
