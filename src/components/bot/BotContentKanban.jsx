@@ -42,7 +42,7 @@ const ROUTE_MAP = {
     label: 'וובינר',
     keys: [
       'webinar_lead_intro', 'webinar_type_clarify', 'webinar_confirm', 'webinar_confirm_recording',
-      'webinar_reminder_1h', 'webinar_reminder_h1', 'webinar_reminder_start', 'webinar_coupon',
+      'webinar_reminder_1h', 'webinar_reminder_h1', 'webinar_reminder_start', 'webinar_post_intro', 'webinar_post_options', 'webinar_coupon',
       'webinar_payment_intro', 'webinar_payment', 'webinar_payment_pending_ack',
       'webinar_location_choice', 'webinar_location', 'webinar_schedule',
       'webinar_meeting_confirmed', 'webinar_recording',
