@@ -21,6 +21,17 @@ async function uchatSend(base44, phone, tplKey, firstName, params) {
 }
 
 
+async function createShortLink(base44, functionsBase, targetUrl, purpose = '') {
+  if (!targetUrl) return '';
+  const code = Array.from(crypto.getRandomValues(new Uint8Array(6))).map(b => 'abcdefghijkmnpqrstuvwxyz23456789'[b % 32]).join('');
+  try {
+    await base44.asServiceRole.entities.ShortLink.create({ code, target_url: targetUrl, purpose, click_count: 0 });
+    return `${functionsBase}/redirectShortLink?code=${code}`;
+  } catch (e) { console.warn('createShortLink failed:', e.message); return targetUrl; }
+}
+
+const FUNCTIONS_BASE = 'https://reemim-crm.base44.app/functions';
+
 function fillTemplate(template, values) {
   return String(template || '').replaceAll('{name}', values.name || '').replaceAll('{zoom_link}', values.zoom_link || '').replaceAll('{webinar_title}', values.webinar_title || '');
 }
@@ -65,6 +76,7 @@ Deno.serve(async (req) => {
 
       if (zoomCache[reg.webinar_type] === undefined) zoomCache[reg.webinar_type] = await getZoom(reg.webinar_type);
       const zoomLink = reg.zoom_join_url || zoomCache[reg.webinar_type];
+      const shortZoom = await createShortLink(base44, FUNCTIONS_BASE, zoomLink, 'zoom_join');
       const contactFirstName = (contact.full_name || '').split(' ')[0];
 
       // שליפת כותרת הוובינר מדף הנחיתה (cache פר-סוג)
@@ -76,15 +88,15 @@ Deno.serve(async (req) => {
       const webinarTitle = titleCache[reg.webinar_type];
 
       const template = phase === '1h' ? tpl1h : tplStart;
-      const message = fillTemplate(template, { name: contact.full_name, zoom_link: zoomLink, webinar_title: webinarTitle });
+      const message = fillTemplate(template, { name: contact.full_name, zoom_link: shortZoom, webinar_title: webinarTitle });
       if (!message) continue;
 
       const uchatTplKey = phase === '1h' ? 'webinar_reminder_1h' : 'webinar_reminder_start';
       let status = 'skipped';
       if (botEnabled) {
         const uchatParams = phase === '1h'
-          ? [contact.full_name || '', webinarTitle, zoomLink]
-          : [zoomLink];
+          ? [contact.full_name || '', webinarTitle, shortZoom]
+          : [shortZoom];
         const ok = await uchatSend(base44, contact.phone, uchatTplKey, contactFirstName, uchatParams);
         status = ok ? 'sent' : 'failed';
       }
