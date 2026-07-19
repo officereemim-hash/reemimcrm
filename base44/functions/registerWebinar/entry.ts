@@ -101,7 +101,7 @@ async function createShortLink(base44, functionsBase, targetUrl, purpose = '') {
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    const appBaseUrl = req.headers.get('base44-api-url') || 'https://reemim-crm.base44.app';
+    const appBaseUrl = 'https://reemim-crm.base44.app';
     const FUNCTIONS_BASE = `${appBaseUrl}/functions`;
     const body = await req.json();
     const { slug, full_name, phone, email } = body;
