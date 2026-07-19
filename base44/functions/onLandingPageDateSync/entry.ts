@@ -31,12 +31,12 @@ Deno.serve(async (req) => {
 
     const now = Date.now();
 
-    // Only update registrations from the current cycle — skip attended and past cycles
+    // Update all future, non-attended registrations of this webinar type
     const regs = await base44.asServiceRole.entities.WebinarRegistration.filter({ webinar_type: page.webinar_type });
     const targets = regs.filter(r =>
-      (r.webinar_date || null) === oldDate &&
       r.attended !== true &&
-      (!oldDate || new Date(oldDate).getTime() > now)
+      r.webinar_date &&
+      new Date(r.webinar_date).getTime() > now
     );
 
     let synced = 0;
