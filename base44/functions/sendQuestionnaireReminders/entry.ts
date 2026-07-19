@@ -1,12 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 
-const INSTANCE_ID = Deno.env.get('GREEN_API_INSTANCE_ID');
-const API_TOKEN = Deno.env.get('GREEN_API_TOKEN');
-
 const MEETING_STATUSES = ['meeting_scheduled', 'meeting_scheduled_frontal', 'meeting_scheduled_zoom'];
 
-// ─── ספק שליחה: Green ↔ uChat (רדום תחת WHATSAPP_PROVIDER) ───
-const WHATSAPP_PROVIDER = Deno.env.get('WHATSAPP_PROVIDER') || 'green';
 const UCHAT_TOKEN = Deno.env.get('UCHAT_API_TOKEN');
 const UCHAT_BASE = 'https://www.uchat.com.au/api';
 async function getUchatTemplateName(base44, key) {
@@ -75,7 +70,6 @@ Deno.serve(async (req) => {
       return records[0]?.value || '';
     };
     const botEnabled = (await getSetting('whatsapp_bot_enabled')) === 'true';
-    const greenApiEnabled = (await getSetting('green_api_enabled')) === 'true';
 
     const templates = await base44.asServiceRole.entities.BotContent.filter({ key: 'questionnaire_reminder', is_active: true });
     const template = templates[0]?.content || '';
@@ -130,22 +124,9 @@ Deno.serve(async (req) => {
           .replaceAll('{questionnaire_link}', questionnaireUrl);
 
         let result = { status: 'skipped', errorDetail: 'log_only_whatsapp_bot_disabled' };
-        if (botEnabled && WHATSAPP_PROVIDER === 'uchat') {
+        if (botEnabled) {
           const ok = await uchatSend(base44, contact.phone, 'questionnaire_reminder', contact.full_name || '', [contact.full_name || '', questionnaireUrl]);
           result = { status: ok ? 'sent' : 'failed', errorDetail: ok ? '' : 'uchat_send_failed' };
-        } else if (botEnabled && !greenApiEnabled) {
-          result = { status: 'sent', errorDetail: 'simulated_green_api_disabled' };
-        } else if (botEnabled && greenApiEnabled) {
-          const chatId = `${normalizePhone(contact.phone)}@c.us`;
-          const response = await fetch(`https://api.green-api.com/waInstance${INSTANCE_ID}/sendMessage/${API_TOKEN}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chatId, message, typingTime: 3000 }),
-          });
-          result = {
-            status: response.ok ? 'sent' : 'failed',
-            errorDetail: response.ok ? '' : (await response.text()).substring(0, 500),
-          };
         }
 
         await base44.asServiceRole.entities.Communication.create({

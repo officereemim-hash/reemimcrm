@@ -1,11 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 
-const INSTANCE_ID = Deno.env.get('GREEN_API_INSTANCE_ID');
-const API_TOKEN = Deno.env.get('GREEN_API_TOKEN');
 const BREVO_API_KEY = Deno.env.get('BREVO_API_KEY');
 
-// ─── ספק שליחה: Green ↔ uChat (רדום תחת WHATSAPP_PROVIDER) ───
-const WHATSAPP_PROVIDER = Deno.env.get('WHATSAPP_PROVIDER') || 'green';
 const UCHAT_TOKEN = Deno.env.get('UCHAT_API_TOKEN');
 const UCHAT_BASE = 'https://www.uchat.com.au/api';
 async function getUchatTemplateName(base44, key) {
@@ -53,22 +49,10 @@ function normalizePhone(phone) {
 
 async function sendWhatsApp(base44, phone, message, tplKey, firstName, params) {
   const cleanPhone = normalizePhone(phone);
-  if (WHATSAPP_PROVIDER === 'uchat') {
-    const tplName = await getUchatTemplateName(base44, tplKey);
-    if (!tplName) { console.log(`uchat: שם תבנית ל-'${tplKey}' לא מוגדר (uchat_tpl_${tplKey})`); return false; }
-    const r = await uchatSendTemplate(cleanPhone, firstName, tplName, params || []);
-    return !!r;
-  }
-  const chatId = `${cleanPhone}@c.us`;
-  const res = await fetch(
-    `https://api.green-api.com/waInstance${INSTANCE_ID}/sendMessage/${API_TOKEN}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chatId, message, typingTime: 3000 }),
-    }
-  );
-  return res.ok;
+  const tplName = await getUchatTemplateName(base44, tplKey);
+  if (!tplName) { console.log(`uchat: שם תבנית ל-'${tplKey}' לא מוגדר (uchat_tpl_${tplKey})`); return false; }
+  const r = await uchatSendTemplate(cleanPhone, firstName, tplName, params || []);
+  return !!r;
 }
 
 Deno.serve(async (req) => {
@@ -92,19 +76,17 @@ Deno.serve(async (req) => {
     });
 
     // Load template and sender settings
-    const [templateRecords, senderEmailSettings, senderNameSettings, botSettings, greenSettings] = await Promise.all([
+    const [templateRecords, senderEmailSettings, senderNameSettings, botSettings] = await Promise.all([
       base44.asServiceRole.entities.BotContent.filter({ key: 'birthday_greeting', is_active: true }),
       base44.asServiceRole.entities.SystemSetting.filter({ key: 'mailing_sender_email' }),
       base44.asServiceRole.entities.SystemSetting.filter({ key: 'mailing_sender_name' }),
       base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' }),
-      base44.asServiceRole.entities.SystemSetting.filter({ key: 'green_api_enabled' }),
     ]);
 
     const waTemplate = templateRecords[0]?.content || 'יום הולדת שמח {name}! 🎂 מאחלים לך יום מיוחד ומלא שמחה. צוות קרנות ראמים';
     const senderEmail = senderEmailSettings[0]?.value || 'office.reemim@gmail.com';
     const senderName = senderNameSettings[0]?.value || 'קרנות ראמים';
     const botEnabled = botSettings[0]?.value === 'true';
-    const greenEnabled = greenSettings[0]?.value === 'true';
 
     let waSent = 0;
     let waFailed = 0;
@@ -115,7 +97,7 @@ Deno.serve(async (req) => {
       const message = waTemplate.replaceAll('{name}', contact.full_name || '');
 
       // WhatsApp
-      if (contact.phone && botEnabled && (WHATSAPP_PROVIDER === 'uchat' || greenEnabled)) {
+      if (contact.phone && botEnabled) {
         const ok = await sendWhatsApp(base44, contact.phone, message, 'birthday', contact.full_name || '', [contact.full_name || '']);
         await base44.asServiceRole.entities.Communication.create({
           contact_id: contact.id,

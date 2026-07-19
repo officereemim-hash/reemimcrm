@@ -1,10 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 
-const INSTANCE_ID = Deno.env.get('GREEN_API_INSTANCE_ID');
-const API_TOKEN = Deno.env.get('GREEN_API_TOKEN');
-
-// ─── ספק שליחה: Green ↔ uChat (רדום תחת WHATSAPP_PROVIDER) ────────────────────
-const WHATSAPP_PROVIDER = Deno.env.get('WHATSAPP_PROVIDER') || 'green';
 const UCHAT_TOKEN = Deno.env.get('UCHAT_API_TOKEN');
 const UCHAT_BASE = 'https://www.uchat.com.au/api';
 
@@ -112,13 +107,12 @@ Deno.serve(async (req) => {
       return r[0]?.value || '';
     }
 
-    const [botEnabledVal, greenEnabledVal, allowedRaw] = await Promise.all([
+    const [botEnabledVal, allowedRaw] = await Promise.all([
       getSetting('whatsapp_bot_enabled'),
-      getSetting('green_api_enabled'),
       getSetting('test_mode_allowed_numbers'),
     ]);
 
-    if (botEnabledVal !== 'true' || greenEnabledVal !== 'true') { await logSkipped('bot_off', 'הבוט/Green API כבוי כרגע'); return Response.json({ ok: true, skipped: 'bot_off' }); }
+    if (botEnabledVal !== 'true') { await logSkipped('bot_off', 'הבוט כבוי כרגע'); return Response.json({ ok: true, skipped: 'bot_off' }); }
 
     const allowedTrimmed = String(allowedRaw || '').trim();
     if (allowedTrimmed) {
@@ -195,25 +189,15 @@ Deno.serve(async (req) => {
     // --- שליחה ---
     let sendStatus;
     let providerResponse = null;
-    if (WHATSAPP_PROVIDER === 'uchat') {
-      // ליד חדש = מחוץ לחלון 24ש' → תבנית מאושרת + create_if_not_found (לא subscriber/create — רפאים!)
-      const phone972 = normalizeIntlPhone(c.phone);
-      const uchatTplKey = c.source === 'shoranss' ? 'new_lead_shoranss' : (missing.length ? 'new_lead_missing' : 'new_lead');
-      const tplName = await getUchatTemplateName(base44, uchatTplKey);
-      if (!tplName) {
-        sendStatus = 'failed';
-        console.log(`uchat: שם תבנית ל-'${uchatTplKey}' לא מוגדר (SystemSetting uchat_tpl_${uchatTplKey}) — דולג`);
-      } else {
-        providerResponse = await uchatSendTemplate(phone972, c.full_name || '', tplName, [c.full_name || c.phone || '']);
-        sendStatus = providerResponse ? 'sent' : 'failed';
-      }
+    const phone972 = normalizeIntlPhone(c.phone);
+    const uchatTplKey = c.source === 'shoranss' ? 'new_lead_shoranss' : (missing.length ? 'new_lead_missing' : 'new_lead');
+    const tplName = await getUchatTemplateName(base44, uchatTplKey);
+    if (!tplName) {
+      sendStatus = 'failed';
+      console.log(`uchat: שם תבנית ל-'${uchatTplKey}' לא מוגדר (SystemSetting uchat_tpl_${uchatTplKey}) — דולג`);
     } else {
-      const response = await fetch(`https://api.green-api.com/waInstance${INSTANCE_ID}/sendMessage/${API_TOKEN}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chatId, message: messageToSend, typingTime: 3000 }),
-      });
-      sendStatus = response.ok ? 'sent' : 'failed';
+      providerResponse = await uchatSendTemplate(phone972, c.full_name || '', tplName, [c.full_name || c.phone || '']);
+      sendStatus = providerResponse ? 'sent' : 'failed';
     }
 
     // --- עדכון Contact ---

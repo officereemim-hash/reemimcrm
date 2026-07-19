@@ -1,13 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 
-const INSTANCE_ID = Deno.env.get('GREEN_API_INSTANCE_ID');
-const API_TOKEN = Deno.env.get('GREEN_API_TOKEN');
-const WEBHOOK_SECRET = Deno.env.get('GREEN_API_WEBHOOK_SECRET');
 const AGENT_NAME = 'bot_reemim';
 
-// ─── ספק שליחה: Green API ↔ uChat (WhatsApp Cloud API רשמי) ─────────────────
-// WHATSAPP_PROVIDER = 'green' (ברירת מחדל) | 'uchat'. שינוי המתג לבד מעביר ספק.
-const WHATSAPP_PROVIDER = Deno.env.get('WHATSAPP_PROVIDER') || 'green';
 const UCHAT_TOKEN = Deno.env.get('UCHAT_API_TOKEN');
 const UCHAT_BASE = 'https://www.uchat.com.au/api';
 // cache פר-isolate: טלפון בינלאומי (972...) → user_ns של uChat
@@ -105,54 +99,30 @@ function extractContactDetails(text) {
 
 async function sendWhatsApp(chatId, message, botEnabled) {
   if (!chatId || !message || !botEnabled) return null;
-  if (WHATSAPP_PROVIDER === 'uchat') {
-    // בתוך חלון 24 שעות (הפונה כתב לנו) → send-text חופשי. הצלחה רק על status:'ok'.
-    const phone972 = String(chatId).replace('@c.us', '');
-    const ns = await uchatResolveNs(phone972);
-    if (!ns) { console.log(`uchat: no subscriber for ${phone972} (send-text skipped)`); return null; }
-    const res = await fetch(`${UCHAT_BASE}/subscriber/send-text`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${UCHAT_TOKEN}` },
-      body: JSON.stringify({ user_ns: ns, text: message }),
-    });
-    if (!res.ok) return null;
-    const j = await res.json().catch(() => ({}));
-    return j?.status === 'ok' ? j : null;
-  }
-  const response = await fetch(`https://api.green-api.com/waInstance${INSTANCE_ID}/sendMessage/${API_TOKEN}`, {
+  const phone972 = String(chatId).replace('@c.us', '');
+  const ns = await uchatResolveNs(phone972);
+  if (!ns) { console.log(`uchat: no subscriber for ${phone972} (send-text skipped)`); return null; }
+  const res = await fetch(`${UCHAT_BASE}/subscriber/send-text`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chatId, message, typingTime: 3000 }),
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${UCHAT_TOKEN}` },
+    body: JSON.stringify({ user_ns: ns, text: message }),
   });
-  if (!response.ok) return null;
-  return await response.json();
+  if (!res.ok) return null;
+  const j = await res.json().catch(() => ({}));
+  return j?.status === 'ok' ? j : null;
 }
 
 async function sendWhatsAppFileByUrl(chatId, fileUrl, fileName, caption, botEnabled) {
   if (!chatId || !fileUrl || !botEnabled) return null;
-  if (WHATSAPP_PROVIDER === 'uchat') {
-    // שליחת קבצים ב-uChat תיבנה בשלב 2 (endpoint ייעודי). בינתיים — שולחים את ה-caption כטקסט כדי לא לאבד תוכן.
-    if (caption) { try { await sendWhatsApp(chatId, caption, botEnabled); } catch (_) {} }
-    console.log(`uchat: file send not yet implemented (${fileUrl}) — sent caption only`);
-    return null;
-  }
-  const response = await fetch(`https://api.green-api.com/waInstance${INSTANCE_ID}/sendFileByUrl/${API_TOKEN}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chatId, urlFile: fileUrl, fileName: fileName || 'image.png', caption: caption || '' }),
-  });
-  if (!response.ok) return null;
-  return await response.json();
+  // שליחת קבצים ב-uChat תיבנה בשלב 2 (endpoint ייעודי). בינתיים — שולחים את ה-caption כטקסט כדי לא לאבד תוכן.
+  if (caption) { try { await sendWhatsApp(chatId, caption, botEnabled); } catch (_) {} }
+  console.log(`uchat: file send not yet implemented (${fileUrl}) — sent caption only`);
+  return null;
 }
 
 async function sendTyping(chatId, seconds = 15, botEnabled = false) {
-  if (!botEnabled) return;
-  if (WHATSAPP_PROVIDER === 'uchat') return; // אין אינדיקטור הקלדה נפרד ב-uChat send-text
-  fetch(`https://api.green-api.com/waInstance${INSTANCE_ID}/sendTyping/${API_TOKEN}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chatId, typingTime: seconds * 1000 }),
-  }).catch(() => {});
+  // אין אינדיקטור הקלדה נפרד ב-uChat
+  return;
 }
 
 async function getBotContent(base44, key) {
@@ -214,18 +184,7 @@ Deno.serve(async (req) => {
       };
     }
 
-    if (!isUchat && WEBHOOK_SECRET && body.webhookSecret && body.webhookSecret !== WEBHOOK_SECRET) {
-      return Response.json({ error: 'Invalid webhook secret' }, { status: 403 });
-    }
-    if (!isUchat && WEBHOOK_SECRET && secretParam && secretParam !== WEBHOOK_SECRET) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const expectedInstanceId = Deno.env.get('GREEN_API_INSTANCE_ID') || '';
-    const incomingInstanceId = String(body.instanceData?.idInstance || '');
-    if (expectedInstanceId && incomingInstanceId && incomingInstanceId !== expectedInstanceId) {
-      return Response.json({ error: 'Forbidden' }, { status: 403 });
-    }
+    // (Green API webhook secret validation removed — uChat only)
 
     if (body.typeWebhook !== 'incomingMessageReceived') {
       return Response.json({ ok: true, skipped: true });
@@ -250,7 +209,7 @@ Deno.serve(async (req) => {
     const localPhone = normalizeLocalPhone(phone);
 
     const [botEnabledSettings, cachedConversationSettings, blockList, duplicateMessages, testModeSettings] = await Promise.all([
-      base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' }),
+      base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' }),  
       base44.asServiceRole.entities.SystemSetting.filter({ key: 'phone_conv_' + phone }),
       base44.asServiceRole.entities.WhatsAppBlockList.list(),
       idMessage ? base44.asServiceRole.entities.WhatsAppMessageLog.filter({ id_message: idMessage }) : Promise.resolve([]),

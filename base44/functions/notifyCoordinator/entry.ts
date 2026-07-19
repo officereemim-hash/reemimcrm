@@ -1,10 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 
-const INSTANCE_ID = Deno.env.get('GREEN_API_INSTANCE_ID');
-const API_TOKEN = Deno.env.get('GREEN_API_TOKEN');
-
-// ─── ספק שליחה: Green ↔ uChat (רדום תחת WHATSAPP_PROVIDER) ───
-const WHATSAPP_PROVIDER = Deno.env.get('WHATSAPP_PROVIDER') || 'green';
 const UCHAT_TOKEN = Deno.env.get('UCHAT_API_TOKEN');
 const UCHAT_BASE = 'https://www.uchat.com.au/api';
 async function getUchatTemplateName(base44, key) {
@@ -88,7 +83,6 @@ Deno.serve(async (req) => {
     if (!coordinatorPhone) return Response.json({ ok: true, skipped: 'no_coordinator_phone' });
 
     const botEnabled = (await getSetting('whatsapp_bot_enabled')) === 'true';
-    const greenApiEnabled = (await getSetting('green_api_enabled')) === 'true';
 
     const templates = await base44.asServiceRole.entities.BotContent.filter({ key: 'coordinator_notify', is_active: true });
     const template = templates[0]?.content || '';
@@ -111,22 +105,9 @@ Deno.serve(async (req) => {
       .replaceAll('{service_type}', serviceLabel);
 
     let result = { status: 'skipped', errorDetail: 'log_only_whatsapp_bot_disabled' };
-    if (botEnabled && WHATSAPP_PROVIDER === 'uchat') {
+    if (botEnabled) {
       const ok = await uchatSend(base44, coordinatorPhone, 'coordinator_notify', 'רכזת', [contact.full_name || '', contact.phone || '', serviceLabel]);
       result = { status: ok ? 'sent' : 'failed', errorDetail: ok ? '' : 'uchat_send_failed' };
-    } else if (botEnabled) {
-      if (!greenApiEnabled) {
-        result = { status: 'sent', errorDetail: 'simulated_green_api_disabled' };
-      } else {
-        const chatId = `${normalizeIntlPhone(coordinatorPhone)}@c.us`;
-        const response = await fetch(`https://api.green-api.com/waInstance${INSTANCE_ID}/sendMessage/${API_TOKEN}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chatId, message, typingTime: 3000 }),
-        });
-        const responseText = await response.text();
-        result = { status: response.ok ? 'sent' : 'failed', errorDetail: response.ok ? '' : responseText.substring(0, 500) };
-      }
     }
 
     await base44.asServiceRole.entities.Communication.create({

@@ -179,15 +179,13 @@ Deno.serve(async (req) => {
     const message = fillTemplate(confirmTemplate, { name: full_name, date: dateStr, zoom_link: effectiveLink, calendar_add_link: calendarAddLink, webinar_title: page.hero_title || '' });
 
     const botSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' });
-    const greenSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'green_api_enabled' });
     const botEnabled = botSettings[0]?.value === 'true';
-    const greenEnabled = greenSettings[0]?.value === 'true';
     const regFirstName = String(full_name).trim().split(' ')[0];
 
     const landingLink = `${appBaseUrl}/webinar/${page.slug}`;
 
     let waStatus = 'skipped';
-    if (botEnabled && WHATSAPP_PROVIDER === 'uchat') {
+    if (botEnabled) {
       const ok = await uchatSend(base44, localPhone, 'webinar_registration', regFirstName, [
         full_name || '',
         page.hero_title || 'וובינר — קרנות ראמים',
@@ -196,14 +194,6 @@ Deno.serve(async (req) => {
         calendarAddLink || effectiveLink || landingLink,
       ]);
       waStatus = ok ? 'sent' : 'failed';
-    } else if (botEnabled && greenEnabled) {
-      const res = await fetch(`https://api.green-api.com/waInstance${INSTANCE_ID}/sendMessage/${API_TOKEN}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chatId: toChatId(localPhone), message, typingTime: 3000 }),
-      });
-      waStatus = res.ok ? 'sent' : 'failed';
-    } else if (botEnabled) {
-      waStatus = 'sent';
     }
 
     await base44.asServiceRole.entities.Communication.create({

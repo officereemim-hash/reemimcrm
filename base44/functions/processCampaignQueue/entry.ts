@@ -1,7 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 
-// ─── ספק שליחה: Green ↔ uChat ───
-const WHATSAPP_PROVIDER = Deno.env.get('WHATSAPP_PROVIDER') || 'green';
 const UCHAT_TOKEN = Deno.env.get('UCHAT_API_TOKEN');
 const UCHAT_BASE = 'https://www.uchat.com.au/api';
 async function getUchatTemplateName(base44, key) {
@@ -75,15 +73,6 @@ async function sendViaBrevo({ apiKey, senderName, senderEmail, toEmail, toName, 
   return data.messageId || '';
 }
 
-async function sendViaGreenApi({ instanceId, token, phone, message }) {
-  const res = await fetch(`https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chatId: `${phone}@c.us`, message, typingTime: 3000 }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(`Green API error: ${JSON.stringify(data)}`);
-  return data.idMessage || '';
-}
 
 async function logCommunication(base44, item, type, ok, errorMsg = '') {
   try {
@@ -115,12 +104,8 @@ async function refreshCampaigns(base44, campaignIds) {
 Deno.serve(async (req) => {
   const base44 = createClientFromRequest(req);
 
-  const [botRow, greenRow] = await Promise.all([
-    base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' }),
-    base44.asServiceRole.entities.SystemSetting.filter({ key: 'green_api_enabled' }),
-  ]);
+  const botRow = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' });
   const botEnabled = botRow[0]?.value === 'true';
-  const greenEnabled = greenRow[0]?.value === 'true';
 
   const summary = { email_sent: 0, email_failed: 0, whatsapp_sent: 0, whatsapp_failed: 0, whatsapp_delayed: false };
   const touchedCampaigns = new Set();
@@ -129,8 +114,6 @@ Deno.serve(async (req) => {
     const senderName = await getSetting(base44, 'mailing_sender_name', 'קרנות ראמים');
     const senderEmail = await getSetting(base44, 'mailing_sender_email', '');
     const BREVO_API_KEY = Deno.env.get('BREVO_API_KEY') || '';
-    const GREEN_ID = Deno.env.get('GREEN_API_INSTANCE_ID') || '';
-    const GREEN_TOKEN = Deno.env.get('GREEN_API_TOKEN') || '';
 
     // ===== 1. מיילים ממתינים =====
     const pendingEmails = await base44.asServiceRole.entities.CampaignQueue.filter({ status: 'pending', channel: 'email' }, 'created_date', EMAIL_BATCH);
@@ -154,10 +137,9 @@ Deno.serve(async (req) => {
     }
 
     // ===== 2. וואטסאפ ממתינים =====
-    const whatsappAllowed = botEnabled && (WHATSAPP_PROVIDER === 'uchat' || greenEnabled);
-    if (!whatsappAllowed) {
+    if (!botEnabled) {
       summary.whatsapp_delayed = true;
-      summary.whatsapp_delay_reason = 'בוט או ספק WhatsApp כבויים';
+      summary.whatsapp_delay_reason = 'בוט WhatsApp כבוי';
     } else {
       const dailyLimit = Number(await getSetting(base44, 'whatsapp_daily_limit', '250')) || 250;
       const recentSent = await base44.asServiceRole.entities.CampaignQueue.filter({ channel: 'whatsapp', status: 'sent' }, '-sent_at', 500);
@@ -173,13 +155,8 @@ Deno.serve(async (req) => {
         for (const item of pendingWA || []) {
           touchedCampaigns.add(item.campaign_id);
           try {
-            if (WHATSAPP_PROVIDER === 'uchat') {
-              const ok = await uchatSend(base44, item.recipient, 'campaign_broadcast', item.contact_name || '', [item.contact_name || '', item.content || '']);
-              if (!ok) throw new Error('uchat send failed');
-            } else {
-              if (!GREEN_ID || !GREEN_TOKEN) throw new Error('חסרים פרטי Green API');
-              await sendViaGreenApi({ instanceId: GREEN_ID, token: GREEN_TOKEN, phone: item.recipient, message: item.content });
-            }
+            const ok = await uchatSend(base44, item.recipient, 'campaign_broadcast', item.contact_name || '', [item.contact_name || '', item.content || '']);
+            if (!ok) throw new Error('uchat send failed');
             await base44.asServiceRole.entities.CampaignQueue.update(item.id, { status: 'sent', sent_at: new Date().toISOString() });
             await logCommunication(base44, item, 'whatsapp', true);
             if (item.contact_id) {

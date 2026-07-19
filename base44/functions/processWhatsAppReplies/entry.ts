@@ -2,8 +2,6 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 
 const INTERNAL_SECRET = 'pwr_scheduled_run_2026';
 
-// ─── ספק שליחה: Green ↔ uChat (רדום תחת WHATSAPP_PROVIDER) ───
-const WHATSAPP_PROVIDER = Deno.env.get('WHATSAPP_PROVIDER') || 'green';
 const UCHAT_TOKEN = Deno.env.get('UCHAT_API_TOKEN');
 const UCHAT_BASE = 'https://www.uchat.com.au/api';
 const _uchatNsCache = {};
@@ -40,9 +38,6 @@ Deno.serve(async (req) => {
     // Check if WhatsApp bot is enabled
     const botSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' });
     const botEnabled = botSettings.length > 0 && botSettings[0].value === 'true';
-
-    const instanceId = Deno.env.get('GREEN_API_INSTANCE_ID');
-    const token = Deno.env.get('GREEN_API_TOKEN');
 
     // ===== PROCESS PENDING BOT MESSAGES =====
     const allRequests = await base44.asServiceRole.entities.ServiceRequest.list('-updated_date', 50);
@@ -124,30 +119,19 @@ Deno.serve(async (req) => {
 
         let sentOk = false;
         if (botEnabled) {
-          if (WHATSAPP_PROVIDER === 'uchat') {
-            const phone972 = String(msg.chat_id).replace('@c.us', '');
-            const ns = await uchatResolveNs(phone972);
-            if (ns) {
-              const r = await fetch(`${UCHAT_BASE}/subscriber/send-text`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${UCHAT_TOKEN}` },
-                body: JSON.stringify({ user_ns: ns, text: botReply }),
-              });
-              const j = r.ok ? await r.json().catch(() => ({})) : {};
-              sentOk = j?.status === 'ok';
-              if (!sentOk) console.error('uchat send-text failed:', JSON.stringify(j));
-            } else {
-              console.log(`uchat: no subscriber for ${phone972} (reply skipped)`);
-            }
-          } else {
-            const sendUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
-            const sendResponse = await fetch(sendUrl, {
+          const phone972 = String(msg.chat_id).replace('@c.us', '');
+          const ns = await uchatResolveNs(phone972);
+          if (ns) {
+            const r = await fetch(`${UCHAT_BASE}/subscriber/send-text`, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ chatId: msg.chat_id, message: botReply, typingTime: 3000 }),
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${UCHAT_TOKEN}` },
+              body: JSON.stringify({ user_ns: ns, text: botReply }),
             });
-            sentOk = sendResponse.ok;
-            if (!sentOk) console.error('Failed to send WhatsApp:', await sendResponse.text());
+            const j = r.ok ? await r.json().catch(() => ({})) : {};
+            sentOk = j?.status === 'ok';
+            if (!sentOk) console.error('uchat send-text failed:', JSON.stringify(j));
+          } else {
+            console.log(`uchat: no subscriber for ${phone972} (reply skipped)`);
           }
         }
 

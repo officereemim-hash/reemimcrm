@@ -1,10 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 
-const INSTANCE_ID = Deno.env.get('GREEN_API_INSTANCE_ID');
-const API_TOKEN = Deno.env.get('GREEN_API_TOKEN');
-
-// ─── ספק שליחה: Green ↔ uChat ───
-const WHATSAPP_PROVIDER = Deno.env.get('WHATSAPP_PROVIDER') || 'green';
 const UCHAT_TOKEN = Deno.env.get('UCHAT_API_TOKEN');
 const UCHAT_BASE = 'https://www.uchat.com.au/api';
 async function getUchatTemplateName(base44, key) {
@@ -106,9 +101,7 @@ Deno.serve(async (req) => {
     }
 
     const phone = normalizePhone(contact.phone);
-    const chatId = `${phone}@c.us`;
     const serviceType = serviceRequest.service_type || '';
-    const sendMessageUrl = `https://api.green-api.com/waInstance${INSTANCE_ID}/sendMessage/${API_TOKEN}`;
     const firstName = (contact.full_name || '').split(' ')[0];
 
     async function getContent(key) {
@@ -166,50 +159,21 @@ Deno.serve(async (req) => {
     }
 
     const botEnabled = (await getSetting('whatsapp_bot_enabled')) === 'true';
-    const greenApiEnabled = (await getSetting('green_api_enabled')) === 'true';
 
     async function sendWhatsApp(message, uchatTplKey, uchatParams) {
       if (!message) return { status: 'skipped', errorDetail: 'empty_message' };
-      if (!botEnabled) {
-        return { status: 'skipped', errorDetail: 'log_only_whatsapp_bot_disabled' };
-      }
-      if (WHATSAPP_PROVIDER === 'uchat' && uchatTplKey) {
+      if (!botEnabled) return { status: 'skipped', errorDetail: 'log_only_whatsapp_bot_disabled' };
+      if (uchatTplKey) {
         const ok = await uchatSend(base44, contact.phone, uchatTplKey, firstName, uchatParams || []);
         return { status: ok ? 'sent' : 'failed', errorDetail: ok ? '' : 'uchat_send_failed' };
       }
-      if (!greenApiEnabled) {
-        return { status: 'sent', errorDetail: 'simulated_green_api_disabled' };
-      }
-
-      const response = await fetch(sendMessageUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chatId, message, typingTime: 3000 }),
-      });
-      const responseText = await response.text();
-      return {
-        status: response.ok ? 'sent' : 'failed',
-        errorDetail: response.ok ? '' : responseText.substring(0, 500),
-      };
+      return { status: 'skipped', errorDetail: 'no_template_key' };
     }
 
     async function sendWhatsAppFile(fileUrl, fileName) {
       if (!fileUrl) return { status: 'skipped', errorDetail: 'empty_file' };
       if (!botEnabled) return { status: 'skipped', errorDetail: 'log_only_whatsapp_bot_disabled' };
-      if (WHATSAPP_PROVIDER === 'uchat') return { status: 'skipped', errorDetail: 'uchat_no_file_support_yet' };
-      if (!greenApiEnabled) return { status: 'sent', errorDetail: 'simulated_green_api_disabled' };
-
-      const fileApiUrl = `https://api.green-api.com/waInstance${INSTANCE_ID}/sendFileByUrl/${API_TOKEN}`;
-      const response = await fetch(fileApiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chatId, urlFile: fileUrl, fileName: fileName || 'file', caption: '' }),
-      });
-      const responseText = await response.text();
-      return {
-        status: response.ok ? 'sent' : 'failed',
-        errorDetail: response.ok ? '' : responseText.substring(0, 500),
-      };
+      return { status: 'skipped', errorDetail: 'uchat_no_file_support_yet' };
     }
 
     async function addMessageToConversation(content, result) {

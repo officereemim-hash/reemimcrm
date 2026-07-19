@@ -1,10 +1,5 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 
-const INSTANCE_ID = Deno.env.get('GREEN_API_INSTANCE_ID');
-const API_TOKEN = Deno.env.get('GREEN_API_TOKEN');
-
-// ─── ספק שליחה: Green ↔ uChat (רדום תחת WHATSAPP_PROVIDER) ───
-const WHATSAPP_PROVIDER = Deno.env.get('WHATSAPP_PROVIDER') || 'green';
 const UCHAT_TOKEN = Deno.env.get('UCHAT_API_TOKEN');
 const UCHAT_BASE = 'https://www.uchat.com.au/api';
 async function getUchatTemplateName(base44, key) {
@@ -68,31 +63,19 @@ function fillMessage(template, contact, meeting) {
 async function sendWhatsApp(base44, phone, message, tplKey, firstName, params) {
   let cleanPhone = phone.replace(/[\s\-\+\(\)]/g, '');
   if (cleanPhone.startsWith('0')) cleanPhone = '972' + cleanPhone.substring(1);
-  if (WHATSAPP_PROVIDER === 'uchat') {
-    const tplName = await getUchatTemplateName(base44, tplKey);
-    if (!tplName) { console.log(`uchat: שם תבנית ל-'${tplKey}' לא מוגדר (uchat_tpl_${tplKey})`); return false; }
-    const r = await uchatSendTemplate(cleanPhone, firstName, tplName, params || []);
-    return !!r;
-  }
-  const chatId = `${cleanPhone}@c.us`;
-  const res = await fetch(`https://api.green-api.com/waInstance${INSTANCE_ID}/sendMessage/${API_TOKEN}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chatId, message, typingTime: 3000 }),
-  });
-  return res.ok;
+  const tplName = await getUchatTemplateName(base44, tplKey);
+  if (!tplName) { console.log(`uchat: שם תבנית ל-'${tplKey}' לא מוגדר (uchat_tpl_${tplKey})`); return false; }
+  const r = await uchatSendTemplate(cleanPhone, firstName, tplName, params || []);
+  return !!r;
 }
 
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
 
-    const [botRow, greenRow] = await Promise.all([
-      base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' }),
-      base44.asServiceRole.entities.SystemSetting.filter({ key: 'green_api_enabled' }),
-    ]);
-    if (botRow[0]?.value !== 'true' || (WHATSAPP_PROVIDER !== 'uchat' && greenRow[0]?.value !== 'true')) {
-      return Response.json({ ok: true, skipped: 'bot_or_green_disabled' });
+    const botRow = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' });
+    if (botRow[0]?.value !== 'true') {
+      return Response.json({ ok: true, skipped: 'bot_disabled' });
     }
 
     const template = 'מחר בשעה {time} הפגישה שלנו! 📍 {location}\nנתראה, קרנות ראמים 🌿';

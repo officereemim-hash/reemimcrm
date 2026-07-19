@@ -1,10 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 
-const INSTANCE_ID = Deno.env.get('GREEN_API_INSTANCE_ID');
-const API_TOKEN = Deno.env.get('GREEN_API_TOKEN');
-
-// ─── ספק שליחה: Green ↔ uChat ───
-const WHATSAPP_PROVIDER = Deno.env.get('WHATSAPP_PROVIDER') || 'green';
 const UCHAT_TOKEN = Deno.env.get('UCHAT_API_TOKEN');
 const UCHAT_BASE = 'https://www.uchat.com.au/api';
 async function getUchatTemplateName(base44, key) { const r = await base44.asServiceRole.entities.SystemSetting.filter({ key: `uchat_tpl_${key}` }); return r[0]?.value || ''; }
@@ -25,7 +20,6 @@ async function uchatSend(base44, phone, tplKey, firstName, params) {
   return !!(await uchatSendTemplate(p, firstName, tplName, params || []));
 }
 
-function toChatId(localPhone) { let clean = String(localPhone || '').replace(/[^\d]/g, ''); if (clean.startsWith('0')) clean = '972' + clean.substring(1); return `${clean}@c.us`; }
 
 Deno.serve(async (req) => {
   try {
@@ -37,9 +31,7 @@ Deno.serve(async (req) => {
     const { webinar_type, webinar_date, registration_ids } = body;
 
     const botSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' });
-    const greenSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'green_api_enabled' });
     const botEnabled = botSettings[0]?.value === 'true';
-    const greenEnabled = greenSettings[0]?.value === 'true';
 
     const introRecords = await base44.asServiceRole.entities.BotContent.filter({ key: 'webinar_post_intro', is_active: true });
     const optionsRecords = await base44.asServiceRole.entities.BotContent.filter({ key: 'webinar_post_options', is_active: true });
@@ -80,17 +72,12 @@ Deno.serve(async (req) => {
       const optionsMessage = optionsTemplate.replaceAll('{name}', name).replaceAll('{option1_link}', option1Link).replaceAll('{option2_link}', option2Link).replaceAll('{option3_link}', option3Link);
 
       let status = 'skipped';
-      if (botEnabled && WHATSAPP_PROVIDER === 'uchat') {
+      if (botEnabled) {
         const ok1 = await uchatSend(base44, contact.phone, 'webinar_post_intro', contactFirstName, [name]);
         await new Promise(resolve => setTimeout(resolve, 3000));
         const ok2 = await uchatSend(base44, contact.phone, 'webinar_post_options', contactFirstName, [name, option1Link, option2Link, option3Link]);
         status = (ok1 && ok2) ? 'sent' : 'failed';
-      } else if (botEnabled && greenEnabled) {
-        const res1 = await fetch(`https://api.green-api.com/waInstance${INSTANCE_ID}/sendMessage/${API_TOKEN}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: introMessage, typingTime: 3000 }) });
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        const res2 = await fetch(`https://api.green-api.com/waInstance${INSTANCE_ID}/sendMessage/${API_TOKEN}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: optionsMessage, typingTime: 3000 }) });
-        status = (res1.ok && res2.ok) ? 'sent' : 'failed';
-      } else if (botEnabled) { status = 'sent'; }
+      }
 
       await base44.asServiceRole.entities.WebinarRegistration.update(reg.id, { coupon_sent: true, coupon_sent_at: new Date().toISOString().split('T')[0], attended: true });
       await base44.asServiceRole.entities.Communication.create({

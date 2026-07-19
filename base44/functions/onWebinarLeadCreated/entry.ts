@@ -1,10 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 
-const INSTANCE_ID = Deno.env.get('GREEN_API_INSTANCE_ID');
-const API_TOKEN = Deno.env.get('GREEN_API_TOKEN');
-
-// ─── ספק שליחה: Green ↔ uChat ───
-const WHATSAPP_PROVIDER = Deno.env.get('WHATSAPP_PROVIDER') || 'green';
 const UCHAT_TOKEN = Deno.env.get('UCHAT_API_TOKEN');
 const UCHAT_BASE = 'https://www.uchat.com.au/api';
 async function getUchatTemplateName(base44, key) { const r = await base44.asServiceRole.entities.SystemSetting.filter({ key: `uchat_tpl_${key}` }); return r[0]?.value || ''; }
@@ -25,7 +20,6 @@ async function uchatSend(base44, phone, tplKey, firstName, params) {
   return !!(await uchatSendTemplate(p, firstName, tplName, params || []));
 }
 
-function toChatId(localPhone) { let clean = String(localPhone || '').replace(/[^\d]/g, ''); if (clean.startsWith('0')) clean = '972' + clean.substring(1); return `${clean}@c.us`; }
 
 function fillTemplate(template, values) {
   return String(template || '').replaceAll('{name}', values.name || '').replaceAll('{landing_link}', values.landing_link || '');
@@ -55,23 +49,15 @@ Deno.serve(async (req) => {
     async function getSetting(key) { const r = await base44.asServiceRole.entities.SystemSetting.filter({ key }); return r[0]?.value || ''; }
 
     const botEnabled = (await getSetting('whatsapp_bot_enabled')) === 'true';
-    const greenEnabled = (await getSetting('green_api_enabled')) === 'true';
     const contactFirstName = (contact.full_name || '').split(' ')[0];
 
     async function sendWhatsApp(message, uchatTplKey, uchatParams) {
-      if (!message) return 'skipped';
-      if (botEnabled && WHATSAPP_PROVIDER === 'uchat' && uchatTplKey) {
+      if (!message || !botEnabled) return 'skipped';
+      if (uchatTplKey) {
         const ok = await uchatSend(base44, contact.phone, uchatTplKey, contactFirstName, uchatParams || []);
         return ok ? 'sent' : 'failed';
       }
-      if (botEnabled && greenEnabled) {
-        const res = await fetch(`https://api.green-api.com/waInstance${INSTANCE_ID}/sendMessage/${API_TOKEN}`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chatId: toChatId(contact.phone), message }),
-        });
-        return res.ok ? 'sent' : 'failed';
-      }
-      return botEnabled ? 'sent' : 'skipped';
+      return 'skipped';
     }
 
     async function log(content, templateId, status) {
