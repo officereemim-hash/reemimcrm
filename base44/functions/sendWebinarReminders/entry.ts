@@ -55,8 +55,8 @@ Deno.serve(async (req) => {
       const minsToStart = (start - now) / 60000;
 
       let phase = null;
-      if (minsToStart <= 60 && minsToStart > 45 && !reg.reminder_1h_sent) phase = '1h';
-      else if (minsToStart <= 10 && minsToStart > -10 && !reg.reminder_start_sent) phase = 'start';
+      if (minsToStart <= 63 && minsToStart > 55 && !reg.reminder_1h_sent) phase = '1h';
+      else if (minsToStart <= 3 && minsToStart > -6 && !reg.reminder_start_sent) phase = 'start';
       if (!phase) continue;
 
       const contacts = await base44.asServiceRole.entities.Contact.filter({ id: reg.contact_id });
