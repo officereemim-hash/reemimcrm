@@ -1166,10 +1166,11 @@ Deno.serve(async (req) => {
     }
 
     const incomingLog = await logIncoming(base44, idMessage, phone, text, chatId, conversationId, 'pending_reply');
-    await base44.asServiceRole.agents.addMessage(conversation, { role: 'user', content: text });
-    // שמירת מספר ההודעות *אחרי* הוספת הודעת המשתמש — למניעת שליחת הד ישן ע"י processWhatsAppReplies
+    // ספירה *לפני* הוספת הודעת המשתמש (+1 עליה) — סוכן מהיר עלול לענות לפני ספירה מאוחרת והתשובה "תיבלע".
+    // הד ישן נמנע ממילא: סורקים רק הודעות שאחרי הודעת המשתמש (אינדקס messageCountBefore ואילך).
     const freshConvForCount = await base44.asServiceRole.agents.getConversation(conversationId);
-    const messageCountBefore = (freshConvForCount.messages || []).length;
+    const messageCountBefore = (freshConvForCount.messages || []).length + 1; // +1 = הודעת המשתמש שנוספת עכשיו
+    await base44.asServiceRole.agents.addMessage(conversation, { role: 'user', content: text });
     await base44.asServiceRole.entities.WhatsAppMessageLog.update(incomingLog.id, { message_count_at_send: messageCountBefore });
 
     let agentReply = '';
@@ -1193,8 +1194,8 @@ Deno.serve(async (req) => {
 
       const freshConversation = await base44.asServiceRole.agents.getConversation(conversationId);
       const messages = freshConversation.messages || [];
-      if (messages.length > messageCountBefore + 1) {
-        for (let index = messages.length - 1; index >= messageCountBefore + 1; index--) {
+      if (messages.length > messageCountBefore) {
+        for (let index = messages.length - 1; index >= messageCountBefore; index--) {
           if (messages[index].role === 'assistant' && messages[index].content && messages[index].content !== '<empty message>') {
             agentReply = messages[index].content;
             break;
