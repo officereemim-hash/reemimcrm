@@ -107,7 +107,7 @@ async function sendWhatsApp(chatId, message, botEnabled) {
   const res = await fetch(`${UCHAT_BASE}/subscriber/send-text`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${UCHAT_TOKEN}` },
-    body: JSON.stringify({ user_ns: ns, text: message }),
+    body: JSON.stringify({ user_ns: ns, content: message }), // uChat מצפה ל-content (לא text) — אחרת 422
   });
   if (!res.ok) return null;
   const j = await res.json().catch(() => ({}));
