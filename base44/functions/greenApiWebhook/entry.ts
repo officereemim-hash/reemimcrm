@@ -111,7 +111,20 @@ async function sendWhatsApp(chatId, message, botEnabled) {
   });
   if (!res.ok) return null;
   const j = await res.json().catch(() => ({}));
-  return j?.status === 'ok' ? j : null;
+  if (j?.status === 'ok') {
+    // uChat משהה את האוטומציה כשנשלחת הודעה דרך ה-API (נחשב למענה סוכן) —
+    // בלי resume ההודעה הבאה של הפונה לא תפעיל את הזרימה והבוט משתתק.
+    // השתקת הבוט במצב נציגה נאכפת ממילא דרך Contact.bot_status='waiting_agent'.
+    try {
+      await fetch(`${UCHAT_BASE}/subscriber/resume-bot`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${UCHAT_TOKEN}` },
+        body: JSON.stringify({ user_ns: ns }),
+      });
+    } catch (_) {}
+    return j;
+  }
+  return null;
 }
 
 async function sendWhatsAppFileByUrl(chatId, fileUrl, fileName, caption, botEnabled) {
