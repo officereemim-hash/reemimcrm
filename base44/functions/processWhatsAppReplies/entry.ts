@@ -130,6 +130,16 @@ Deno.serve(async (req) => {
             const j = r.ok ? await r.json().catch(() => ({})) : {};
             sentOk = j?.status === 'ok';
             if (!sentOk) console.error('uchat send-text failed:', JSON.stringify(j));
+            if (sentOk) {
+              // uChat משהה אוטומציה אחרי שליחה דרך ה-API — resume כדי שההודעה הבאה תמשיך להגיע לזרימה
+              try {
+                await fetch(`${UCHAT_BASE}/subscriber/resume-bot`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${UCHAT_TOKEN}` },
+                  body: JSON.stringify({ user_ns: ns }),
+                });
+              } catch (_) {}
+            }
           } else {
             console.log(`uchat: no subscriber for ${phone972} (reply skipped)`);
           }
