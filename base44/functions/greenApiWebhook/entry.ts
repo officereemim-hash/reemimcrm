@@ -405,6 +405,29 @@ Deno.serve(async (req) => {
       });
     }
 
+    // ===== FP-Greeting: פונה מוכר (פרטים מלאים) שפותח בברכה → תפריט השירותים ישירות, לא סוכן =====
+    const GREETING_KEYWORDS = ['שלום', 'היי', 'הי', 'אהלן', 'בוקר טוב', 'ערב טוב', 'צהריים טובים', 'hello', 'hi', 'הלו'];
+    if (contact && GREETING_KEYWORDS.includes(normalizeAnswer(text))) {
+      const greetFirstName = String(contact.full_name || '').trim().split(/\s+/)[0] || '';
+      const greetTpl = await getBotContent(base44, 'greeting_known');
+      const greetMenu = (greetTpl && greetTpl.replace('{name}', greetFirstName)) ||
+        `שלום ${greetFirstName} 🌿 טוב לשמוע ממך!
+במה את/ה מתעניין/ת?
+1. ייעוץ פרישה
+2. היתכנות כלכלית
+3. השקעות
+4. איזון אקטוארי (גירושין)
+5. ייעוץ מס (שכר גבוה)
+6. אחר
+
+👈 פשוט השב/י במספר המתאים (1-6)`;
+      const greetConvId = cachedConversationSettings[0]?.value || null;
+      const sentGreet = await sendWhatsApp(chatId, greetMenu, botEnabled);
+      await logIncoming(base44, idMessage, phone, text, chatId, greetConvId);
+      await logOutgoing(base44, sentGreet?.idMessage || `out_${Date.now()}_fp_greeting`, phone, greetMenu, chatId, greetConvId, outgoingStatus);
+      return Response.json({ ok: true, fast_path: 'fp_greeting_menu' });
+    }
+
     let conversationId = serviceRequest?.conversation_id || cachedConversationSettings[0]?.value || null;
     let conversation = null;
 
