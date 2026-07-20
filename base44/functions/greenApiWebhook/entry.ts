@@ -4,6 +4,8 @@ const AGENT_NAME = 'bot_reemim';
 
 const UCHAT_TOKEN = Deno.env.get('UCHAT_API_TOKEN');
 const UCHAT_BASE = 'https://www.uchat.com.au/api';
+// ענף זה עובד מול uChat בלבד (אימות Green הוסר) — לכן ברירת המחדל 'uchat' גם בלי env var
+const WHATSAPP_PROVIDER = Deno.env.get('WHATSAPP_PROVIDER') || 'uchat';
 // cache פר-isolate: טלפון בינלאומי (972...) → user_ns של uChat
 const _uchatNsCache = {};
 
