@@ -125,7 +125,7 @@ Deno.serve(async (req) => {
             const r = await fetch(`${UCHAT_BASE}/subscriber/send-text`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${UCHAT_TOKEN}` },
-              body: JSON.stringify({ user_ns: ns, text: botReply }),
+              body: JSON.stringify({ user_ns: ns, content: botReply }), // uChat מצפה ל-content (לא text) — אחרת 422
             });
             const j = r.ok ? await r.json().catch(() => ({})) : {};
             sentOk = j?.status === 'ok';
