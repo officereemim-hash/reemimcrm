@@ -26,7 +26,7 @@ Deno.serve(async (req) => {
       const sendRes = await fetch(`${UCHAT_BASE}/subscriber/send-text`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${UCHAT_TOKEN}` },
-        body: JSON.stringify({ user_ns: ns, text }),
+        body: JSON.stringify({ user_ns: ns, content: text }),
       });
       sendStatus = sendRes.status;
       sendBody = await sendRes.text();
