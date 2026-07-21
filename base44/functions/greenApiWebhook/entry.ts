@@ -174,6 +174,28 @@ async function logOutgoing(base44, idMessage, phone, text, chatId, conversationI
   });
 }
 
+// תיקון 7: התראת מייל כשהבוט מעביר שיחה לנציגה — מייל בלבד, לעולם לא וואטסאפ
+async function notifyHandoffByEmail(base44, contact, reason, lastText) {
+  try {
+    const BREVO_API_KEY = Deno.env.get('BREVO_API_KEY') || '';
+    if (!BREVO_API_KEY) return;
+    const senderSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'mailing_sender_email' });
+    const senderEmail = senderSettings[0]?.value || '';
+    if (!senderEmail) return;
+    const body = `הבוט העביר שיחה לטיפול נציגה.<br/><br/>לקוח: ${contact?.full_name || 'לא ידוע'} (${contact?.phone || ''})<br/>סיבה: ${reason}<br/>ההודעה האחרונה שכתב: "${String(lastText || '').substring(0, 300)}"`;
+    await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: { 'api-key': BREVO_API_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sender: { name: 'קרנות ראמים — בוט', email: senderEmail },
+        to: [{ email: 'office.reemim@gmail.com', name: 'משרד ראמים' }],
+        subject: `📞 שיחה הועברה לנציגה — ${contact?.full_name || contact?.phone || ''}`,
+        htmlContent: `<div dir="rtl" style="font-family:Arial;font-size:16px">${body}</div>`,
+      }),
+    });
+  } catch (e) { console.error('notifyHandoffByEmail failed:', e.message); }
+}
+
 Deno.serve(async (req) => {
   try {
     const url = new URL(req.url);
@@ -409,6 +431,18 @@ Deno.serve(async (req) => {
     const GREETING_KEYWORDS = ['שלום', 'היי', 'הי', 'אהלן', 'בוקר טוב', 'ערב טוב', 'צהריים טובים', 'hello', 'hi', 'הלו'];
     if (contact && GREETING_KEYWORDS.includes(normalizeAnswer(text))) {
       const greetFirstName = String(contact.full_name || '').trim().split(/\s+/)[0] || '';
+      // תיקון 3: לקוח באמצע מסלול פעיל — ברכה מודעת-הקשר במקום תפריט (תפריט + "1" היה משתיק את הבוט)
+      const ACTIVE_ROUTE_STATUSES = ['interested', 'quote_sent', 'awaiting_client_decision', 'followup_active',
+        'phone_meeting', 'meeting_scheduled', 'meeting_scheduled_frontal', 'meeting_scheduled_zoom'];
+      if (serviceRequest && ACTIVE_ROUTE_STATUSES.includes(serviceRequest.status)) {
+        const midTpl = await getBotContent(base44, 'greeting_mid_route') || 'שלום {name} 🌿 טוב לשמוע ממך!\nאנחנו באמצע התהליך שלך — אם יש שאלה, פשוט כתוב/י אותה כאן ואשמח לעזור.';
+        const midMsg = midTpl.replaceAll('{name}', greetFirstName);
+        const midConvId = cachedConversationSettings[0]?.value || null;
+        const sentMid = await sendWhatsApp(chatId, midMsg, botEnabled);
+        await logIncoming(base44, idMessage, phone, text, chatId, midConvId);
+        await logOutgoing(base44, sentMid?.idMessage || `out_${Date.now()}_fp_greeting_mid`, phone, midMsg, chatId, midConvId, outgoingStatus);
+        return Response.json({ ok: true, fast_path: 'fp_greeting_mid_route' });
+      }
       const greetTpl = await getBotContent(base44, 'greeting_known');
       const greetMenu = (greetTpl && greetTpl.replace('{name}', greetFirstName)) ||
         `שלום ${greetFirstName} 🌿 טוב לשמוע ממך!
@@ -725,6 +759,7 @@ Deno.serve(async (req) => {
       // עדיין לא זוהה תחום — העברה לנציגה
       await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { pending_service_clarify: false });
       await base44.asServiceRole.entities.Contact.update(contact.id, { bot_status: 'waiting_agent', conversation_owner: 'bar' });
+      await notifyHandoffByEmail(base44, contact, 'תחום השירות לא זוהה גם אחרי שאלת בירור', text);
       const escalateMessage = await getBotContent(base44, 'escalate_to_agent') || 'מעבירים את הפנייה לנציגת שירות, נחזור אליך בהקדם 🙏';
       const sent = await sendWhatsApp(chatId, escalateMessage, botEnabled);
       await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
@@ -756,9 +791,21 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, fast_path: 'fp_other_clarify' });
     }
 
-    // FP-ServiceChoice: "1" כאשר כבר יש SR עם service_type → ניתוב ל-FP-WaitCoordinator
-    if (selectedServiceType && contact && serviceRequest && serviceRequest.service_type && normalizeAnswer(text) === '1') {
+    // FP-ServiceChoice: "1"/"2" כאשר כבר יש SR עם service_type (תפריט ההמתנה) — תיקון 2: "2" לא ייפול יותר לבחירת שירות בלולאה
+    if (selectedServiceType && contact && serviceRequest && serviceRequest.service_type && ['1', '2'].includes(normalizeAnswer(text))) {
+      if (normalizeAnswer(text) === '2') {
+        // "2" = תיאום עצמאי — קישור המתאמת, בלי השתקת הבוט
+        const selfCalLink = await getServiceContentUrl(base44, { service_type: 'general', content_type: 'calendar_link', sub_type: 'coordinator_calendar' });
+        const selfTpl = await getBotContent(base44, 'self_schedule_ack') || 'מצוין! הנה הקישור לתיאום שיחה עם המתאמת שלנו 📅\n{calendar_link}\n\nאחרי שתקבע/י — פשוט כתוב/י כאן "קבעתי" ונמשיך משם 🙂';
+        const selfMsg = selfTpl.replaceAll('{calendar_link}', selfCalLink);
+        const sentSelf = await sendWhatsApp(chatId, selfMsg, botEnabled);
+        await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
+        await logOutgoing(base44, sentSelf?.idMessage || `out_${Date.now()}_fp_2_self`, phone, selfMsg, chatId, conversationId, outgoingStatus);
+        try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${selfMsg}` }); } catch (_) {}
+        return Response.json({ ok: true, fast_path: 'fp_2_self_schedule' });
+      }
       await base44.asServiceRole.entities.Contact.update(contact.id, { bot_status: 'waiting_agent' });
+      await notifyHandoffByEmail(base44, contact, 'הלקוח בחר להמתין לחזרת נציגה (תפריט ההמתנה)', text);
       const ackMsg = await getBotContent(base44, 'wait_coordinator_ack') || 'מעולה! נציגה תחזור אלייך בהקדם 🙏';
       const sent = await sendWhatsApp(chatId, ackMsg, botEnabled);
       await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
@@ -808,6 +855,7 @@ Deno.serve(async (req) => {
     // "1" = המתנה לנציגה רק כשעוד לא נשלח תפריט הפגישות (בסטטוס interested "1" = זום)
     if (contact && serviceRequest && waitAnswers.includes(normalizeAnswer(text))) {
       await base44.asServiceRole.entities.Contact.update(contact.id, { bot_status: 'waiting_agent' });
+      await notifyHandoffByEmail(base44, contact, 'הלקוח ביקש שנציגה תחזור אליו', text);
       const ackMessage = await getBotContent(base44, 'wait_coordinator_ack') || 'מעולה! נציגה תחזור אלייך בהקדם 🙏';
       const sent = await sendWhatsApp(chatId, ackMessage, botEnabled);
       await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
@@ -901,11 +949,14 @@ Deno.serve(async (req) => {
 
         const calendarUrl = await getServiceContentUrl(base44, calendarQuery);
         if (calendarUrl) {
-          const sent = await sendWhatsApp(chatId, calendarUrl, botEnabled);
+          // תיקון 5א: הקישור נשלח עם הסבר והנחיה לכתוב "קבעתי" — זה מה שפותח את חלון 24 השעות להמשך המסלול
+          const calIntroTpl = await getBotContent(base44, 'calendar_link_intro') || 'מצוין! הנה הקישור לבחירת מועד 📅\n{calendar_link}\n\n👈 חשוב: אחרי שתבחר/י מועד — כתוב/י לי כאן "קבעתי", ואשלח לך את כל הפרטים.';
+          const calMsg = calIntroTpl.replaceAll('{calendar_link}', calendarUrl);
+          const sent = await sendWhatsApp(chatId, calMsg, botEnabled);
           await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
-          await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_meeting`, phone, calendarUrl, chatId, conversationId, outgoingStatus);
+          await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_meeting`, phone, calMsg, chatId, conversationId, outgoingStatus);
           try {
-            await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${calendarUrl}` });
+            await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${calMsg}` });
           } catch (error) {}
           return Response.json({ ok: true, fast_path: 'fp_meeting_choice', location: chosenLocation });
         }
@@ -926,6 +977,7 @@ Deno.serve(async (req) => {
           ? 'מבינה {name} 🙏 מעבירה את הבקשה לנציגה שלנו — היא תחזור אלייך בהקדם עם מועד וובינר חלופי או קישור להקלטה.'
           : 'אין שום בעיה {name} 🙏\nמעבירה את הבקשה לנציגה שלנו — היא תחזור אלייך בהקדם לתיאום המועד מחדש.';
         await base44.asServiceRole.entities.Contact.update(contact.id, { bot_status: 'waiting_agent', conversation_owner: 'bar' });
+        await notifyHandoffByEmail(base44, contact, 'בקשת שינוי/ביטול מועד (פגישה או וובינר)', text);
         const ackMsg = (await getBotContent(base44, ackKey) || ackFallback).replaceAll('{name}', contact.full_name || '');
         const sent = await sendWhatsApp(chatId, ackMsg, botEnabled);
         await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
@@ -937,16 +989,34 @@ Deno.serve(async (req) => {
 
     // ===== FP-Kavati: "קבעתי" — אישור קצר בלבד (היצירה בפועל דרך Cal.com webhook) =====
     if (normalizeAnswer(text) === 'קבעתי') {
-      const confirmedMessage = await getBotContent(base44, 'appointment_confirmed');
-      if (confirmedMessage) {
-        const sent = await sendWhatsApp(chatId, confirmedMessage, botEnabled);
-        await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
-        await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_kavati`, phone, confirmedMessage, chatId, conversationId, outgoingStatus);
-        try {
-          await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${confirmedMessage}` });
-        } catch (error) {}
-        return Response.json({ ok: true, fast_path: 'fp_appointment_confirmed' });
+      // תיקון 5ב: שולפים את הפגישה בפועל; תמיד עונים ותמיד return — לא נופלים לסוכן
+      const kavatiMeetings = contact ? await base44.asServiceRole.entities.Meeting.filter({ contact_id: contact.id }, '-scheduled_at', 1) : [];
+      const kavatiMeeting = kavatiMeetings[0] || null;
+      let confirmedMessage;
+      let kavatiFastPath;
+      if (kavatiMeeting) {
+        const KAVATI_LOCATION_LABELS = { modiin: 'מודיעין — המעיין 44, מתחם M.dot', petah_tikva_wednesday: 'פתח תקווה — השחם 1, בניין C', zoom: 'פגישת זום', phone: 'שיחת טלפון' };
+        const kavatiTimeStr = kavatiMeeting.scheduled_at
+          ? new Intl.DateTimeFormat('he-IL', { timeZone: 'Asia/Jerusalem', dateStyle: 'full', timeStyle: 'short' }).format(new Date(kavatiMeeting.scheduled_at))
+          : '';
+        const kavatiTpl = await getBotContent(base44, 'appointment_confirmed') || 'מצוין {name}, הפגישה נקבעה ✅\n📅 {time}\n📍 {location}\n\nנשלח לך בהמשך את כל מה שצריך להכנה. נתראה!';
+        confirmedMessage = kavatiTpl
+          .replaceAll('{name}', contact?.full_name || '')
+          .replaceAll('{time}', kavatiTimeStr)
+          .replaceAll('{location}', KAVATI_LOCATION_LABELS[kavatiMeeting.location] || kavatiMeeting.location || '');
+        kavatiFastPath = 'fp_appointment_confirmed';
+      } else {
+        // ה-webhook של Cal.com עדיין לא נקלט — הודעת המתנה במקום שתיקה
+        confirmedMessage = await getBotContent(base44, 'appointment_pending_ack') || 'תודה! אני בודקת את פרטי הפגישה ואחזור אלייך עם האישור המלא תוך כמה דקות 🙏';
+        kavatiFastPath = 'fp_appointment_pending';
       }
+      const sent = await sendWhatsApp(chatId, confirmedMessage, botEnabled);
+      await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
+      await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_kavati`, phone, confirmedMessage, chatId, conversationId, outgoingStatus);
+      try {
+        await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${confirmedMessage}` });
+      } catch (error) {}
+      return Response.json({ ok: true, fast_path: kavatiFastPath });
     }
 
     // ===== FP-IDDetails: קליטת ת.ז. + תאריך לידה אחרי מילוי שאלון =====
@@ -985,7 +1055,10 @@ Deno.serve(async (req) => {
         await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_id_ack`, phone, ackMessage, chatId, conversationId, outgoingStatus);
 
         // שליחת בקשת מסמכים
-        const docsTemplate = await getBotContent(base44, 'documents_request') || '';
+        // תיקון 6: רשימת מסמכים לפי סוג שירות, עם נפילה חזרה לגנרי (רשומה ריקה נופלת אוטומטית לגנרי)
+        const docsKey = serviceRequest.service_type ? `documents_request_${serviceRequest.service_type}` : '';
+        const docsTemplate = (docsKey ? await getBotContent(base44, docsKey) : '')
+          || await getBotContent(base44, 'documents_request') || '';
         if (docsTemplate) {
           await new Promise(resolve => setTimeout(resolve, 1200));
           const docsMessage = docsTemplate.replaceAll('{name}', contact.full_name || '');
@@ -1011,6 +1084,7 @@ Deno.serve(async (req) => {
         // 2 כישלונות — הסלמה לנציגה
         if (retrySettings.length > 0) await base44.asServiceRole.entities.SystemSetting.delete(retrySettings[0].id);
         await base44.asServiceRole.entities.Contact.update(contact.id, { bot_status: 'waiting_agent', conversation_owner: 'bar' });
+        await notifyHandoffByEmail(base44, contact, 'קליטת ת.ז. ותאריך לידה נכשלה פעמיים', text);
         const escalateMsg = await getBotContent(base44, 'escalate_to_agent') || 'מעבירים את הפנייה לנציגת שירות, נחזור אליך בהקדם 🙏';
         const sent = await sendWhatsApp(chatId, escalateMsg, botEnabled);
         await logIncoming(base44, idMessage, phone, text, chatId, conversationId);

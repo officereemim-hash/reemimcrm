@@ -48,6 +48,46 @@ async function uchatSend(base44, phone, tplKey, firstName, params) {
   return !!(await uchatSendTemplate(p, firstName, tplName, params || []));
 }
 
+// ===== send-text (טקסט חופשי) — ברירת המחדל, תבנית כגיבוי =====
+const _uchatNsCache = {};
+
+async function uchatResolveNs(phone972) {
+  if (!phone972) return null;
+  if (_uchatNsCache[phone972]) return _uchatNsCache[phone972];
+  try {
+    const r = await fetch(`${UCHAT_BASE}/subscriber/get-info-by-user-id?user_id=${phone972}`, {
+      headers: { Authorization: `Bearer ${UCHAT_TOKEN}` },
+    });
+    if (!r.ok) return null;
+    const j = await r.json();
+    const ns = j?.user_ns || j?.data?.user_ns || null;
+    if (ns) _uchatNsCache[phone972] = ns;
+    return ns;
+  } catch { return null; }
+}
+
+async function uchatSendText(phone972, message) {
+  const ns = await uchatResolveNs(phone972);
+  if (!ns) return { ok: false, reason: 'no_subscriber' };
+  const res = await fetch(`${UCHAT_BASE}/subscriber/send-text`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${UCHAT_TOKEN}` },
+    body: JSON.stringify({ user_ns: ns, content: message }), // חובה content ולא text — text מחזיר 422
+  });
+  if (!res.ok) return { ok: false, reason: `http_${res.status}` };
+  const j = await res.json().catch(() => ({}));
+  if (j?.status !== 'ok') return { ok: false, reason: `uchat_${JSON.stringify(j).substring(0, 120)}` };
+  try {
+    // resume-bot חובה אחרי שליחה — בלעדיו uChat מסמן "אצל סוכן" והבוט משתתק
+    await fetch(`${UCHAT_BASE}/subscriber/resume-bot`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${UCHAT_TOKEN}` },
+      body: JSON.stringify({ user_ns: ns }),
+    });
+  } catch (_) {}
+  return { ok: true };
+}
+
 function normalizePhone(phone) {
   let cleanPhone = String(phone || '').replace(/[\s\-\+\(\)]/g, '');
   if (cleanPhone.startsWith('0')) cleanPhone = '972' + cleanPhone.substring(1);
@@ -115,6 +155,10 @@ function fillTemplate(template, values) {
 
 async function sendWhatsApp(base44Instance, phone, message, uchatTplKey, uchatFirstName, uchatParams) {
   if (!phone || !message) return false;
+  // טקסט חופשי קודם (חלון 24 שעות פתוח, למשל אחרי "קבעתי")
+  const textResult = await uchatSendText(normalizePhone(phone), message);
+  if (textResult.ok) return true;
+  // גיבוי בתבנית — ייכנס לפעולה כשיתווספו רשומות uchat_tpl_<key>
   if (uchatTplKey) {
     return await uchatSend(base44Instance, phone, uchatTplKey, uchatFirstName || '', uchatParams || []);
   }

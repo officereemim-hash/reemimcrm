@@ -46,6 +46,46 @@ async function uchatSend(base44, phone, tplKey, firstName, params) {
   return !!(await uchatSendTemplate(p, firstName, tplName, params || []));
 }
 
+// ===== send-text (טקסט חופשי) — ברירת המחדל בתוך שיחה פעילה, כמו בצד הנכנס =====
+const _uchatNsCache = {};
+
+async function uchatResolveNs(phone972) {
+  if (!phone972) return null;
+  if (_uchatNsCache[phone972]) return _uchatNsCache[phone972];
+  try {
+    const r = await fetch(`${UCHAT_BASE}/subscriber/get-info-by-user-id?user_id=${phone972}`, {
+      headers: { Authorization: `Bearer ${UCHAT_TOKEN}` },
+    });
+    if (!r.ok) return null;
+    const j = await r.json();
+    const ns = j?.user_ns || j?.data?.user_ns || null;
+    if (ns) _uchatNsCache[phone972] = ns;
+    return ns;
+  } catch { return null; }
+}
+
+async function uchatSendText(phone972, message) {
+  const ns = await uchatResolveNs(phone972);
+  if (!ns) return { ok: false, reason: 'no_subscriber' };
+  const res = await fetch(`${UCHAT_BASE}/subscriber/send-text`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${UCHAT_TOKEN}` },
+    body: JSON.stringify({ user_ns: ns, content: message }), // חובה content ולא text — text מחזיר 422
+  });
+  if (!res.ok) return { ok: false, reason: `http_${res.status}` };
+  const j = await res.json().catch(() => ({}));
+  if (j?.status !== 'ok') return { ok: false, reason: `uchat_${JSON.stringify(j).substring(0, 120)}` };
+  try {
+    // resume-bot חובה אחרי שליחה — בלעדיו uChat מסמן "אצל סוכן" והבוט משתתק
+    await fetch(`${UCHAT_BASE}/subscriber/resume-bot`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${UCHAT_TOKEN}` },
+      body: JSON.stringify({ user_ns: ns }),
+    });
+  } catch (_) {}
+  return { ok: true };
+}
+
 function normalizePhone(phone) {
   let cleanPhone = String(phone || '').replace(/[\s\-\+\(\)]/g, '');
   if (cleanPhone.startsWith('0')) cleanPhone = '972' + cleanPhone.substring(1);
@@ -163,11 +203,17 @@ Deno.serve(async (req) => {
     async function sendWhatsApp(message, uchatTplKey, uchatParams) {
       if (!message) return { status: 'skipped', errorDetail: 'empty_message' };
       if (!botEnabled) return { status: 'skipped', errorDetail: 'log_only_whatsapp_bot_disabled' };
+
+      // טקסט חופשי קודם (שיחה פעילה בתוך חלון 24 שעות)
+      const textResult = await uchatSendText(phone, message);
+      if (textResult.ok) return { status: 'sent', errorDetail: '' };
+
+      // גיבוי בתבנית — ייכנס לפעולה כשיתווספו רשומות uchat_tpl_<key> ב-SystemSetting
       if (uchatTplKey) {
         const ok = await uchatSend(base44, contact.phone, uchatTplKey, firstName, uchatParams || []);
-        return { status: ok ? 'sent' : 'failed', errorDetail: ok ? '' : 'uchat_send_failed' };
+        if (ok) return { status: 'sent', errorDetail: 'sent_via_template_fallback' };
       }
-      return { status: 'skipped', errorDetail: 'no_template_key' };
+      return { status: 'failed', errorDetail: `send_text_failed: ${textResult.reason}` };
     }
 
     async function sendWhatsAppFile(fileUrl, fileName) {
@@ -203,6 +249,36 @@ Deno.serve(async (req) => {
         status: result?.status || 'skipped',
         error_detail: result?.errorDetail || '',
       });
+      // התראת מייל על כישלון מסירה (במקום כישלון שקט) — דדופ של שעה
+      if (result?.status === 'failed') {
+        try {
+          const alertKey = 'send_fail_alerted_' + serviceRequest.contact_id;
+          const markers = await base44.asServiceRole.entities.SystemSetting.filter({ key: alertKey });
+          const lastAlert = markers.length > 0 ? new Date(markers[0].value).getTime() : 0;
+          if (Date.now() - lastAlert > 60 * 60 * 1000) {
+            const BREVO_API_KEY = Deno.env.get('BREVO_API_KEY') || '';
+            const senderEmail = await getSetting('mailing_sender_email');
+            if (BREVO_API_KEY && senderEmail) {
+              const alertBody = `הודעה במסלול השירות לא נמסרה ללקוח.<br/><br/>לקוח: ${contact.full_name || ''} (${contact.phone})<br/>שלב: ${templateId}<br/>סיבה: ${result.errorDetail}<br/><br/>יש לפנות אליו ידנית.`;
+              await fetch('https://api.brevo.com/v3/smtp/email', {
+                method: 'POST',
+                headers: { 'api-key': BREVO_API_KEY, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  sender: { name: 'קרנות ראמים — בוט', email: senderEmail },
+                  to: [{ email: 'office.reemim@gmail.com', name: 'משרד ראמים' }],
+                  subject: `⚠️ הודעה לא נמסרה — ${contact.full_name || ''} — ${templateId}`,
+                  htmlContent: `<div dir="rtl" style="font-family:Arial;font-size:16px">${alertBody}</div>`,
+                }),
+              });
+            }
+            if (markers.length > 0) {
+              await base44.asServiceRole.entities.SystemSetting.update(markers[0].id, { value: new Date().toISOString() });
+            } else {
+              await base44.asServiceRole.entities.SystemSetting.create({ key: alertKey, value: new Date().toISOString(), category: 'flow' });
+            }
+          }
+        } catch (e) { console.error('send_fail_alert failed:', e.message); }
+      }
       await addMessageToConversation(content, result);
     }
 
@@ -215,7 +291,10 @@ Deno.serve(async (req) => {
         bot_status: 'waiting_user_reply',
         last_bot_interaction_at: new Date().toISOString(),
       });
-      await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { pending_bot_message: '' });
+      // תיקון 4: מעבר ל-interested כדי שתשובת המיקום (א-ד) תיתפס ב-FP-MeetingChoice ולא תיפול לסוכן
+      const MEETING_STATUSES = ['phone_meeting', 'meeting_scheduled', 'meeting_scheduled_frontal', 'meeting_scheduled_zoom'];
+      const statusUpdate = MEETING_STATUSES.includes(serviceRequest.status) ? {} : { status: 'interested' };
+      await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { pending_bot_message: '', ...statusUpdate });
       return Response.json({ ok: true, action: 'send_basmat_schedule' });
     }
 
@@ -313,7 +392,8 @@ Deno.serve(async (req) => {
         return Response.json({ ok: true, skipped: 'duplicate_event' });
       }
       const phoneTemplate = await getContent('meeting_scheduled_phone');
-      const callerPhone = await getSetting('coordinator_phone') || 'מספר המתאמת יישלח בהמשך';
+      // intro_caller_phone = מחרוזת לתצוגה בלבד בהודעה ללקוח — לעולם לא יעד לשליחה
+      const callerPhone = (await getSetting('intro_caller_phone')) || (await getSetting('coordinator_phone')) || 'מספר המתאמת יישלח בהמשך';
       let message = fillTemplate(phoneTemplate, {
         name: contact.full_name || '',
         time: serviceRequest.last_appointment_time_str || '',
@@ -367,7 +447,8 @@ Deno.serve(async (req) => {
         zoom_link: zoomLink,
         waze_link: wazeLink,
         meeting_link: meetingLink || zoomLink,
-        caller_phone: await getSetting('coordinator_phone'),
+        // intro_caller_phone = מחרוזת לתצוגה בלבד — לעולם לא יעד לשליחה
+        caller_phone: (await getSetting('intro_caller_phone')) || (await getSetting('coordinator_phone')),
       };
 
       const confirmTemplate = await getContent(templateKey);
