@@ -6,6 +6,7 @@ import { format } from 'date-fns';
 import { he } from 'date-fns/locale';
 import WebinarRegistrationForm from '@/components/landing/WebinarRegistrationForm';
 import FaqSection from '@/components/landing/FaqSection';
+import GtmTracker from '@/components/landing/GtmTracker';
 
 export default function WebinarLanding() {
   const { slug } = useParams();
@@ -50,6 +51,7 @@ export default function WebinarLanding() {
 
   return (
     <div className="min-h-screen bg-stone-50" dir="rtl">
+      <GtmTracker slug={slug} />
       {/* Hero */}
       <div className="relative text-white" style={{ backgroundColor: primary }}>
         {page.hero_image_url && page.hero_image_fit === 'contain' ? (
