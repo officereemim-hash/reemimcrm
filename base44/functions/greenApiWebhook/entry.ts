@@ -193,6 +193,16 @@ async function notifyHandoffByEmail(base44, contact, reason, lastText) {
         htmlContent: `<div dir="rtl" style="font-family:Arial;font-size:16px">${body}</div>`,
       }),
     });
+    // סמן דדופ משותף עם onContactHandoff — מונע מייל כפול על אותה העברה (האוטומציה על Contact)
+    if (contact?.id) {
+      const markerKey = 'handoff_alerted_' + contact.id;
+      const markers = await base44.asServiceRole.entities.SystemSetting.filter({ key: markerKey });
+      if (markers.length > 0) {
+        await base44.asServiceRole.entities.SystemSetting.update(markers[0].id, { value: new Date().toISOString() });
+      } else {
+        await base44.asServiceRole.entities.SystemSetting.create({ key: markerKey, value: new Date().toISOString(), category: 'flow' });
+      }
+    }
   } catch (e) { console.error('notifyHandoffByEmail failed:', e.message); }
 }
 
