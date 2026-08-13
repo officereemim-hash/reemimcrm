@@ -80,35 +80,19 @@ Deno.serve(async (req) => {
     const values = { name: contact.full_name || '' };
 
     if (attendedNow) {
-      if (reg.coupon_sent) return Response.json({ ok: true, skipped: 'coupon_already_sent' });
-      const couponSettings = await base44.asServiceRole.entities.WebinarCouponSetting.filter({ webinar_type: reg.webinar_type });
-      const cfg = couponSettings[0] || {};
-      const couponCode = reg.coupon_code || genCoupon(reg.webinar_type, cfg.coupon_prefix);
-      const paymentLink = await getPaymentUrl(PAYMENT_SUBTYPE[reg.webinar_type]);
-      const couponTemplate = await getContent('webinar_coupon');
-      const couponMessage = fillTemplate(couponTemplate || 'תודה {name}! קוד ההטבה שלך: {coupon_code}', {
-        ...values, coupon_code: couponCode,
-        discount: cfg.discount_percent != null ? String(cfg.discount_percent) : '',
-        amount: cfg.amount != null ? String(cfg.amount) : '', payment_link: paymentLink,
-      });
-      const couponStatus = await sendWhatsApp(couponMessage, 'webinar_coupon', [contact.full_name || '', couponCode, paymentLink]);
-      // coupon_sent נדלק רק על שליחה שהצליחה — אחרת כשל תבנית (למשל מיפוי uchat_tpl_ חסר) יסמן "נשלח" לנצח וימנע שליחה חוזרת. (תוקן 13.8)
-      await base44.asServiceRole.entities.WebinarRegistration.update(reg.id, couponStatus === 'sent'
-        ? { coupon_code: couponCode, coupon_sent: true, coupon_sent_at: new Date().toISOString().split('T')[0] }
-        : { coupon_code: couponCode });
-      await log(couponMessage, 'webinar_coupon', couponStatus);
-
-      const recordingLink = await getUrl(RECORDING_SUBTYPE[reg.webinar_type]);
-      if (recordingLink) {
-        const recTemplate = await getContent('webinar_recording');
-        const recMessage = fillTemplate(recTemplate || 'הנה הקלטת הוובינר לצפייה חוזרת:\n{recording_link}', { ...values, recording_link: recordingLink });
-        await new Promise(resolve => setTimeout(resolve, 1200));
-        const recStatus = await sendWhatsApp(recMessage, 'webinar_recording', [contact.full_name || '', recordingLink]);
-        await log(recMessage, 'webinar_recording', recStatus);
+      // מודל חדש (28.7, יושם 13.8): בלי קופון ובלי הקלטה — שולחים את תבנית ה"תודה" (reemim_webinar_thankyou)
+      // עם כפתור "לקבלת ההטבה"; המשך המסלול בטקסט חופשי דרך greenApiWebhook.
+      // דגל coupon_sent נשמר כמנגנון אנטי-כפילות בלבד (לפי message-to-builder-reemim-2026-07-28).
+      if (reg.coupon_sent) return Response.json({ ok: true, skipped: 'thankyou_already_sent' });
+      const lp = (await base44.asServiceRole.entities.LandingPage.filter({ webinar_type: reg.webinar_type, is_active: true }, '-created_date', 1))[0];
+      const webinarTitle = lp?.hero_title || 'ההדרכה';
+      const tyStatus = await sendWhatsApp(`תבנית תודה — ${webinarTitle}`, 'webinar_thankyou', [contactFirstName, webinarTitle]);
+      if (tyStatus === 'sent') {
+        await base44.asServiceRole.entities.WebinarRegistration.update(reg.id, { coupon_sent: true, coupon_sent_at: new Date().toISOString().split('T')[0] });
       }
-
+      await log(`תבנית תודה (reemim_webinar_thankyou) — ${webinarTitle}`, 'webinar_thankyou', tyStatus);
       await base44.asServiceRole.entities.Contact.update(contact.id, { last_bot_interaction_at: new Date().toISOString() });
-      return Response.json({ ok: true, action: 'attended_coupon_recording', recording: !!recordingLink });
+      return Response.json({ ok: true, action: 'attended_thankyou', sent: tyStatus });
     }
 
     if (paidNow) {
