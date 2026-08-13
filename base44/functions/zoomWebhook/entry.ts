@@ -70,13 +70,16 @@ Deno.serve(async (req) => {
         if (regs[0] && !regs[0].attended) {
           const updated = await base44.asServiceRole.entities.WebinarRegistration.update(regs[0].id, { attended: true });
           marked++;
-          // קריאה מפורשת למסלול הקופון — עדכון service-role לא מפעיל אוטומציית דשבורד, ולכן הקופון מעולם לא יצא. (תוקן 13.8)
+          // קריאה פנימית למסלול "תודה על ההשתתפות" — עדכון service-role לא מפעיל אוטומציית דשבורד.
+          // חובה invoke פנימי (ולא fetch לכתובת הציבורית): כתובת ציבורית מריצה את הגרסה המפורסמת
+          // וללא הרשאת שירות — ולכן התודה לא יצאה ולא נרשמה שגיאה. (תוקן 13.8)
           try {
-            await fetch('https://reemim-crm.base44.app/functions/autoWebinarRegistrationUpdated', {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ data: { ...(updated || regs[0]), id: regs[0].id, attended: true }, old_data: { attended: false } }),
+            const invokeRes = await base44.asServiceRole.functions.invoke('autoWebinarRegistrationUpdated', {
+              data: { ...(updated || regs[0]), id: regs[0].id, attended: true },
+              old_data: { attended: false },
             });
-          } catch (e) { console.error('coupon flow invoke failed:', e.message); }
+            console.log('thankyou flow invoked:', JSON.stringify(invokeRes?.data || invokeRes || {}));
+          } catch (e) { console.error('thankyou flow invoke FAILED:', e.message); }
         }
       }
       return Response.json({ ok: true, marked });

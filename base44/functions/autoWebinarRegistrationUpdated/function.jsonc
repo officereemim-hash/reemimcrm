@@ -4,9 +4,9 @@
   "automations": [
     {
       "name": "צ'קבוקס וובינר → הודעת בוט (השתתף/שילם/פגישה)",
-      "description": "כשמסמנים בטבלת הוובינרים — השתתף שולח קופון+הקלטה, שילם שולח בחירת מיקום פגישה, פגישה נקבעה שולח אישור.",
+      "description": "כשמסמנים בטבלת הוובינרים — השתתף שולח תבנית תודה, שילם שולח בחירת מיקום פגישה, פגישה נקבעה שולח אישור.",
       "function_args": null,
-      "is_active": false,
+      "is_active": true,
       "type": "entity",
       "entity_name": "WebinarRegistration",
       "event_types": [
