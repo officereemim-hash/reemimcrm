@@ -67,7 +67,17 @@ Deno.serve(async (req) => {
         const contact = contacts[0];
         if (!contact) continue;
         const regs = await base44.asServiceRole.entities.WebinarRegistration.filter({ contact_id: contact.id }, '-created_date', 1);
-        if (regs[0] && !regs[0].attended) { await base44.asServiceRole.entities.WebinarRegistration.update(regs[0].id, { attended: true }); marked++; }
+        if (regs[0] && !regs[0].attended) {
+          const updated = await base44.asServiceRole.entities.WebinarRegistration.update(regs[0].id, { attended: true });
+          marked++;
+          // קריאה מפורשת למסלול הקופון — עדכון service-role לא מפעיל אוטומציית דשבורד, ולכן הקופון מעולם לא יצא. (תוקן 13.8)
+          try {
+            await fetch('https://reemim-crm.base44.app/functions/autoWebinarRegistrationUpdated', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ data: { ...(updated || regs[0]), id: regs[0].id, attended: true }, old_data: { attended: false } }),
+            });
+          } catch (e) { console.error('coupon flow invoke failed:', e.message); }
+        }
       }
       return Response.json({ ok: true, marked });
     }
