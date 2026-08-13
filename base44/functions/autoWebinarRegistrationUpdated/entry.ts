@@ -92,7 +92,10 @@ Deno.serve(async (req) => {
         amount: cfg.amount != null ? String(cfg.amount) : '', payment_link: paymentLink,
       });
       const couponStatus = await sendWhatsApp(couponMessage, 'webinar_coupon', [contact.full_name || '', couponCode, paymentLink]);
-      await base44.asServiceRole.entities.WebinarRegistration.update(reg.id, { coupon_code: couponCode, coupon_sent: true, coupon_sent_at: new Date().toISOString().split('T')[0] });
+      // coupon_sent נדלק רק על שליחה שהצליחה — אחרת כשל תבנית (למשל מיפוי uchat_tpl_ חסר) יסמן "נשלח" לנצח וימנע שליחה חוזרת. (תוקן 13.8)
+      await base44.asServiceRole.entities.WebinarRegistration.update(reg.id, couponStatus === 'sent'
+        ? { coupon_code: couponCode, coupon_sent: true, coupon_sent_at: new Date().toISOString().split('T')[0] }
+        : { coupon_code: couponCode });
       await log(couponMessage, 'webinar_coupon', couponStatus);
 
       const recordingLink = await getUrl(RECORDING_SUBTYPE[reg.webinar_type]);
