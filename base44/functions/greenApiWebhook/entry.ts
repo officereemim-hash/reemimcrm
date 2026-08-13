@@ -227,7 +227,7 @@ Deno.serve(async (req) => {
         idMessage: String(body.idMessage || body.message_id || `uchat_${p972}_${Date.now()}`),
         senderData: { chatId: `${p972}@c.us`, senderName: body.first_name || '' },
         messageData: { typeMessage: 'textMessage', textMessageData: { textMessage: String(body.message || '') } },
-        instanceData: { idInstance: Deno.env.get('GREEN_API_INSTANCE_ID') || '' },
+        instanceData: { idInstance: '' },
       };
     }
 
@@ -670,6 +670,47 @@ Deno.serve(async (req) => {
           await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${welcomeMessage}` });
         } catch (error) {}
         return Response.json({ ok: true, fast_path: 'fp_details_saved' });
+      }
+    }
+
+    // ===== FP-WebinarBenefit: "לקבלת ההטבה" (כפתור תבנית התודה) → הודעת פתיחה + 3 האפשרויות =====
+    const BENEFIT_KEYWORDS = ['לקבלת ההטבה', 'לקבלת הטבה', 'הטבה', 'ההטבה'];
+    if (contact && BENEFIT_KEYWORDS.includes(normalizeAnswer(text))) {
+      const benefitRegs = await base44.asServiceRole.entities.WebinarRegistration.filter({ contact_id: contact.id }, '-created_date', 5);
+      if (benefitRegs.some(r => r.coupon_sent === true)) {
+        const introTpl = await getBotContent(base44, 'webinar_post_intro') || 'היי {name}, שמחתי לראות אותך בהדרכה!';
+        const optionsTpl = await getBotContent(base44, 'webinar_post_options') || '';
+        const [opt1, opt2, opt3] = await Promise.all([
+          getServiceContentUrl(base44, { service_type: 'webinar', content_type: 'payment_link', sub_type: 'webinar_option1_digital' }),
+          getServiceContentUrl(base44, { service_type: 'webinar', content_type: 'payment_link', sub_type: 'webinar_option2_meeting_program' }),
+          getServiceContentUrl(base44, { service_type: 'webinar', content_type: 'payment_link', sub_type: 'webinar_option3_full_personal' }),
+        ]);
+        const introMsg = introTpl.replaceAll('{name}', contact.full_name || '');
+        const optionsMsg = optionsTpl
+          .replaceAll('{name}', contact.full_name || '')
+          .replaceAll('{option1_link}', opt1)
+          .replaceAll('{option2_link}', opt2)
+          .replaceAll('{option3_link}', opt3);
+
+        const sentIntro = await sendWhatsApp(chatId, introMsg, botEnabled);
+        await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
+        await logOutgoing(base44, sentIntro?.idMessage || `out_${Date.now()}_fp_benefit_intro`, phone, introMsg, chatId, conversationId, outgoingStatus);
+
+        let sentOptions = null;
+        if (optionsMsg) {
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          sentOptions = await sendWhatsApp(chatId, optionsMsg, botEnabled);
+          await logOutgoing(base44, sentOptions?.idMessage || `out_${Date.now()}_fp_benefit_options`, phone, optionsMsg, chatId, conversationId, outgoingStatus);
+        }
+
+        await base44.asServiceRole.entities.Communication.create({
+          contact_id: contact.id, type: 'whatsapp', direction: 'outbound',
+          content: (introMsg + '\n---\n' + optionsMsg).substring(0, 500),
+          sent_by: 'bot', is_automated: true, template_id: 'webinar_post_options',
+          status: botEnabled ? 'sent' : 'skipped',
+        });
+        try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${introMsg}\n\n${optionsMsg}` }); } catch (_) {}
+        return Response.json({ ok: true, fast_path: 'fp_webinar_benefit_options' });
       }
     }
 
