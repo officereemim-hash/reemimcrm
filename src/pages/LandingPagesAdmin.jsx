@@ -29,8 +29,17 @@ export default function LandingPagesAdmin() {
 
   const handleSave = async (data) => {
     try {
-      if (editItem) await base44.entities.LandingPage.update(editItem.id, data);
-      else await base44.entities.LandingPage.create(data);
+      let savedId;
+      if (editItem) { await base44.entities.LandingPage.update(editItem.id, data); savedId = editItem.id; }
+      else { const created = await base44.entities.LandingPage.create(data); savedId = created?.id; }
+      // סנכרון תאריך לזום ולהרשמות — קריאה מפורשת, לא נשענים על אוטומציית דשבורד.
+      // הפונקציה מזיזה את המופע היחיד בזום ומאפסת דגלי תזכורת להרשמות עתידיות.
+      if (data.webinar_date && data.webinar_date !== (editItem?.webinar_date || null)) {
+        base44.functions.invoke('onLandingPageDateSync', {
+          data: { ...data, id: savedId },
+          old_data: { webinar_date: editItem?.webinar_date || null },
+        }).catch(() => {});
+      }
       setShowForm(false); setEditItem(null); load();
       toast.success('דף הנחיתה נשמר');
     } catch (err) {
