@@ -1,0 +1,17 @@
+{
+  "name": "autoWebinarRegistrationUpdated",
+  "entry": "main.ts",
+  "automations": [
+    {
+      "name": "צ'קבוקס וובינר → הודעת בוט (השתתף/שילם/פגישה)",
+      "description": "כשמסמנים בטבלת הוובינרים — השתתף שולח קופון+הקלטה, שילם שולח בחירת מיקום פגישה, פגישה נקבעה שולח אישור.",
+      "function_args": null,
+      "is_active": false,
+      "type": "entity",
+      "entity_name": "WebinarRegistration",
+      "event_types": [
+        "update"
+      ]
+    }
+  ]
+}
