@@ -25,14 +25,6 @@ function fillTemplate(template, values) {
   return String(template || '').replaceAll('{name}', values.name || '').replaceAll('{coupon_code}', values.coupon_code || '').replaceAll('{discount}', values.discount || '').replaceAll('{amount}', values.amount || '').replaceAll('{payment_link}', values.payment_link || '').replaceAll('{recording_link}', values.recording_link || '');
 }
 
-const PAYMENT_SUBTYPE = { investments: 'payment_webinar_investments', divorce: 'payment_webinar_divorce', retirement: 'payment_webinar_retirement' };
-const RECORDING_SUBTYPE = { investments: 'recording_webinar_investments', divorce: 'recording_webinar_divorce', retirement: 'recording_webinar_retirement' };
-
-function genCoupon(type, customPrefix) {
-  const prefix = customPrefix || { investments: 'INV', divorce: 'DIV', retirement: 'RET' }[type] || 'WEB';
-  return `${prefix}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
-}
-
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
@@ -55,8 +47,6 @@ Deno.serve(async (req) => {
     const contactFirstName = (contact.full_name || '').split(' ')[0];
 
     async function getContent(key) { const r = await base44.asServiceRole.entities.BotContent.filter({ key, is_active: true }); return r[0]?.content || ''; }
-    async function getUrl(subType) { const r = await base44.asServiceRole.entities.ServiceContent.filter({ content_type: 'external_link', sub_type: subType, is_active: true }); return r[0]?.url || ''; }
-    async function getPaymentUrl(subType) { const r = await base44.asServiceRole.entities.ServiceContent.filter({ content_type: 'payment_link', sub_type: subType, is_active: true }); return r[0]?.url || ''; }
     async function getSetting(key) { const r = await base44.asServiceRole.entities.SystemSetting.filter({ key }); return r[0]?.value || ''; }
 
     const botEnabled = (await getSetting('whatsapp_bot_enabled')) === 'true';
@@ -84,6 +74,11 @@ Deno.serve(async (req) => {
       // עם כפתור "לקבלת ההטבה"; המשך המסלול בטקסט חופשי דרך greenApiWebhook.
       // דגל coupon_sent נשמר כמנגנון אנטי-כפילות בלבד (לפי message-to-builder-reemim-2026-07-28).
       if (reg.coupon_sent) return Response.json({ ok: true, skipped: 'thankyou_already_sent' });
+      // נעילת חלון זמן: שני טריגרים מקבילים (קריאה מ-zoomWebhook + אוטומציית עדכון) רצו לפני כתיבת הדגל.
+      const recentTy = await base44.asServiceRole.entities.Communication.filter({ contact_id: reg.contact_id, template_id: 'webinar_thankyou' }, '-created_date', 1);
+      if (recentTy[0] && Date.now() - new Date(recentTy[0].created_date).getTime() < 10 * 60 * 1000) {
+        return Response.json({ ok: true, skipped: 'thankyou_sent_recently' });
+      }
       const lp = (await base44.asServiceRole.entities.LandingPage.filter({ webinar_type: reg.webinar_type, is_active: true }, '-created_date', 1))[0];
       const webinarTitle = lp?.hero_title || 'ההדרכה';
       const tyStatus = await sendWhatsApp(`תבנית תודה — ${webinarTitle}`, 'webinar_thankyou', [contactFirstName, webinarTitle]);
