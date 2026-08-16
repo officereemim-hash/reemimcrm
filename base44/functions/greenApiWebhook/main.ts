@@ -127,6 +127,35 @@ async function sendWhatsApp(chatId, message, botEnabled) {
   return null;
 }
 
+async function sendWhatsAppVideo(chatId, videoUrl, caption, botEnabled) {
+  if (!chatId || !videoUrl || !botEnabled) return null;
+  const phone972 = String(chatId).replace('@c.us', '');
+  const ns = await uchatResolveNs(phone972);
+  if (!ns) { console.log(`uchat: no subscriber for ${phone972} (video skipped)`); return null; }
+  const messages = [];
+  if (caption) messages.push({ type: 'text', text: caption });
+  messages.push({ type: 'video', url: videoUrl });
+  const res = await fetch(`${UCHAT_BASE}/subscriber/send-content`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${UCHAT_TOKEN}` },
+    body: JSON.stringify({ user_ns: ns, data: { version: 'v1', content: { messages } } }),
+  });
+  if (!res.ok) { console.error('uchat send-content http', res.status, await res.text().catch(() => '')); return null; }
+  const j = await res.json().catch(() => ({}));
+  if (j?.status === 'ok') {
+    try {
+      await fetch(`${UCHAT_BASE}/subscriber/resume-bot`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${UCHAT_TOKEN}` },
+        body: JSON.stringify({ user_ns: ns }),
+      });
+    } catch (_) {}
+    return j;
+  }
+  console.error('uchat send-content not ok:', JSON.stringify(j));
+  return null;
+}
+
 async function sendWhatsAppFileByUrl(chatId, fileUrl, fileName, caption, botEnabled) {
   if (!chatId || !fileUrl || !botEnabled) return null;
   // שליחת קבצים ב-uChat תיבנה בשלב 2 (endpoint ייעודי). בינתיים — שולחים את ה-caption כטקסט כדי לא לאבד תוכן.
@@ -882,18 +911,33 @@ Deno.serve(async (req) => {
         await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { service_type: selectedServiceType });
       }
 
-      const waitMessageTemplate = await getBotContent(base44, 'after_choice_wait');
-      const calendarLink = await getServiceContentUrl(base44, {
-        service_type: 'general',
-        content_type: 'calendar_link',
-        sub_type: 'coordinator_calendar',
-      });
+      const SERVICE_NAME_LABELS = {
+        retirement: 'ייעוץ פרישה',
+        economic_feasibility: 'היתכנות כלכלית',
+        investments: 'תכנון השקעות',
+        divorce_split: 'איזון אקטוארי (גירושין)',
+        tax_advisory: 'ייעוץ מס',
+      };
+      const [waitMessageTemplate, calendarLink, serviceVideoUrl] = await Promise.all([
+        getBotContent(base44, 'after_choice_wait'),
+        getServiceContentUrl(base44, { service_type: 'general', content_type: 'calendar_link', sub_type: 'coordinator_calendar' }),
+        getServiceContentUrl(base44, { service_type: selectedServiceType, content_type: 'video', sub_type: 'service_intro_video' }),
+      ]);
 
       if (waitMessageTemplate && calendarLink) {
-        const message = waitMessageTemplate.replace('{calendar_link}', calendarLink);
+        const message = waitMessageTemplate
+          .replaceAll('{calendar_link}', calendarLink)
+          .replaceAll('{service_name}', SERVICE_NAME_LABELS[selectedServiceType] || 'השירות שבחרת');
         const sent = await sendWhatsApp(chatId, message, botEnabled);
         await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
         await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_service`, phone, message, chatId, conversationId, outgoingStatus);
+        // סרטון אודות השירות — הודעה נפרדת (אם הועלה קובץ לשירות הזה)
+        if (serviceVideoUrl) {
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          const videoCaption = await getBotContent(base44, 'service_video_caption') || 'לצפיה בסרטון קצר אודות השירות 🎬';
+          const videoSent = await sendWhatsAppVideo(chatId, serviceVideoUrl, videoCaption, botEnabled);
+          await logOutgoing(base44, videoSent ? `out_${Date.now()}_fp_service_video` : `out_${Date.now()}_fp_service_video_fail`, phone, `${videoCaption}\n[סרטון: ${SERVICE_NAME_LABELS[selectedServiceType] || selectedServiceType}]`, chatId, conversationId, videoSent ? outgoingStatus : 'error');
+        }
         try {
           await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${message}` });
         } catch (error) {}
