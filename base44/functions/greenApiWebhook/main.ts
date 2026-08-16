@@ -759,63 +759,48 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ===== FP-WebinarPostMeeting: לקוח וובינר כותב "פגישה" → ניתוב לתיאום פגישה =====
+    // ===== FP-WebinarPostMeeting: "פגישה" → קישור תשלום (Part 4) =====
+    // לא יוצרים/מעדכנים SR כאן — זה קורה ב-"שילמתי" (Part 5).
     if (contact && normalizeAnswer(text) === 'פגישה') {
       const webinarRegs = await base44.asServiceRole.entities.WebinarRegistration.filter({ contact_id: contact.id }, '-created_date', 5);
       const activeReg = webinarRegs.find(r => r.coupon_sent === true);
       if (activeReg) {
-        // יצירת/עדכון SR לסטטוס interested כדי להפעיל את מסלול בחירת מיקום פגישה
-        let sr = serviceRequest;
-        if (!sr || ['completed', 'cancelled', 'closed_lost', 'followup_closed'].includes(sr?.status)) {
-          sr = await base44.asServiceRole.entities.ServiceRequest.create({
-            contact_id: contact.id, contact_name: contact.full_name, contact_phone: contact.phone,
-            contact_email: contact.email, status: 'interested', source: 'webinar', conversation_id: conversationId,
-            service_type: activeReg.webinar_type === 'retirement' ? 'retirement' : activeReg.webinar_type === 'investments' ? 'investments' : 'divorce_split',
-          });
-        } else {
-          await base44.asServiceRole.entities.ServiceRequest.update(sr.id, { status: 'interested', source: 'webinar' });
-        }
-        // שליחת בחירת מיקום פגישה
-        const locationMsg = await getBotContent(base44, 'webinar_location_choice') || 'איפה תרצו לקיים את הפגישה?\nא) זום\nב) מודיעין\nג) פתח תקווה\nד) שיחת טלפון';
-        const locationFilled = locationMsg.replaceAll('{name}', contact.full_name || '');
-        const sent = await sendWhatsApp(chatId, locationFilled, botEnabled);
+        const PAY_SUBTYPE = { retirement: 'payment_webinar_retirement', investments: 'payment_webinar_investments', divorce: 'payment_webinar_divorce' };
+        const paymentLink = await getServiceContentUrl(base44, { content_type: 'payment_link', sub_type: PAY_SUBTYPE[activeReg.webinar_type] || 'payment_webinar_retirement' });
+        const payTpl = await getBotContent(base44, 'webinar_payment_intro') || '';
+        const payMsg = payTpl.replaceAll('{name}', contact.full_name || '').replaceAll('{payment_link}', paymentLink);
+        const sent = await sendWhatsApp(chatId, payMsg, botEnabled);
         await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
-        await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_webinar_meeting`, phone, locationFilled, chatId, conversationId, outgoingStatus);
-        try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${locationFilled}` }); } catch (_) {}
-        return Response.json({ ok: true, fast_path: 'fp_webinar_post_meeting' });
+        await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_webinar_pay`, phone, payMsg, chatId, conversationId, outgoingStatus);
+        try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${payMsg}` }); } catch (_) {}
+        return Response.json({ ok: true, fast_path: 'fp_webinar_payment_link' });
       }
     }
 
-    // ===== FP-WebinarPaid: "שילמתי" אחרי מימוש קופון =====
-    // אם הצוות כבר אישר תשלום (payment_completed) → שולחים בחירת מיקום פגישה.
-    // אם עדיין לא אושר → שולחים הודעת המתנה. אישור התשלום נעשה ע"י הצוות בלבד.
+    // ===== FP-WebinarPaid: "שילמתי" → SR interested + בחירת מיקום (Part 5) =====
+    // החלטת בשמת: לא מעכבים עד אימות תשלום — הצוות מאמת בנפרד.
     if (contact && (normalizeAnswer(text).startsWith('שילמתי') || normalizeAnswer(text) === 'שולם')) {
       const regsByContact = await base44.asServiceRole.entities.WebinarRegistration.filter({ contact_id: contact.id }, '-created_date', 10);
-      let reg = regsByContact.find(r => r.pending_payment === true || r.payment_completed === true);
-      if (!reg) {
-        reg = regsByContact.find(r => r.coupon_sent === true); // fallback — קופון נשלח אבל pending_payment לא סומן
-      }
+      const reg = regsByContact.find(r => r.coupon_sent === true || r.pending_payment === true || r.payment_completed === true);
       if (reg) {
-        let message;
-        let fastPath;
-        if (reg.payment_completed === true) {
-          // הצוות כבר אישר — בחירת מיקום פגישה
-          const locationMessage = await getBotContent(base44, 'webinar_location_choice') || 'איך תרצו לקיים את הפגישה?\n1) זום 2) מודיעין 3) פתח תקווה 4) טלפון';
-          message = locationMessage.replaceAll('{name}', contact.full_name || '');
-          fastPath = 'fp_webinar_paid_confirmed';
+        const svcType = reg.webinar_type === 'retirement' ? 'retirement' : reg.webinar_type === 'investments' ? 'investments' : 'divorce_split';
+        let sr = serviceRequest;
+        if (!sr || ['completed', 'cancelled', 'closed_lost', 'followup_closed'].includes(sr?.status)) {
+          sr = await base44.asServiceRole.entities.ServiceRequest.create({
+            contact_id: contact.id, contact_name: contact.full_name, contact_phone: contact.phone, contact_email: contact.email,
+            status: 'interested', source: 'webinar', conversation_id: conversationId, service_type: svcType,
+          });
         } else {
-          // עדיין לא אושר ע"י הצוות — הודעת המתנה
-          const ackMessage = await getBotContent(base44, 'webinar_payment_pending_ack') || 'תודה רבה על העדכון! הצוות בודק שהתשלום התקבל ויעדכן אותך בהקדם.';
-          message = ackMessage.replaceAll('{name}', contact.full_name || '');
-          fastPath = 'fp_webinar_paid_pending';
+          await base44.asServiceRole.entities.ServiceRequest.update(sr.id, { status: 'interested', source: 'webinar', service_type: sr.service_type || svcType });
         }
-        const sent = await sendWhatsApp(chatId, message, botEnabled);
+        await base44.asServiceRole.entities.WebinarRegistration.update(reg.id, { service_request_id: sr.id });
+        const locTpl = await getBotContent(base44, 'webinar_location_choice') || '';
+        const locMsg = locTpl.replaceAll('{name}', contact.full_name || '');
+        const sent = await sendWhatsApp(chatId, locMsg, botEnabled);
         await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
-        await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_paid`, phone, message, chatId, conversationId, outgoingStatus);
-        try {
-          await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${message}` });
-        } catch (error) {}
-        return Response.json({ ok: true, fast_path: fastPath });
+        await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_paid`, phone, locMsg, chatId, conversationId, outgoingStatus);
+        try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${locMsg}` }); } catch (_) {}
+        return Response.json({ ok: true, fast_path: 'fp_webinar_paid_to_scheduling' });
       }
     }
 

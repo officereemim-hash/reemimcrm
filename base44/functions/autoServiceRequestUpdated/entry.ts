@@ -456,23 +456,8 @@ Deno.serve(async (req) => {
       const confirmResult = await sendWhatsApp(confirmMessage, templateKey, [contact.full_name || '', serviceRequest.last_appointment_time_str || '', zoomLink || wazeLink || '']);
       await logCommunication(confirmMessage, templateKey, confirmResult);
 
-      if (isWebinar) {
-        const isModiinMeeting = templateKey === 'meeting_scheduled_modiin' || apptType === 'modiin';
-        if (!isModiinMeeting) {
-          await new Promise(resolve => setTimeout(resolve, 3000));
-          const closingTemplate = await getContent('conversation_closing');
-          const closingMessage = fillTemplate(closingTemplate || 'תודה רבה {name}, שיהיה לך יום נפלא! 🙏', values);
-          const closingResult = await sendWhatsApp(closingMessage, 'conversation_closing', [contact.full_name || '']);
-          await logCommunication(closingMessage, 'conversation_closing', closingResult);
-        }
-
-        await base44.asServiceRole.entities.Contact.update(contact.id, {
-          bot_status: isModiinMeeting ? 'waiting_user_reply' : 'closed',
-          last_bot_interaction_at: new Date().toISOString(),
-        });
-        return Response.json({ ok: true, action: 'webinar_meeting_scheduled', template: templateKey });
-      }
-
+      // Part 7: מסלול הוובינר ממשיך מכאן בדיוק כמו מסלול השירות —
+      // שאלון → ת.ז. → מסמכים → סיום. (הבלוק שסגר את השיחה ל-isWebinar הוסר.)
       const questionnaireUrl = await getQuestionnaireUrl();
       if (!questionnaireUrl) {
         const clarifyTemplate = await getContent('service_type_clarify');
