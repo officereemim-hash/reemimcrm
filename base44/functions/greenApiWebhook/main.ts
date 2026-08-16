@@ -1172,6 +1172,11 @@ Deno.serve(async (req) => {
         return Response.json({ ok: true, fast_path: 'fp_id_details_received', id_number: idNumber, birth_date: birthDate });
       }
 
+      // הקלט הוא שאלה ולא נתון — לא נחשב ניסיון כושל; הסוכן יענה ויחזיר לבקשת הפרטים
+      const ID_QUESTION_WORDS = ['מה', 'למה', 'איך', 'מתי', 'איפה', 'האם', 'כמה', 'מי', 'אפשר'];
+      const isIdQuestion = text.includes('?') || ID_QUESTION_WORDS.includes(normalizeAnswer(text.trim().split(/\s+/)[0]));
+
+      if (!isIdQuestion) {
       // לא הצליח לחלץ — בדיקת מספר ניסיונות
       const retryKey = 'id_retry_' + phone;
       const retrySettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: retryKey });
@@ -1202,10 +1207,12 @@ Deno.serve(async (req) => {
         await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${retryMessage}` });
       } catch (error) {}
       return Response.json({ ok: true, fast_path: 'fp_id_details_retry' });
+      }
+      // שאלה בשלב איסוף הפרטים — ממשיכים לסוכן AI
     }
 
     // ===== FP-DocsSent: "שלחתי" אחרי מילוי שאלון — אישור שקיבלנו, ממתינים לבדיקה =====
-    if (serviceRequest && serviceRequest.questionnaire_completed && !serviceRequest.documents_received && normalizeAnswer(text).startsWith('שלחתי') && normalizeAnswer(text).split(/\s+/).length <= 3) {
+    if (serviceRequest && (serviceRequest.questionnaire_completed || serviceRequest.current_step === 'waiting_documents') && !serviceRequest.documents_received && normalizeAnswer(text).startsWith('שלחתי') && normalizeAnswer(text).split(/\s+/).length <= 3) {
       const docsAckMessage = await getBotContent(base44, 'documents_sent_ack') || 'תודה ששלחת, אנחנו נעדכן אותך ברגע שיתקבלו המסמכים 🙏';
       const sent = await sendWhatsApp(chatId, docsAckMessage, botEnabled);
       await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
@@ -1234,111 +1241,96 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ===== FP-CarPlate: קליטת מספר רכב או "אין צורך" לפגישה במודיעין =====
-    const MODIIN_MEETING_STATUSES = ['meeting_scheduled_frontal'];
-    if (contact && serviceRequest && MODIIN_MEETING_STATUSES.includes(serviceRequest.status) && serviceRequest.last_appointment_type === 'modiin' && !contact.car_plate) {
-      const normalized = normalizeAnswer(text);
-      const isNoCar = ['אין צורך', 'אין', 'לא צריך', 'לא', 'לא מגיע עם רכב', 'בלי רכב', 'אין רכב'].includes(normalized);
+    // ===== FP-CarPlate: מספר רכב / "אין צורך" → הנחיות חניה → ואז השאלון (מודיעין + פתח תקווה) =====
+    if (contact && serviceRequest && serviceRequest.current_step === 'waiting_car_plate') {
+      const normalizedCar = normalizeAnswer(text);
+      const isNoCar = ['אין צורך', 'אין', 'לא צריך', 'לא', 'לא מגיע עם רכב', 'בלי רכב', 'אין רכב', 'בתחבורה ציבורית', 'באוטובוס', 'ברכבת', 'ברגל'].includes(normalizedCar);
       const carPlateMatch = text.match(/\b\d{5,8}\b/);
 
       if (isNoCar || carPlateMatch) {
-        const officeImageUrl = await getServiceContentUrl(base44, { content_type: 'image', sub_type: 'modiin_office_image' });
+        const apptType = serviceRequest.last_appointment_type || '';
+        const isPetahTikva = apptType.includes('petah_tikva');
+        await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
 
         if (carPlateMatch && !isNoCar) {
-          // מסלול 1: יש מספר רכב
           const plateNumber = carPlateMatch[0];
           await base44.asServiceRole.entities.Contact.update(contact.id, { car_plate: plateNumber });
 
-          // תודה ללקוח
           const thanksMsg = await getBotContent(base44, 'car_plate_thanks') || 'תודה! צוות ראמים עודכן במספר הרכב ✅';
           const thanksSent = await sendWhatsApp(chatId, thanksMsg, botEnabled);
-          await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
           await logOutgoing(base44, thanksSent?.idMessage || `out_${Date.now()}_fp_car_thanks`, phone, thanksMsg, chatId, conversationId, outgoingStatus);
 
-          // התראה לרכזת — וואטסאפ למספר הבוט
           const alertTemplate = await getBotContent(base44, 'car_plate_admin_alert') || '🚗 *יש לארגן חניה*\nשם לקוח: {name}\nמספר רכב: {car_plate}\nמועד פגישה: {time}';
           const alertMsg = alertTemplate
             .replaceAll('{name}', contact.full_name || '')
             .replaceAll('{car_plate}', plateNumber)
             .replaceAll('{time}', serviceRequest.last_appointment_time_str || '');
-          const botPhoneSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'coordinator_phone' });
-          const botPhone = normalizeIntlPhone(botPhoneSettings[0]?.value || '');
-          if (botPhone) {
-            await sendWhatsApp(`${botPhone}@c.us`, alertMsg, botEnabled);
-          }
-
-          // התראה במייל
           try {
             const BREVO_API_KEY = Deno.env.get('BREVO_API_KEY') || '';
-            if (BREVO_API_KEY) {
-              const senderSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'mailing_sender_email' });
-              const senderEmail = senderSettings[0]?.value || '';
-              if (senderEmail) {
-                await fetch('https://api.brevo.com/v3/smtp/email', {
-                  method: 'POST',
-                  headers: { 'api-key': BREVO_API_KEY, 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    sender: { name: 'קרנות ראמים — בוט', email: senderEmail },
-                    to: [{ email: 'office.reemim@gmail.com', name: 'משרד ראמים' }],
-                    subject: `🚗 חניה לארגן — ${contact.full_name || ''} — רכב ${plateNumber}`,
-                    htmlContent: `<div dir="rtl" style="font-family:Arial;font-size:16px">${alertMsg.replace(/\n/g, '<br/>')}</div>`,
-                  }),
-                });
-              }
+            const senderSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'mailing_sender_email' });
+            const senderEmail = senderSettings[0]?.value || '';
+            if (BREVO_API_KEY && senderEmail) {
+              await fetch('https://api.brevo.com/v3/smtp/email', {
+                method: 'POST',
+                headers: { 'api-key': BREVO_API_KEY, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  sender: { name: 'קרנות ראמים — בוט', email: senderEmail },
+                  to: [{ email: 'office.reemim@gmail.com', name: 'משרד ראמים' }],
+                  subject: `🚗 חניה לארגן — ${contact.full_name || ''} — רכב ${plateNumber}`,
+                  htmlContent: `<div dir="rtl" style="font-family:Arial;font-size:16px">${alertMsg.replace(/\n/g, '<br/>')}</div>`,
+                }),
+              });
             }
           } catch (e) { console.error('Car plate email error:', e.message); }
+        }
 
-          // שליחת תמונת המשרד
-          if (officeImageUrl) {
-            await new Promise(resolve => setTimeout(resolve, 1500));
-            await sendWhatsAppFileByUrl(chatId, officeImageUrl, 'modiin_office.png', '', botEnabled);
-          }
-
-          // הנחיות חניה
+        // תמונת מיקום — רק אם קיימת לאותו מיקום (לא מבטיחים מה שאין)
+        const officeImageUrl = await getServiceContentUrl(base44, { content_type: 'image', sub_type: isPetahTikva ? 'petah_tikva_office_image' : 'modiin_office_image' });
+        if (officeImageUrl) {
           await new Promise(resolve => setTimeout(resolve, 1500));
-          const parkingMsg = await getBotContent(base44, 'parking_instructions_modiin') || '';
-          if (parkingMsg) {
-            const parkingSent = await sendWhatsApp(chatId, parkingMsg, botEnabled);
-            await logOutgoing(base44, parkingSent?.idMessage || `out_${Date.now()}_fp_car_parking`, phone, parkingMsg, chatId, conversationId, outgoingStatus);
-          }
-
-          // הודעת סיום
-          await new Promise(resolve => setTimeout(resolve, 2000));
-          const closingMsg = await getBotContent(base44, 'conversation_closing') || '';
-          if (closingMsg) {
-            const closingFilled = closingMsg.replaceAll('{name}', contact.full_name || '');
-            const closingSent = await sendWhatsApp(chatId, closingFilled, botEnabled);
-            await logOutgoing(base44, closingSent?.idMessage || `out_${Date.now()}_fp_car_closing`, phone, closingFilled, chatId, conversationId, outgoingStatus);
-          }
-
-          try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${thanksMsg}` }); } catch (_) {}
-          return Response.json({ ok: true, fast_path: 'fp_car_plate_saved', plate: plateNumber });
+          await sendWhatsAppFileByUrl(chatId, officeImageUrl, 'office.png', '', botEnabled);
         }
 
-        if (isNoCar) {
-          // מסלול 2: אין צורך בחניה — סימון car_plate כ"אין" למניעת חזרה
-          await base44.asServiceRole.entities.Contact.update(contact.id, { car_plate: 'אין' });
-
-          await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
-
-          // שליחת תמונת המשרד
-          if (officeImageUrl) {
-            await sendWhatsAppFileByUrl(chatId, officeImageUrl, 'modiin_office.png', '', botEnabled);
-          }
-
-          // הודעת סיום
-          await new Promise(resolve => setTimeout(resolve, 2000));
-          const closingMsg = await getBotContent(base44, 'conversation_closing') || '';
-          if (closingMsg) {
-            const closingFilled = closingMsg.replaceAll('{name}', contact.full_name || '');
-            const closingSent = await sendWhatsApp(chatId, closingFilled, botEnabled);
-            await logOutgoing(base44, closingSent?.idMessage || `out_${Date.now()}_fp_nocar_closing`, phone, closingFilled, chatId, conversationId, outgoingStatus);
-          }
-
-          try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n[תמונת משרד + הודעת סיום]` }); } catch (_) {}
-          return Response.json({ ok: true, fast_path: 'fp_car_plate_not_needed' });
+        // הנחיות חניה לפי מיקום
+        const parkingMsg = await getBotContent(base44, isPetahTikva ? 'parking_instructions_petah_tikva' : 'parking_instructions_modiin');
+        if (parkingMsg) {
+          await new Promise(resolve => setTimeout(resolve, 1500));
+          const parkingSent = await sendWhatsApp(chatId, parkingMsg, botEnabled);
+          await logOutgoing(base44, parkingSent?.idMessage || `out_${Date.now()}_fp_car_parking`, phone, parkingMsg, chatId, conversationId, outgoingStatus);
         }
+
+        // ואז השאלון — בקשה אחת בכל פעם, עם חיווי צעד הבא
+        const CAR_SHORANSS_SUBTYPE = {
+          retirement: 'shoranss_retirement',
+          economic_feasibility: 'shoranss_economic',
+          investments: 'shoranss_investments',
+          divorce_split: 'shoranss_divorce',
+          tax_advisory: 'shoranss_tax',
+          annual_service_call: 'shoranss_retirement',
+        };
+        const qSubType = CAR_SHORANSS_SUBTYPE[serviceRequest.service_type];
+        const questionnaireUrl = qSubType ? await getServiceContentUrl(base44, { content_type: 'questionnaire', sub_type: qSubType }) : '';
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        let followupMsg = '';
+        if (questionnaireUrl) {
+          const qTpl = await getBotContent(base44, 'questionnaire_request') || 'לקראת הפגישה, נשמח שתמלא/י את השאלון:\n{questionnaire_link}\n\n👈 לאחר המילוי — השב/י כאן "מילאתי" ונמשיך 🙂';
+          followupMsg = qTpl.replaceAll('{name}', contact.full_name || '').replaceAll('{questionnaire_link}', questionnaireUrl);
+          await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: 'waiting_questionnaire' });
+          await base44.asServiceRole.entities.Contact.update(contact.id, { bot_status: 'waiting_user_reply', shoranss_questionnaire: 'sent' });
+        } else {
+          followupMsg = await getBotContent(base44, 'service_type_clarify') || 'כדי שנוכל לכוון אותך נכון — מה התחום שמעניין אותך?\n1. ייעוץ פרישה\n2. היתכנות כלכלית\n3. תכנון השקעות\n4. איזון אקטוארי בגירושין\n5. ייעוץ מס\n\n👈 השב/י במספר המתאים';
+          await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: '', pending_service_clarify: true });
+          await base44.asServiceRole.entities.Contact.update(contact.id, { bot_status: 'waiting_user_reply' });
+        }
+        const followupSent = await sendWhatsApp(chatId, followupMsg, botEnabled);
+        await logOutgoing(base44, followupSent?.idMessage || `out_${Date.now()}_fp_car_next`, phone, followupMsg, chatId, conversationId, outgoingStatus);
+
+        try {
+          await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${parkingMsg || ''}\n\n${followupMsg}` });
+        } catch (_) {}
+        return Response.json({ ok: true, fast_path: 'fp_car_plate_then_questionnaire', location: isPetahTikva ? 'petah_tikva' : 'modiin' });
       }
+      // לא מספר רכב ולא "אין צורך" — שאלה או הבהרה: ממשיכים לסוכן AI (בלי לספור ניסיון כושל)
     }
 
     // ===== FP-Polite: תגובת נימוס קצרה במצב המתנה — מענה קצר בלי סוכן =====

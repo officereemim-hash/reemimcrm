@@ -228,8 +228,7 @@ Deno.serve(async (req) => {
       if (!conversationId) { console.log('conversation_injection_skipped: no_conversation_id'); return; }
       try {
         const conv = await base44.asServiceRole.agents.getConversation(conversationId);
-        const hasUserMessage = (conv.messages || []).some((m) => m.role === 'user');
-        if (!hasUserMessage) { console.log('conversation_injection_skipped: no_user_message'); return; }
+        // חובה להזריק גם כשעוד אין הודעת משתמש — אחרת הסוכן לא רואה מה נשלח ללקוח ומכחיש הודעות שהמערכת שלחה
         await base44.asServiceRole.agents.addMessage(conv, { role: 'assistant', content });
         console.log('message_added_to_conversation');
       } catch (err) {
@@ -456,6 +455,24 @@ Deno.serve(async (req) => {
       const confirmResult = await sendWhatsApp(confirmMessage, templateKey, [contact.full_name || '', serviceRequest.last_appointment_time_str || '', zoomLink || wazeLink || '']);
       await logCommunication(confirmMessage, templateKey, confirmResult);
 
+      // רצף חניה: בפגישה פרונטלית מבקשים מספר רכב כהודעה נפרדת ועוצרים.
+      // השאלון נשלח רק אחרי מענה הרכב (greenApiWebhook / FP-CarPlate) — בקשה אחת בכל פעם.
+      if (templateKey === 'meeting_scheduled_modiin' || templateKey === 'meeting_scheduled_petah_tikva') {
+        const carTemplate = await getContent('car_plate_request');
+        if (carTemplate) {
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          const carMessage = fillTemplate(carTemplate, values);
+          const carResult = await sendWhatsApp(carMessage, 'car_plate_request', [contact.full_name || '']);
+          await logCommunication(carMessage, 'car_plate_request', carResult);
+        }
+        await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: 'waiting_car_plate' });
+        await base44.asServiceRole.entities.Contact.update(contact.id, {
+          bot_status: 'waiting_user_reply',
+          last_bot_interaction_at: new Date().toISOString(),
+        });
+        return Response.json({ ok: true, action: 'waiting_car_plate', template: templateKey });
+      }
+
       // Part 7: מסלול הוובינר ממשיך מכאן בדיוק כמו מסלול השירות —
       // שאלון → ת.ז. → מסמכים → סיום. (הבלוק שסגר את השיחה ל-isWebinar הוסר.)
       const questionnaireUrl = await getQuestionnaireUrl();
@@ -535,8 +552,8 @@ Deno.serve(async (req) => {
         await logCommunication(confirmedMessage, 'documents_confirmed', confirmedResult);
       }
 
-      const isWebinar = serviceRequest.source === 'webinar';
-      if (!isWebinar) {
+      {
+        // סגירה חמה בסוף המסלול — גם בוובינר וגם בלי ש"סיום" נכתב
         await new Promise(resolve => setTimeout(resolve, 3000));
         const closingTemplate = await getContent('preparation_complete_closing')
           || 'תודה רבה {name}! 🌿\nההכנה לפגישה הושלמה — את/ה מוזמן/ת להגיע מוכן/ה ורגוע/ה.\nנשמח לראותך בפגישה עם בשמת! 💜';
