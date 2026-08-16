@@ -64,7 +64,6 @@ Deno.serve(async (req) => {
       const contact = contacts[0];
       if (!contact?.phone) { skipped++; continue; }
 
-      const chatId = toChatId(contact.phone);
       const name = contact.full_name || '';
       const contactFirstName = name.split(' ')[0];
 
