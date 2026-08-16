@@ -243,19 +243,35 @@ Deno.serve(async (req) => {
 
     // ─── קליטת פורמט uChat: flow שולח External Request עם {phone, message, first_name, user_ns, secret} ───
     // ממירים למבנה שכל שאר הקוד כבר יודע לקרוא (Green: typeWebhook/senderData/messageData).
-    const isUchat = WHATSAPP_PROVIDER === 'uchat' && body && body.phone !== undefined && body.message !== undefined && !body.typeWebhook;
+    // זיהוי uChat: מזהים לפי קיום phone (בלי דרישה ל-message — לחיצת כפתור עלולה להגיע בשדה אחר/ריק)
+    const isUchat = WHATSAPP_PROVIDER === 'uchat' && body && body.phone !== undefined && !body.typeWebhook;
     if (isUchat) {
+      // אימות מחמיר: הסוד נקרא מ-header / body / query — אבל בקשה בלי סוד תקין נדחית תמיד.
       const UCHAT_WEBHOOK_SECRET = Deno.env.get('UCHAT_WEBHOOK_SECRET');
-      if (UCHAT_WEBHOOK_SECRET && (body.secret || secretParam) !== UCHAT_WEBHOOK_SECRET) {
+      const providedSecret = req.headers.get('x-uchat-secret') || body.secret || secretParam || '';
+      const p972 = normalizeIntlPhone(body.phone);
+      if (!UCHAT_WEBHOOK_SECRET || providedSecret !== UCHAT_WEBHOOK_SECRET) {
+        // לוג אבחון — בלי ערך הסוד עצמו
+        console.log(`UCHAT_INBOUND rejected — bad_or_missing_secret (phone=${p972}, hasSecretField=${providedSecret ? 'yes' : 'no'})`);
         return Response.json({ error: 'Unauthorized' }, { status: 401 });
       }
-      const p972 = normalizeIntlPhone(body.phone);
-      if (body.user_ns) _uchatNsCache[p972] = body.user_ns; // לשליחות היוצאות באותה שיחה
+
+      // טקסט ההודעה: הקלדה רגילה או payload/label של כפתור (Quick Reply)
+      const incomingText = String(
+        body.message ?? body.text ?? body.last_text_input ?? body.button_payload ??
+        body.payload ?? body.button_text ?? body.title ?? ''
+      ).trim();
+      // user_ns בכל הווריאציות — לשליחות היוצאות באותה שיחה
+      const incomingNs = body.user_ns ?? body.subscriber_ns ?? body.ns ?? null;
+      if (incomingNs) _uchatNsCache[p972] = incomingNs;
+
+      console.log(`UCHAT_INBOUND accepted — phone=${p972}, textLen=${incomingText.length}, hasNs=${incomingNs ? 'yes' : 'no'}, text="${incomingText.substring(0, 60)}"`);
+
       body = {
         typeWebhook: 'incomingMessageReceived',
         idMessage: String(body.idMessage || body.message_id || `uchat_${p972}_${Date.now()}`),
         senderData: { chatId: `${p972}@c.us`, senderName: body.first_name || '' },
-        messageData: { typeMessage: 'textMessage', textMessageData: { textMessage: String(body.message || '') } },
+        messageData: { typeMessage: 'textMessage', textMessageData: { textMessage: incomingText } },
         instanceData: { idInstance: '' },
       };
     }
