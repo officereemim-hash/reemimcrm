@@ -1211,33 +1211,64 @@ Deno.serve(async (req) => {
       // שאלה בשלב איסוף הפרטים — ממשיכים לסוכן AI
     }
 
-    // ===== FP-DocsSent: "שלחתי" אחרי מילוי שאלון — אישור שקיבלנו, ממתינים לבדיקה =====
-    if (serviceRequest && (serviceRequest.questionnaire_completed || serviceRequest.current_step === 'waiting_documents') && !serviceRequest.documents_received && normalizeAnswer(text).startsWith('שלחתי') && normalizeAnswer(text).split(/\s+/).length <= 3) {
-      const docsAckMessage = await getBotContent(base44, 'documents_sent_ack') || 'תודה ששלחת, אנחנו נעדכן אותך ברגע שיתקבלו המסמכים 🙏';
+    // ===== FP-DocsSent: "שלחתי" אחרי מילוי שאלון — אישור + סגירה חמה מיידית =====
+    // שחרור צומת (17.8): לא ממתינים לסימון אדמין — הפונה מסיים את המסלול בתוך חלון 24 השעות.
+    // האימות של הצוות נמשך ברקע (documents_received נשאר false עד סימון אמיתי).
+    if (serviceRequest && (serviceRequest.questionnaire_completed || serviceRequest.current_step === 'waiting_documents' || serviceRequest.current_step === 'waiting_id_details') && !serviceRequest.documents_received && normalizeAnswer(text).startsWith('שלחתי') && normalizeAnswer(text).split(/\s+/).length <= 3) {
+      const docsAckMessage = await getBotContent(base44, 'documents_sent_ack') || 'תודה ששלחת! 🙏 הצוות שלנו יעבור על המסמכים ויוודא שהכל התקבל.';
       const sent = await sendWhatsApp(chatId, docsAckMessage, botEnabled);
       await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
       await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_docs`, phone, docsAckMessage, chatId, conversationId, outgoingStatus);
+      // סגירה חמה מיד — הפונה לא ממתין לאף אחד
+      await new Promise(resolve => setTimeout(resolve, 2500));
+      const closingMsg = await getBotContent(base44, 'preparation_complete_closing') || 'תודה רבה {name}! 🌿\nההכנה לפגישה הושלמה — את/ה מוזמן/ת להגיע מוכן/ה ורגוע/ה.\nנשמח לראותך בפגישה עם בשמת! 💜';
+      const closingFilled = closingMsg.replaceAll('{name}', contact?.full_name || '');
+      const closingSent = await sendWhatsApp(chatId, closingFilled, botEnabled);
+      await logOutgoing(base44, closingSent?.idMessage || `out_${Date.now()}_fp_docs_closing`, phone, closingFilled, chatId, conversationId, outgoingStatus);
       try {
-        await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${docsAckMessage}` });
+        await base44.asServiceRole.entities.Communication.create({
+          contact_id: contact?.id, type: 'whatsapp', direction: 'outbound',
+          content: closingFilled.substring(0, 500), sent_by: 'bot', is_automated: true,
+          template_id: 'preparation_complete_closing', status: botEnabled ? 'sent' : 'skipped',
+        });
+      } catch (_) {}
+      await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: 'prep_completed' });
+      try {
+        await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${docsAckMessage}\n\n${closingFilled}` });
       } catch (error) {}
-      return Response.json({ ok: true, fast_path: 'fp_documents_sent_ack' });
+      return Response.json({ ok: true, fast_path: 'fp_documents_sent_closed' });
     }
 
     // ===== FP-QuestionnaireSelfReport: לקוח אומר "מילאתי" — אישור המתנה (האימות בשורנס בלבד) =====
     const questionnaireStatuses = ['meeting_scheduled', 'meeting_scheduled_frontal', 'meeting_scheduled_zoom'];
     const filledKeywords = ['מילאתי', 'מלאתי', 'סיימתי את השאלון', 'סיימתי שאלון', 'שלחתי את השאלון', 'מילאתי את השאלון'];
-    if (contact && serviceRequest && questionnaireStatuses.includes(serviceRequest.status) && !serviceRequest.questionnaire_completed) {
+    if (contact && serviceRequest && questionnaireStatuses.includes(serviceRequest.status) && !serviceRequest.questionnaire_completed && serviceRequest.current_step !== 'waiting_id_details' && serviceRequest.current_step !== 'prep_completed') {
       const normalizedText = normalizeAnswer(text);
       if (filledKeywords.some(kw => normalizedText.includes(kw))) {
-        const ackTemplate = await getBotContent(base44, 'questionnaire_ack_waiting') || 'תודה {name}! 🙏\nנבדוק שהשאלון אכן התקבל במערכת — זה עשוי לקחת כמה דקות.\nנעדכן אותך ברגע שיתקבל האישור.';
+        // שחרור צומת (17.8): לא ממתינים לאישור שורנס — ממשיכים מיד לבקשת ת"ז; האימות נמשך ברקע
+        const ackTemplate = await getBotContent(base44, 'questionnaire_ack_continue') || 'תודה {name}! 🙏 השאלון נקלט — הצוות יוודא אותו ברקע, ואנחנו ממשיכים 🙂';
         const ackMsg = ackTemplate.replaceAll('{name}', contact.full_name || '');
         const sent = await sendWhatsApp(chatId, ackMsg, botEnabled);
         await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
         await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_q_ack`, phone, ackMsg, chatId, conversationId, outgoingStatus);
+        // בקשת ת"ז + תאריך לידה (ומייל אם חסר) — מיד, בלי עצירה
+        const qNeedsEmail = !contact.email;
+        let idReqTpl = await getBotContent(base44, qNeedsEmail ? 'questionnaire_id_email_request' : 'questionnaire_id_request');
+        if (!idReqTpl && qNeedsEmail) {
+          idReqTpl = await getBotContent(base44, 'questionnaire_id_request');
+          if (idReqTpl) idReqTpl += '\n\n📧 וגם — מה כתובת המייל שלך?';
+        }
+        if (!idReqTpl) idReqTpl = 'אשמח לקראת הפגישה שתכתוב/י לנו את *מספר תעודת הזהות* ו*תאריך הלידה*.\n\n👈 בהודעה אחת, לדוגמה: 123456789 01/01/1960';
+        await new Promise(resolve => setTimeout(resolve, 2500));
+        const idReqMsg = idReqTpl.replaceAll('{name}', contact.full_name || '');
+        const idReqSent = await sendWhatsApp(chatId, idReqMsg, botEnabled);
+        await logOutgoing(base44, idReqSent?.idMessage || `out_${Date.now()}_fp_q_idreq`, phone, idReqMsg, chatId, conversationId, outgoingStatus);
+        await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: 'waiting_id_details' });
+        await base44.asServiceRole.entities.Contact.update(contact.id, { bot_status: 'waiting_user_reply', shoranss_questionnaire: 'filled', last_bot_interaction_at: new Date().toISOString() });
         try {
-          await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${ackMsg}` });
+          await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${ackMsg}\n\n${idReqMsg}` });
         } catch (error) {}
-        return Response.json({ ok: true, fast_path: 'fp_questionnaire_ack_waiting' });
+        return Response.json({ ok: true, fast_path: 'fp_questionnaire_continue_to_id' });
       }
     }
 
