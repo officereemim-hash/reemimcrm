@@ -153,6 +153,7 @@ Deno.serve(async (req) => {
     }
 
     let zoomJoinUrl = '';
+    let zoomRegistrantId = '';
     let zoomError = '';
     const zoomWebinarId = (await base44.asServiceRole.entities.SystemSetting.filter({ key: 'zoom_webinar_id' }))[0]?.value;
     if (zoomWebinarId && cleanEmail) {
@@ -172,6 +173,7 @@ Deno.serve(async (req) => {
               if (zr.ok) {
                 const zrData = await zr.json();
                 zoomJoinUrl = zrData.join_url || '';
+                zoomRegistrantId = String(zrData.registrant_id || '');
                 zoomError = '';
               } else {
                 zoomError = `http_${zr.status}: ${(await zr.text().catch(() => '')).substring(0, 400)}`;
@@ -182,7 +184,7 @@ Deno.serve(async (req) => {
         }
       } catch (e) { zoomError = `outer: ${e.message}`.substring(0, 400); console.error('Zoom registrant error:', e.message); }
       await base44.asServiceRole.entities.WebinarRegistration.update(regRecord.id, {
-        ...(zoomJoinUrl ? { zoom_registration_id: zoomJoinUrl ? String((zoomError ? '' : '') || regRecord.zoom_registration_id || '') : '' } : {}),
+        ...(zoomRegistrantId ? { zoom_registration_id: zoomRegistrantId } : {}),
         zoom_join_url: zoomJoinUrl,
         zoom_error: zoomError,
       });
