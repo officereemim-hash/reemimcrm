@@ -1317,19 +1317,20 @@ Deno.serve(async (req) => {
           } catch (e) { console.error('Car plate email error:', e.message); }
         }
 
-        // תמונת מיקום — רק אם קיימת לאותו מיקום (לא מבטיחים מה שאין)
-        const officeImageUrl = await getServiceContentUrl(base44, { content_type: 'image', sub_type: isPetahTikva ? 'petah_tikva_office_image' : 'modiin_office_image' });
-        if (officeImageUrl) {
-          await new Promise(resolve => setTimeout(resolve, 1500));
-          await sendWhatsAppFileByUrl(chatId, officeImageUrl, 'office.png', '', botEnabled);
-        }
-
-        // הנחיות חניה לפי מיקום
-        const parkingMsg = await getBotContent(base44, isPetahTikva ? 'parking_instructions_petah_tikva' : 'parking_instructions_modiin');
-        if (parkingMsg) {
-          await new Promise(resolve => setTimeout(resolve, 1500));
-          const parkingSent = await sendWhatsApp(chatId, parkingMsg, botEnabled);
-          await logOutgoing(base44, parkingSent?.idMessage || `out_${Date.now()}_fp_car_parking`, phone, parkingMsg, chatId, conversationId, outgoingStatus);
+        // תמונת מיקום והנחיות חניה — רק למי שמגיע עם רכב (תיקון 17.8: "אין צורך" קיבל חניה מיותרת)
+        let parkingMsg = '';
+        if (!isNoCar) {
+          const officeImageUrl = await getServiceContentUrl(base44, { content_type: 'image', sub_type: isPetahTikva ? 'petah_tikva_office_image' : 'modiin_office_image' });
+          if (officeImageUrl) {
+            await new Promise(resolve => setTimeout(resolve, 1500));
+            await sendWhatsAppFileByUrl(chatId, officeImageUrl, 'office.png', '', botEnabled);
+          }
+          parkingMsg = await getBotContent(base44, isPetahTikva ? 'parking_instructions_petah_tikva' : 'parking_instructions_modiin');
+          if (parkingMsg) {
+            await new Promise(resolve => setTimeout(resolve, 1500));
+            const parkingSent = await sendWhatsApp(chatId, parkingMsg, botEnabled);
+            await logOutgoing(base44, parkingSent?.idMessage || `out_${Date.now()}_fp_car_parking`, phone, parkingMsg, chatId, conversationId, outgoingStatus);
+          }
         }
 
         // ואז השאלון — בקשה אחת בכל פעם, עם חיווי צעד הבא
