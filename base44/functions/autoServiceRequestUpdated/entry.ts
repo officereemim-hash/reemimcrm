@@ -553,7 +553,13 @@ Deno.serve(async (req) => {
       }
 
       {
-        // סגירה חמה בסוף המסלול — גם בוובינר וגם בלי ש"סיום" נכתב
+        // סגירה חמה — אך אם הפונה כבר קיבל אותה (סגירה מיידית אחרי "שלחתי", 17.8) — לא שולחים שוב
+        const recentClosing = await base44.asServiceRole.entities.Communication.filter(
+          { contact_id: serviceRequest.contact_id, template_id: 'preparation_complete_closing' }, '-created_date', 1
+        );
+        if (recentClosing[0] && Date.now() - new Date(recentClosing[0].created_date).getTime() < 48 * 60 * 60 * 1000) {
+          return Response.json({ ok: true, action: 'documents_confirmed_closing_already_sent' });
+        }
         await new Promise(resolve => setTimeout(resolve, 3000));
         const closingTemplate = await getContent('preparation_complete_closing')
           || 'תודה רבה {name}! 🌿\nההכנה לפגישה הושלמה — את/ה מוזמן/ת להגיע מוכן/ה ורגוע/ה.\nנשמח לראותך בפגישה עם בשמת! 💜';
@@ -566,6 +572,12 @@ Deno.serve(async (req) => {
     }
 
     if (questionnaireFilled) {
+      // שחרור צומת (17.8): אם הפונה כבר התקדם דרך "מילאתי" (FP שלח כבר בקשת ת"ז) —
+      // אישור שורנס המאוחר נקלט בשקט, בלי לשלוח שוב את בקשת הת"ז
+      const progressedSteps = ['waiting_id_details', 'waiting_documents', 'prep_completed'];
+      if (progressedSteps.includes(serviceRequest.current_step || '') || contact.id_number) {
+        return Response.json({ ok: true, action: 'questionnaire_confirmed_silent_already_progressed' });
+      }
       const values = { name: contact.full_name || '' };
 
       const thanksTemplate = await getContent('questionnaire_completed_thanks');
