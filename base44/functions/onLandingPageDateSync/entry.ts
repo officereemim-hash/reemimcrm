@@ -15,6 +15,27 @@ async function getZoomToken() {
   return data.access_token;
 }
 
+// ריפוי עצמי (17.8): כשאין אף מופע עתידי — בונים מחדש סדרת מופעים חודשית עד סוף 2027
+// (מופע יחיד שעבר = הוובינר נעלם מהפורטל והרישומים נכשלים — התקלה של 17.8)
+async function ensureFutureOccurrences(token, webinarId, fromDateISO) {
+  const d = new Date(fromDateISO);
+  if (isNaN(d.getTime()) || d.getTime() < Date.now()) return false;
+  const local = new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  }).format(d).replace(' ', 'T');
+  const monthlyDay = Number(local.substring(8, 10));
+  const res = await fetch(`https://api.zoom.us/v2/webinars/${webinarId}`, {
+    method: 'PATCH', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      start_time: local, timezone: 'Asia/Jerusalem',
+      recurrence: { type: 3, repeat_interval: 1, monthly_day: Math.min(monthlyDay, 28), end_date_time: '2027-12-31T20:00:00Z' },
+    }),
+  });
+  if (!res.ok) { console.error('ensureFutureOccurrences failed:', res.status, await res.text().catch(() => '')); return false; }
+  return true;
+}
+
 // Automation (LandingPage update): sync webinar_date to all registrations of the current cycle
 Deno.serve(async (req) => {
   try {
@@ -59,9 +80,19 @@ Deno.serve(async (req) => {
             headers: { Authorization: `Bearer ${token}` },
           });
           const w = await wRes.json();
-          const next = (w.occurrences || [])
+          let next = (w.occurrences || [])
             .filter(o => o.status === 'available' && new Date(o.start_time).getTime() > now)
             .sort((a, b) => new Date(a.start_time) - new Date(b.start_time))[0];
+          if (!next) {
+            // אין מופע עתידי — בונים מחדש את הסדרה מהתאריך החדש ושולפים שוב
+            const healed = await ensureFutureOccurrences(token, webinarId, newDate);
+            if (healed) {
+              const w2 = await (await fetch(`https://api.zoom.us/v2/webinars/${webinarId}`, { headers: { Authorization: `Bearer ${token}` } })).json();
+              next = (w2.occurrences || [])
+                .filter(o => o.status === 'available' && new Date(o.start_time).getTime() > now)
+                .sort((a, b) => new Date(a.start_time) - new Date(b.start_time))[0];
+            }
+          }
           if (next) {
             const d = new Date(newDate);
             const local = new Intl.DateTimeFormat('sv-SE', {
