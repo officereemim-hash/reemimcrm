@@ -720,7 +720,9 @@ Deno.serve(async (req) => {
 
     // ===== FP-WebinarBenefit: "לקבלת ההטבה" (כפתור תבנית התודה) → הודעת פתיחה + 3 האפשרויות =====
     const BENEFIT_KEYWORDS = ['לקבלת ההטבה', 'לקבלת הטבה', 'הטבה', 'ההטבה'];
-    if (contact && BENEFIT_KEYWORDS.includes(normalizeAnswer(text))) {
+    // גם ביטוי בתוך משפט ("היי, לקבלת ההטבה בבקשה") — אחרי המעבר מכפתור להקלדה (17.8)
+    const benefitTyped = BENEFIT_KEYWORDS.includes(normalizeAnswer(text)) || normalizeAnswer(text).includes('לקבלת ההטבה') || normalizeAnswer(text).includes('לקבלת הטבה');
+    if (contact && benefitTyped) {
       const benefitRegs = await base44.asServiceRole.entities.WebinarRegistration.filter({ contact_id: contact.id }, '-created_date', 5);
       if (benefitRegs.some(r => r.coupon_sent === true)) {
         const introTpl = await getBotContent(base44, 'webinar_post_intro') || 'היי {name}, שמחתי לראות אותך בהדרכה!';
