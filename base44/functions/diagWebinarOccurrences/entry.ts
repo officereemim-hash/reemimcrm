@@ -26,7 +26,7 @@ Deno.serve(async (req) => {
   }
   return Response.json({
     system_zoom_webinar_id: wid,
-    webinar: { id:w.id, topic:w.topic, type:w.type, host_id:host, host_email:w.host_email||null, occurrences_count:occ.length, first:occ[0], nearest_future:occ.find(o=>new Date(o.start).getTime()>Date.now()), has_start_url:!!w.start_url, registration_url:w.registration_url||null },
+    webinar: { id:w.id, topic:w.topic, type:w.type, host_id:host, host_email:w.host_email||null, occurrences_count:occ.length, first:occ[0], nearest_future:occ.find(o=>new Date(o.start).getTime()>Date.now()), has_start_url:!!w.start_url, start_url:w.start_url||null, registration_url:w.registration_url||null },
     all_host_webinars: (all.webinars||[]).map(x=>({id:x.id, topic:x.topic, type:x.type, start:x.start_time})),
     account_users: perUser,
   });
