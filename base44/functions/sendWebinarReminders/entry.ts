@@ -3,6 +3,18 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 import { uchatSend } from '../../shared/uchat.ts';
 
 
+async function getZoomToken() {
+  const accountId = Deno.env.get('ZOOM_ACCOUNT_ID');
+  const clientId = Deno.env.get('ZOOM_CLIENT_ID');
+  const clientSecret = Deno.env.get('ZOOM_CLIENT_SECRET');
+  if (!accountId || !clientId || !clientSecret) return null;
+  const res = await fetch(`https://zoom.us/oauth/token?grant_type=account_credentials&account_id=${accountId}`, {
+    method: 'POST', headers: { Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+  });
+  if (!res.ok) { console.error('Zoom token error:', await res.text().catch(() => '')); return null; }
+  return (await res.json()).access_token;
+}
+
 async function createShortLink(base44, functionsBase, targetUrl, purpose = '') {
   if (!targetUrl) return '';
   const code = Array.from(crypto.getRandomValues(new Uint8Array(6))).map(b => 'abcdefghijkmnpqrstuvwxyz23456789'[b % 32]).join('');
@@ -74,6 +86,32 @@ Deno.serve(async (req) => {
       }
       const webinarTitle = titleCache[reg.webinar_type];
 
+      // אין קישור אישי? קודם מנסים לרשום עכשיו מול Zoom API — רק אם גם זה נכשל נופלים לקישור הגנרי
+      // (הקישור הגנרי מכריח את הלקוח למלא פרטים שוב בזום — 17.8)
+      if (!reg.zoom_join_url && contact.email) {
+        try {
+          const zt = await getZoomToken();
+          const wid = (await base44.asServiceRole.entities.SystemSetting.filter({ key: 'zoom_webinar_id' }))[0]?.value;
+          if (zt && wid) {
+            const [zfn, ...zrest] = String(contact.full_name || '-').trim().split(' ');
+            const zr = await fetch(`https://api.zoom.us/v2/webinars/${wid}/registrants`, {
+              method: 'POST', headers: { Authorization: `Bearer ${zt}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email: contact.email, first_name: zfn || '-', last_name: zrest.join(' ') || '-' }),
+            });
+            if (zr.ok) {
+              const zd = await zr.json();
+              if (zd.join_url) {
+                reg.zoom_join_url = zd.join_url;
+                await base44.asServiceRole.entities.WebinarRegistration.update(reg.id, { zoom_join_url: zd.join_url, zoom_registration_id: String(zd.registrant_id || ''), zoom_error: '' });
+              }
+            } else {
+              const zerr = `reminder http_${zr.status}: ${(await zr.text().catch(() => '')).substring(0, 300)}`;
+              await base44.asServiceRole.entities.WebinarRegistration.update(reg.id, { zoom_error: zerr });
+              console.error('reminder-time zoom register failed:', zerr);
+            }
+          }
+        } catch (e) { console.error('reminder-time zoom register error:', e.message); }
+      }
       // הקישור לתזכורת: קישור אישי אם קיים, אחרת קישור הזום הקבוע, ורק בשעת חירום דף הנחיתה.
       const zoomLink = reg.zoom_join_url || zoomCache[reg.webinar_type] || lpCache[reg.webinar_type];
       if (!zoomLink) {
