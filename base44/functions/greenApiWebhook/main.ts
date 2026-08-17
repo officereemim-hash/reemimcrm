@@ -999,12 +999,12 @@ Deno.serve(async (req) => {
 
     // ===== FP-MeetingChoice: בחירת מיקום פגישה אחרי שהלקוח מעוניין (interested) =====
     if (contact && serviceRequest && serviceRequest.status === 'interested') {
+      // אפשרות "שיחת טלפון" לפגישה הוסרה (החלטת עינת 17.8) — שיחת התיאום עם המתאמת היא זרימה נפרדת ולא הושפעה
       const locationMap = {
-        'א': 'zoom', 'ב': 'modiin', 'ג': 'petah_tikva_wednesday', 'ד': 'phone',
+        'א': 'zoom', 'ב': 'modiin', 'ג': 'petah_tikva_wednesday',
         'זום': 'zoom', 'zoom': 'zoom', 'בזום': 'zoom',
         'מודיעין': 'modiin', 'במודיעין': 'modiin',
         'פתח תקווה': 'petah_tikva_wednesday', 'פתח-תקווה': 'petah_tikva_wednesday', 'פת': 'petah_tikva_wednesday', 'בפתח תקווה': 'petah_tikva_wednesday',
-        'טלפון': 'phone', 'שיחת טלפון': 'phone', 'בטלפון': 'phone', 'שיחה טלפונית': 'phone',
       };
       const chosenLocation = locationMap[normalizeAnswer(text)];
       if (chosenLocation) {
@@ -1016,7 +1016,7 @@ Deno.serve(async (req) => {
         if (isChange) {
           await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { pending_location_confirm: true });
           const clarifyTemplate = await getBotContent(base44, 'location_change_confirm') ||
-            'רק כדי לוודא 😊 קודם בחרת {prev} ועכשיו {new} — איפה נקיים את הפגישה?\nא) זום\nב) מודיעין\nג) פתח תקווה\nד) שיחת טלפון\n\n👈 השב/י באות המתאימה ואשלח את הקישור הנכון';
+            'רק כדי לוודא 😊 קודם בחרת {prev} ועכשיו {new} — איפה נקיים את הפגישה?\nא) זום\nב) מודיעין\nג) פתח תקווה\n\n👈 השב/י באות המתאימה ואשלח את הקישור הנכון';
           const clarifyMsg = clarifyTemplate
             .replaceAll('{prev}', LOCATION_LABEL[prevLocation] || prevLocation)
             .replaceAll('{new}', LOCATION_LABEL[chosenLocation] || chosenLocation);
