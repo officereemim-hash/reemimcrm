@@ -34,9 +34,28 @@ async function uchatSendTemplate(phone972, firstName, templateName, bodyParams) 
   if (!res.ok) { console.error('uchat template http', res.status, await res.text().catch(() => '')); return null; }
   const j = await res.json().catch(() => ({}));
   const mid = j?.mid || j?.data?.mid || null;
-  if (j?.status === 'ok' && mid) return { ...j, mid };
+  if (j?.status === 'ok' && mid) {
+    // uChat משהה את האוטומציה אחרי שליחת תבנית (מפרש כמענה נציג) —
+    // בלי resume לחיצה על כפתור בתבנית לא תפעיל את ה-Flow והבוט משתתק.
+    await resumeUchatBot(phone972);
+    return { ...j, mid };
+  }
   console.error('uchat template not ok:', JSON.stringify(j));
   return null;
+}
+async function resumeUchatBot(phone972) {
+  try {
+    const r = await fetch(`${UCHAT_BASE}/subscriber/get-info-by-user-id?user_id=${phone972}`, { headers: { Authorization: `Bearer ${UCHAT_TOKEN}` } });
+    if (!r.ok) return;
+    const j = await r.json();
+    const ns = j?.user_ns || j?.data?.user_ns || null;
+    if (!ns) { console.log(`uchat resume: no subscriber for ${phone972}`); return; }
+    const rb = await fetch(`${UCHAT_BASE}/subscriber/resume-bot`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${UCHAT_TOKEN}` },
+      body: JSON.stringify({ user_ns: ns }),
+    });
+    if (!rb.ok) console.error('uchat resume-bot http', rb.status, await rb.text().catch(() => ''));
+  } catch (e) { console.error('uchat resume-bot failed:', e.message); }
 }
 async function uchatSend(base44, phone, tplKey, firstName, params) {
   let p = String(phone || '').replace(/[\s\-\+\(\)]/g, '');
@@ -134,23 +153,57 @@ Deno.serve(async (req) => {
     }
 
     let zoomJoinUrl = '';
+    let zoomError = '';
     const zoomWebinarId = (await base44.asServiceRole.entities.SystemSetting.filter({ key: 'zoom_webinar_id' }))[0]?.value;
     if (zoomWebinarId && cleanEmail) {
       try {
         const zoomToken = await getZoomToken();
+        if (!zoomToken) zoomError = 'no_zoom_token';
         if (zoomToken) {
           const [firstName, ...rest] = String(full_name).trim().split(' ');
-          const zr = await fetch(`https://api.zoom.us/v2/webinars/${zoomWebinarId}/registrants`, {
-            method: 'POST', headers: { Authorization: `Bearer ${zoomToken}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: cleanEmail, first_name: firstName, last_name: rest.join(' ') || '-' }),
-          });
-          if (zr.ok) {
-            const zrData = await zr.json();
-            zoomJoinUrl = zrData.join_url || '';
-            await base44.asServiceRole.entities.WebinarRegistration.update(regRecord.id, { zoom_registration_id: String(zrData.registrant_id || ''), zoom_join_url: zoomJoinUrl });
-          } else { console.error('Zoom registrant failed:', await zr.text()); }
+          // ניסיון אחד + ריטריי — וכל כישלון נשמר ב-zoom_error (לא עוד כשל שקט)
+          for (let attempt = 0; attempt < 2 && !zoomJoinUrl; attempt++) {
+            if (attempt > 0) await new Promise(r => setTimeout(r, 2000));
+            try {
+              const zr = await fetch(`https://api.zoom.us/v2/webinars/${zoomWebinarId}/registrants`, {
+                method: 'POST', headers: { Authorization: `Bearer ${zoomToken}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: cleanEmail, first_name: firstName, last_name: rest.join(' ') || '-' }),
+              });
+              if (zr.ok) {
+                const zrData = await zr.json();
+                zoomJoinUrl = zrData.join_url || '';
+                zoomError = '';
+              } else {
+                zoomError = `http_${zr.status}: ${(await zr.text().catch(() => '')).substring(0, 400)}`;
+                console.error('Zoom registrant failed:', zoomError);
+              }
+            } catch (e) { zoomError = `fetch: ${e.message}`.substring(0, 400); }
+          }
         }
-      } catch (e) { console.error('Zoom registrant error:', e.message); }
+      } catch (e) { zoomError = `outer: ${e.message}`.substring(0, 400); console.error('Zoom registrant error:', e.message); }
+      await base44.asServiceRole.entities.WebinarRegistration.update(regRecord.id, {
+        ...(zoomJoinUrl ? { zoom_registration_id: zoomJoinUrl ? String((zoomError ? '' : '') || regRecord.zoom_registration_id || '') : '' } : {}),
+        zoom_join_url: zoomJoinUrl,
+        zoom_error: zoomError,
+      });
+      if (!zoomJoinUrl) {
+        // התראת אדמין — שלא יישאר לקוח בלי קישור בלי שאף אחד ידע
+        try {
+          const BREVO_ALERT_KEY = Deno.env.get('BREVO_API_KEY') || '';
+          const alertSender = (await base44.asServiceRole.entities.SystemSetting.filter({ key: 'mailing_sender_email' }))[0]?.value || '';
+          if (BREVO_ALERT_KEY && alertSender) {
+            await fetch('https://api.brevo.com/v3/smtp/email', {
+              method: 'POST', headers: { 'api-key': BREVO_ALERT_KEY, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                sender: { name: 'קרנות ראמים — מערכת', email: alertSender },
+                to: [{ email: 'office.reemim@gmail.com', name: 'משרד ראמים' }],
+                subject: `⚠️ רישום לזום נכשל — ${full_name}`,
+                htmlContent: `<div dir="rtl" style="font-family:Arial;font-size:15px">הרשמה לוובינר נקלטה, אבל הרישום לזום נכשל וללקוח אין קישור אישי.<br/>לקוח: ${full_name} • ${localPhone} • ${cleanEmail}<br/>שגיאה: ${zoomError}<br/><b>מה לעשות:</b> לשלוח ללקוח קישור הצטרפות ידנית, או לוודא שהוובינר בזום עם מופע עתידי ולבקש מהלקוח להירשם שוב.</div>`,
+              }),
+            });
+          }
+        } catch (e) { console.error('zoom-fail alert email error:', e.message); }
+      }
     }
 
     const hasRecording = false;
@@ -169,9 +222,13 @@ Deno.serve(async (req) => {
     }
     const rawEffectiveLink = hasRecording ? page.recording_url : zoomJoinUrl;
     const effectiveLink = rawEffectiveLink ? await createShortLink(base44, FUNCTIONS_BASE, rawEffectiveLink, 'zoom_join') : '';
+    // אין קישור? לעולם לא שולחים "קישור לזום:" ריק — מחליפים בהבטחה מפורשת לשליחה בנפרד (קטגוריה 24)
+    const confirmTemplateSafe = effectiveLink
+      ? confirmTemplate
+      : confirmTemplate.replace(/^.*\{zoom_link\}.*$/m, '🔗 קישור ההצטרפות האישי יישלח אליך בהודעה נפרדת לפני ההדרכה 🙏');
     const rawCalendarAddLink = buildCalendarAddLink(page.webinar_date, page.hero_title || 'וובינר — קרנות ראמים', rawEffectiveLink ? `קישור להצטרפות: ${rawEffectiveLink}` : '');
     const calendarAddLink = rawCalendarAddLink ? await createShortLink(base44, FUNCTIONS_BASE, rawCalendarAddLink, 'calendar') : '';
-    const message = fillTemplate(confirmTemplate, { name: full_name, date: dateStr, zoom_link: effectiveLink, calendar_add_link: calendarAddLink, webinar_title: page.hero_title || '' });
+    const message = fillTemplate(confirmTemplateSafe, { name: full_name, date: dateStr, zoom_link: effectiveLink, calendar_add_link: calendarAddLink, webinar_title: page.hero_title || '' });
 
     const botSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' });
     const botEnabled = botSettings[0]?.value === 'true';
