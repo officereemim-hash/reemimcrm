@@ -1277,7 +1277,12 @@ Deno.serve(async (req) => {
     // ===== FP-CarPlate: מספר רכב / "אין צורך" → הנחיות חניה → ואז השאלון (מודיעין + פתח תקווה) =====
     if (contact && serviceRequest && serviceRequest.current_step === 'waiting_car_plate') {
       const normalizedCar = normalizeAnswer(text);
-      const isNoCar = ['אין צורך', 'אין', 'לא צריך', 'לא', 'לא מגיע עם רכב', 'בלי רכב', 'אין רכב', 'בתחבורה ציבורית', 'באוטובוס', 'ברכבת', 'ברגל'].includes(normalizedCar);
+      // זיהוי "אין רכב" — גם בתוך משפט. 17.8: התאמה-מלאה בלבד (.includes על מערך) פספסה ניסוחים
+      // כמו "אין צורך ברכב" / "לא, אני מגיעה באוטובוס" והפילה אותם ל-LLM עם חיווי צעד-הבא שגוי.
+      // "לא"/"אין" בודדים נשארים התאמה-מלאה בלבד — עמומים מדי להכלה ("לא הבנתי מה עם החניה").
+      const NO_CAR_EXACT = ['לא', 'אין'];
+      const NO_CAR_SUBSTR = ['אין צורך', 'לא צריך', 'לא צריכה', 'אין רכב', 'אין לי רכב', 'בלי רכב', 'ללא רכב', 'לא מגיע עם רכב', 'לא מגיעה עם רכב', 'לא ברכב', 'לא באוטו', 'בתחבורה ציבורית', 'תחבורה ציבורית', 'באוטובוס', 'ברכבת', 'ברגל'];
+      const isNoCar = NO_CAR_EXACT.includes(normalizedCar) || NO_CAR_SUBSTR.some((kw) => normalizedCar.includes(kw));
       const carPlateMatch = text.match(/\b\d{5,8}\b/);
 
       if (isNoCar || carPlateMatch) {
