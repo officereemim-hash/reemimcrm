@@ -544,6 +544,43 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ===== FP-WebinarBenefit-UnknownNumber: "לקבלת ההטבה" ממספר שאין לו Contact =====
+    // חייב לרוץ *לפני* ברכת ליד-חדש (fp0_greeting) ואיסוף הפרטים (FP-PartialDetails) —
+    // אחרת "לקבלת ההטבה" נקלט כשם ("תודה לקבלת ההטבה!") או נשלף תפריט שירות רגיל.
+    // תרחיש: משתתף וובינר שכותב ממספר שונה מזה שנרשם בו. מאשרים בעדינות
+    // ומעבירים לבשמת לקישור ידני (הצלבה-אוטו-לפי-שם עלולה לקשר לאדם הלא-נכון).
+    {
+      const _benefitUnknown = ['לקבלת ההטבה', 'לקבלת הטבה', 'הטבה', 'ההטבה'].includes(normalizeAnswer(text))
+        || normalizeAnswer(text).includes('לקבלת ההטבה') || normalizeAnswer(text).includes('לקבלת הטבה');
+      if (!contact && _benefitUnknown) {
+        await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
+        const unknownTpl = await getBotContent(base44, 'webinar_benefit_unknown_number')
+          || 'נראה שאתה פונה בקשר להטבה מההדרכה 🎁\nמהמספר הזה לא מצאתי את ההרשמה — יתכן שנרשמת ממספר אחר.\nהעברתי את הפנייה לבשמת, והיא תחזור אליך ותמשיך איתך בהקדם 🙏';
+        const unknownSent = await sendWhatsApp(chatId, unknownTpl, botEnabled);
+        await logOutgoing(base44, unknownSent?.idMessage || `out_${Date.now()}_fp_benefit_unknown`, phone, unknownTpl, chatId, conversationId, outgoingStatus);
+        try {
+          const BREVO_API_KEY = Deno.env.get('BREVO_API_KEY') || '';
+          const senderSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'mailing_sender_email' });
+          const senderEmail = senderSettings[0]?.value || '';
+          if (BREVO_API_KEY && senderEmail) {
+            const alertHtml = `<div dir="rtl" style="font-family:Arial;font-size:16px">📌 <b>פונה בקשר להטבת וובינר ממספר לא-מוכר</b><br/>טלפון: ${phone}<br/>הטקסט שנשלח: ${String(text || '').substring(0, 200)}<br/><br/>יתכן משתתף שנרשם ממספר אחר — יש לאתר ידנית ולהמשיך את מסלול ההטבה.</div>`;
+            await fetch('https://api.brevo.com/v3/smtp/email', {
+              method: 'POST',
+              headers: { 'api-key': BREVO_API_KEY, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                sender: { name: 'קרנות ראמים — בוט', email: senderEmail },
+                to: [{ email: 'office.reemim@gmail.com', name: 'משרד ראמים' }],
+                subject: `📌 פניית הטבה ממספר לא-מוכר — ${phone}`,
+                htmlContent: alertHtml,
+              }),
+            });
+          }
+        } catch (e) { console.error('benefit-unknown admin alert error:', e.message); }
+        try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${unknownTpl}` }); } catch (_) {}
+        return Response.json({ ok: true, fast_path: 'fp_webinar_benefit_unknown_number' });
+      }
+    }
+
     if (!contact && cachedConversationSettings.length === 0) {
       const greetingMessage = await getBotContent(base44, 'greeting');
       if (greetingMessage) {
