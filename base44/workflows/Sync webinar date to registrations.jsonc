@@ -1,0 +1,37 @@
+{
+  "name": "Sync webinar date to registrations",
+  "description": "\u05db\u05e9-webinar_date \u05de\u05e9\u05ea\u05e0\u05d4 \u05d1\u05d3\u05e3 \u05e0\u05d7\u05d9\u05ea\u05d4, \u05de\u05e1\u05e0\u05db\u05e8\u05df \u05d0\u05ea \u05d4\u05ea\u05d0\u05e8\u05d9\u05da \u05dc\u05db\u05dc \u05d4\u05d4\u05e8\u05e9\u05de\u05d5\u05ea \u05e9\u05dc \u05d4\u05de\u05d7\u05d6\u05d5\u05e8 \u05d4\u05e0\u05d5\u05db\u05d7\u05d9 \u05d5\u05de\u05d0\u05e4\u05e1 \u05d3\u05d2\u05dc\u05d9 \u05ea\u05d6\u05db\u05d5\u05e8\u05ea",
+  "trigger": {
+    "condition": "${ (.trigger.changed_fields | index(\"webinar_date\") != null) }",
+    "config": {
+      "trigger_type": "entity",
+      "events": [
+        "update"
+      ],
+      "entity_name": "LandingPage"
+    }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "sync_webinar_date_to_registrations",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "run_function": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "onLandingPageDateSync",
+            "args": {}
+          },
+          "then": "end"
+        }
+      }
+    ]
+  },
+  "x-base44-migrated-from-automation": {
+    "legacy_payload_function": "onLandingPageDateSync"
+  }
+}

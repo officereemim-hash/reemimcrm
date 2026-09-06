@@ -1,0 +1,37 @@
+{
+  "name": "autoMeetingCreated",
+  "description": "\u05db\u05e9\u05e0\u05d5\u05e6\u05e8\u05ea \u05e4\u05d2\u05d9\u05e9\u05d4 \u05d7\u05d3\u05e9\u05d4 \u2014 \u05d9\u05d5\u05e6\u05e8 token \u05dc\u05ea\u05d9\u05d0\u05d5\u05dd \u05d5\u05e9\u05d5\u05dc\u05d7 \u05e7\u05d9\u05e9\u05d5\u05e8 WhatsApp \u05d0\u05dd BASE44_APP_URL \u05de\u05d5\u05d2\u05d3\u05e8",
+  "trigger": {
+    "condition": "${ ((.trigger.data.scheduled_at == null or .trigger.data.scheduled_at == \"\" or .trigger.data.scheduled_at == [] or .trigger.data.scheduled_at == {}) and (.trigger.data.calcom_event_id == null or .trigger.data.calcom_event_id == \"\" or .trigger.data.calcom_event_id == [] or .trigger.data.calcom_event_id == {})) }",
+    "config": {
+      "trigger_type": "entity",
+      "events": [
+        "create"
+      ],
+      "entity_name": "Meeting"
+    }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "automeetingcreated",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "run_function": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "autoMeetingCreated",
+            "args": {}
+          },
+          "then": "end"
+        }
+      }
+    ]
+  },
+  "x-base44-migrated-from-automation": {
+    "legacy_payload_function": "autoMeetingCreated"
+  }
+}

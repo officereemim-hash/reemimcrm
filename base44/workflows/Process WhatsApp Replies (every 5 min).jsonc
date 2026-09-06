@@ -1,0 +1,46 @@
+{
+  "name": "Process WhatsApp Replies (every 5 min)",
+  "description": "\u05e9\u05d5\u05dc\u05e3 \u05d4\u05d5\u05d3\u05e2\u05d5\u05ea pending_reply \u05d5-timeout_fallback \u05d5\u05e9\u05d5\u05dc\u05d7 \u05ea\u05e9\u05d5\u05d1\u05d5\u05ea \u05de\u05d0\u05d5\u05d7\u05e8\u05d5\u05ea \u05e9\u05dc \u05d4\u05e1\u05d5\u05db\u05df",
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "scheduled",
+      "events": [],
+      "schedule_mode": "interval",
+      "cron_expression": null,
+      "one_time_date": null,
+      "timezone": "UTC",
+      "interval_value": 5,
+      "interval_unit": "minutes",
+      "interval_anchor": "2026-07-07T11:38:18.359000",
+      "ends_type": "never",
+      "ends_on_date": null,
+      "ends_after_count": null
+    }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "process_whatsapp_replies_every_5_min",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "run_function": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "processWhatsAppReplies",
+            "args": {
+              "secret": "pwr_scheduled_run_2026"
+            }
+          },
+          "then": "end"
+        }
+      }
+    ]
+  },
+  "x-base44-migrated-from-automation": {
+    "legacy_payload_function": "processWhatsAppReplies"
+  }
+}

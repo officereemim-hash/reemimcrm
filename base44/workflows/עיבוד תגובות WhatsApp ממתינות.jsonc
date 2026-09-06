@@ -1,0 +1,44 @@
+{
+  "name": "\u05e2\u05d9\u05d1\u05d5\u05d3 \u05ea\u05d2\u05d5\u05d1\u05d5\u05ea WhatsApp \u05de\u05de\u05ea\u05d9\u05e0\u05d5\u05ea",
+  "description": "\u05e2\u05d5\u05d1\u05e8 \u05db\u05dc 5 \u05d3\u05e7\u05d5\u05ea \u05e2\u05dc \u05d4\u05d5\u05d3\u05e2\u05d5\u05ea WhatsApp \u05e9\u05de\u05de\u05ea\u05d9\u05e0\u05d5\u05ea \u05dc\u05ea\u05d2\u05d5\u05d1\u05d4 \u05de\u05d4-Agent \u05d5\u05e9\u05d5\u05dc\u05d7 \u05d0\u05d5\u05ea\u05df",
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "scheduled",
+      "events": [],
+      "schedule_mode": "interval",
+      "cron_expression": null,
+      "one_time_date": null,
+      "timezone": "UTC",
+      "interval_value": 5,
+      "interval_unit": "minutes",
+      "interval_anchor": "2026-05-01T01:24:59.822000",
+      "ends_type": "never",
+      "ends_on_date": null,
+      "ends_after_count": null
+    }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "whatsapp",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "run_function": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "processWhatsAppReplies",
+            "args": {}
+          },
+          "then": "end"
+        }
+      }
+    ]
+  },
+  "x-base44-migrated-from-automation": {
+    "legacy_payload_function": "processWhatsAppReplies"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "name": "\u05d4\u05ea\u05e8\u05d0\u05ea \u05de\u05d9\u05d9\u05dc \u05e2\u05dc \u05d4\u05e2\u05d1\u05e8\u05d4 \u05dc\u05e0\u05e6\u05d9\u05d2\u05d4 (Contact \u2192 waiting_agent)",
+  "description": "\u05db\u05e9bot_status \u05e9\u05dc \u05d0\u05d9\u05e9 \u05e7\u05e9\u05e8 \u05de\u05e9\u05ea\u05e0\u05d4 \u05dc-waiting_agent (\u05de\u05d4\u05e1\u05d5\u05db\u05df, \u05de\u05d4\u05e6\u05d5\u05d5\u05ea \u05d0\u05d5 \u05de\u05db\u05dc \u05de\u05e7\u05d5\u05e8) \u2014 \u05e9\u05dc\u05d9\u05d7\u05ea \u05de\u05d9\u05d9\u05dc \u05d4\u05ea\u05e8\u05d0\u05d4 \u05dc-office.reemim@gmail.com. \u05de\u05d9\u05d9\u05dc \u05d1\u05dc\u05d1\u05d3, \u05e2\u05dd \u05d3\u05d3\u05d5\u05e4 \u05e9\u05dc \u05e9\u05e2\u05d4.",
+  "trigger": {
+    "condition": "${ ((.trigger.changed_fields | index(\"bot_status\") != null) and (.trigger.data.bot_status == \"waiting_agent\")) }",
+    "config": {
+      "trigger_type": "entity",
+      "events": [
+        "update"
+      ],
+      "entity_name": "Contact"
+    }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "contact_waiting_agent",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "run_function": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "onContactHandoff",
+            "args": {}
+          },
+          "then": "end"
+        }
+      }
+    ]
+  },
+  "x-base44-migrated-from-automation": {
+    "legacy_payload_function": "onContactHandoff"
+  }
+}
