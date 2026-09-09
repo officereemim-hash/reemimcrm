@@ -193,7 +193,7 @@ async function findServiceRequest(base44, contactId, serviceType) {
   const open = requests.find(request => !['completed', 'cancelled', 'closed_lost', 'followup_closed'].includes(request.status));
   if (open) return open;
   if (requests[0]) return requests[0];
-  const requestData = { contact_id: contactId, source: 'bot', status: 'new' };
+  const requestData = { contact_id: contactId, source: 'calcom', status: 'new' };
   if (serviceType) requestData.service_type = serviceType;
   return await base44.asServiceRole.entities.ServiceRequest.create(requestData);
 }

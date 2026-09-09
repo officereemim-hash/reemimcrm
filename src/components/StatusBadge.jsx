@@ -121,4 +121,5 @@ export const SOURCE_LABELS = {
   bot: 'בוט',
   bar_call: 'שיחת בר',
   shoranss: 'שורנס',
+  calcom: 'קביעת פגישה עצמאית (Cal.com)',
 };

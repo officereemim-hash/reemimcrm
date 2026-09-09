@@ -61,7 +61,8 @@
         "excel_import",
         "manual",
         "webinar",
-        "website"
+        "website",
+        "calcom"
       ]
     },
     "current_step": {
@@ -70,7 +71,7 @@
     },
     "conversation_id": {
       "type": "string",
-      "description": "\u05de\u05d6\u05d4\u05d4 \u05e9\u05d9\u05d7\u05ea \u05d4\u05d1\u05d5\u05d8 \u05d1\u05d5\u05d5\u05d0\u05e6\u05d0\u05e4"
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05e9\u05d9\u05d7\u05ea \u05d4\u05d1\u05d5\u05d8 \u05d1\u05d5\u05d5\u05d0\u05d8\u05e1\u05d0\u05e4"
     },
     "pending_bot_message": {
       "type": "string",
@@ -94,7 +95,7 @@
     "scheduled_date_whatsapp": {
       "type": "string",
       "format": "date-time",
-      "description": "\u05ea\u05d5\u05e8 \u05d5\u05d5\u05d0\u05e6\u05d0\u05e4"
+      "description": "\u05ea\u05d5\u05e8 \u05d5\u05d5\u05d5\u05d0\u05d8\u05e1\u05d0\u05e4"
     },
     "scheduled_date_clinic": {
       "type": "string",
