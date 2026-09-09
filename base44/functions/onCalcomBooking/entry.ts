@@ -49,21 +49,34 @@ async function uchatSend(base44, phone, tplKey, firstName, params) {
 }
 
 // ===== send-text (טקסט חופשי) — ברירת המחדל, תבנית כגיבוי =====
-const _uchatNsCache = {};
+const _uchatInfoCache = {};
 
-async function uchatResolveNs(phone972) {
+// allow_send_message = הדגל של מטא אם חלון 24 השעות פתוח (מונע שגיאה 131049)
+async function uchatGetInfo(phone972) {
   if (!phone972) return null;
-  if (_uchatNsCache[phone972]) return _uchatNsCache[phone972];
+  if (_uchatInfoCache[phone972]) return _uchatInfoCache[phone972];
   try {
     const r = await fetch(`${UCHAT_BASE}/subscriber/get-info-by-user-id?user_id=${phone972}`, {
       headers: { Authorization: `Bearer ${UCHAT_TOKEN}` },
     });
     if (!r.ok) return null;
     const j = await r.json();
-    const ns = j?.user_ns || j?.data?.user_ns || null;
-    if (ns) _uchatNsCache[phone972] = ns;
-    return ns;
+    const d = j?.data || j;
+    const info = { ns: d?.user_ns || null, allowSend: d?.allow_send_message !== false };
+    if (info.ns) _uchatInfoCache[phone972] = info;
+    return info;
   } catch { return null; }
+}
+
+async function uchatResolveNs(phone972) {
+  const info = await uchatGetInfo(phone972);
+  return info?.ns || null;
+}
+
+// ברירת מחדל true — אם uChat לא זמינה, לא חוסמים שליחה שהייתה מצליחה
+async function uchatWindowOpen(phone972) {
+  const info = await uchatGetInfo(phone972);
+  return info ? info.allowSend : true;
 }
 
 async function uchatSendText(phone972, message) {
@@ -156,8 +169,11 @@ function fillTemplate(template, values) {
 async function sendWhatsApp(base44Instance, phone, message, uchatTplKey, uchatFirstName, uchatParams) {
   if (!phone || !message) return false;
   // טקסט חופשי קודם (חלון 24 שעות פתוח, למשל אחרי "קבעתי")
-  const textResult = await uchatSendText(normalizePhone(phone), message);
-  if (textResult.ok) return true;
+  const windowOpen = await uchatWindowOpen(normalizePhone(phone));
+  if (windowOpen) {
+    const textResult = await uchatSendText(normalizePhone(phone), message);
+    if (textResult.ok) return true;
+  }
   // גיבוי בתבנית — ייכנס לפעולה כשיתווספו רשומות uchat_tpl_<key>
   if (uchatTplKey) {
     return await uchatSend(base44Instance, phone, uchatTplKey, uchatFirstName || '', uchatParams || []);

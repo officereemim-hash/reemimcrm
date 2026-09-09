@@ -47,21 +47,35 @@ async function uchatSend(base44, phone, tplKey, firstName, params) {
 }
 
 // ===== send-text (טקסט חופשי) — ברירת המחדל בתוך שיחה פעילה, כמו בצד הנכנס =====
-const _uchatNsCache = {};
+const _uchatInfoCache = {};
 
-async function uchatResolveNs(phone972) {
+// allow_send_message = הדגל של מטא עצמה אם חלון 24 השעות פתוח.
+// בלי הבדיקה הזאת נשלחות בקשות חסומות שפוגעות בבריאות המספר במטא (שגיאה 131049).
+async function uchatGetInfo(phone972) {
   if (!phone972) return null;
-  if (_uchatNsCache[phone972]) return _uchatNsCache[phone972];
+  if (_uchatInfoCache[phone972]) return _uchatInfoCache[phone972];
   try {
     const r = await fetch(`${UCHAT_BASE}/subscriber/get-info-by-user-id?user_id=${phone972}`, {
       headers: { Authorization: `Bearer ${UCHAT_TOKEN}` },
     });
     if (!r.ok) return null;
     const j = await r.json();
-    const ns = j?.user_ns || j?.data?.user_ns || null;
-    if (ns) _uchatNsCache[phone972] = ns;
-    return ns;
+    const d = j?.data || j;
+    const info = { ns: d?.user_ns || null, allowSend: d?.allow_send_message !== false };
+    if (info.ns) _uchatInfoCache[phone972] = info;
+    return info;
   } catch { return null; }
+}
+
+async function uchatResolveNs(phone972) {
+  const info = await uchatGetInfo(phone972);
+  return info?.ns || null;
+}
+
+// ברירת מחדל true — אם uChat לא זמינה, לא חוסמים שליחה שהייתה מצליחה
+async function uchatWindowOpen(phone972) {
+  const info = await uchatGetInfo(phone972);
+  return info ? info.allowSend : true;
 }
 
 async function uchatSendText(phone972, message) {
@@ -205,15 +219,22 @@ Deno.serve(async (req) => {
       if (!botEnabled) return { status: 'skipped', errorDetail: 'log_only_whatsapp_bot_disabled' };
 
       // טקסט חופשי קודם (שיחה פעילה בתוך חלון 24 שעות)
-      const textResult = await uchatSendText(phone, message);
-      if (textResult.ok) return { status: 'sent', errorDetail: '' };
+      const windowOpen = await uchatWindowOpen(phone);
+      let textReason = 'window_closed_24h';
+      if (windowOpen) {
+        const textResult = await uchatSendText(phone, message);
+        if (textResult.ok) return { status: 'sent', errorDetail: '' };
+        textReason = textResult.reason;
+      }
 
       // גיבוי בתבנית — ייכנס לפעולה כשיתווספו רשומות uchat_tpl_<key> ב-SystemSetting
       if (uchatTplKey) {
         const ok = await uchatSend(base44, contact.phone, uchatTplKey, firstName, uchatParams || []);
         if (ok) return { status: 'sent', errorDetail: 'sent_via_template_fallback' };
       }
-      return { status: 'failed', errorDetail: `send_text_failed: ${textResult.reason}` };
+      // חלון סגור ואין תבנית — לא שולחים בקשה חסומה למטא (הפונה קיבל אישור במייל מקלקום)
+      if (!windowOpen) return { status: 'skipped', errorDetail: 'window_closed_24h' };
+      return { status: 'failed', errorDetail: `send_text_failed: ${textReason}` };
     }
 
     async function sendWhatsAppFile(fileUrl, fileName) {
@@ -459,13 +480,17 @@ Deno.serve(async (req) => {
       // השאלון נשלח רק אחרי מענה הרכב (greenApiWebhook / FP-CarPlate) — בקשה אחת בכל פעם.
       if (templateKey === 'meeting_scheduled_modiin' || templateKey === 'meeting_scheduled_petah_tikva') {
         const carTemplate = await getContent('car_plate_request');
+        let carResult = null;
         if (carTemplate) {
           await new Promise(resolve => setTimeout(resolve, 3000));
           const carMessage = fillTemplate(carTemplate, values);
-          const carResult = await sendWhatsApp(carMessage, 'car_plate_request', [contact.full_name || '']);
+          carResult = await sendWhatsApp(carMessage, 'car_plate_request', [contact.full_name || '']);
           await logCommunication(carMessage, 'car_plate_request', carResult);
         }
-        await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: 'waiting_car_plate' });
+        // אם בקשת הרכב לא נשלחה בגלל חלון סגור — לא מעמידים את הפנייה בהמתנה לתשובה שלא בוקשה
+        if (carResult?.errorDetail !== 'window_closed_24h') {
+          await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: 'waiting_car_plate' });
+        }
         await base44.asServiceRole.entities.Contact.update(contact.id, {
           bot_status: 'waiting_user_reply',
           last_bot_interaction_at: new Date().toISOString(),
