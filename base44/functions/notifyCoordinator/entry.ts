@@ -110,6 +110,29 @@ Deno.serve(async (req) => {
       result = { status: ok ? 'sent' : 'failed', errorDetail: ok ? '' : 'uchat_send_failed' };
     }
 
+    // התראת מייל לבשמת — לא דורשת אישור תבנית של מטא, ולכן זהו הערוץ האמין תמיד
+    try {
+      const BREVO_API_KEY = Deno.env.get('BREVO_API_KEY') || '';
+      const senderEmail = await getSetting('mailing_sender_email');
+      const adminEmail = (await getSetting('admin_alert_email')) || 'bosmat@oryx-alt.com';
+      if (BREVO_API_KEY && senderEmail) {
+        const appUrl = 'https://reemim-crm.base44.app';
+        const linkHtml = serviceRequest
+          ? `<br/><br/><a href="${appUrl}/service-requests/${serviceRequest.id}">פתיחת הפנייה במערכת</a>`
+          : `<br/><br/><a href="${appUrl}/contacts/${contact.id}">פתיחת כרטיס הלקוח במערכת</a>`;
+        await fetch('https://api.brevo.com/v3/smtp/email', {
+          method: 'POST',
+          headers: { 'api-key': BREVO_API_KEY, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sender: { name: 'קרנות ראמים — סוכן המערכת', email: senderEmail },
+            to: [{ email: adminEmail, name: 'בשמת' }],
+            subject: `📞 פונה מעוניין בתיאום שיחה — ${contact.full_name || contact.phone || ''}`,
+            htmlContent: `<div dir="rtl" style="font-family:Arial;font-size:16px">${message.replace(/\n/g, '<br/>')}${linkHtml}</div>`,
+          }),
+        });
+      }
+    } catch (e) { console.error('notifyCoordinator email failed:', e.message); }
+
     await base44.asServiceRole.entities.Communication.create({
       contact_id: contact.id,
       type: 'whatsapp',

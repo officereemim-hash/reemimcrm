@@ -437,6 +437,21 @@ Deno.serve(async (req) => {
     }
     // ===== סוף הסרה מתפוצה =====
 
+    // ===== שער WhatsAppBotControl: השהיית בוט לפי מספר (נקבע ע"י האדמינית מסוכן המערכת) =====
+    {
+      const controls = await base44.asServiceRole.entities.WhatsAppBotControl.filter({ phone });
+      if (controls.length === 0) {
+        const localControls = await base44.asServiceRole.entities.WhatsAppBotControl.filter({ phone: localPhone });
+        if (localControls[0]?.mode === 'paused') {
+          await logIncoming(base44, idMessage, phone, text, chatId, cachedConversationSettings[0]?.value || null, 'skipped');
+          return Response.json({ ok: true, skipped: true, reason: 'bot_control_paused' });
+        }
+      } else if (controls[0].mode === 'paused') {
+        await logIncoming(base44, idMessage, phone, text, chatId, cachedConversationSettings[0]?.value || null, 'skipped');
+        return Response.json({ ok: true, skipped: true, reason: 'bot_control_paused' });
+      }
+    }
+
     // ===== שער waiting_agent: הבוט שותק כשהשיחה אצל נציגה =====
     if (contact && contact.bot_status === 'waiting_agent') {
       await logIncoming(base44, idMessage, phone, text, chatId, cachedConversationSettings[0]?.value || null, 'skipped');
