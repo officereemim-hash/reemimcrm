@@ -7,6 +7,7 @@ import CommunicationsTab from '@/components/settings/CommunicationsTab';
 import CouponsSettingsTab from '@/components/settings/CouponsSettingsTab';
 import ResetTestUserCard from '@/components/settings/ResetTestUserCard';
 import HelpGuideTab from '@/components/settings/HelpGuideTab';
+import SystemAgentCard from '@/components/settings/SystemAgentCard';
 import BotChat from '@/pages/BotChat';
 
 export default function Settings() {
@@ -114,6 +115,7 @@ export default function Settings() {
       {activeTab === 'guide' && <HelpGuideTab />}
 
       {activeTab === 'general' && <div className="grid md:grid-cols-2 gap-6">
+        <div className="md:col-span-2"><SystemAgentCard /></div>
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
