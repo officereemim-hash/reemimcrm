@@ -18,6 +18,7 @@ const STATUS_LABELS = {
 
 const QUEUE_STATUS_LABELS = {
   pending: 'ממתין',
+  processing: 'בטיפול — אין לשלוח שוב לפני בירור',
   sent: 'נשלח',
   delivered: 'נמסר',
   opened: 'נפתח',
@@ -38,6 +39,7 @@ export default function CampaignHistory() {
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const handleResend = async (c) => {
+    if (c.greeting_key) return;
     if (!confirm(`לשלוח מחדש את "${c.name}" ל-${c.recipients_count || 0} נמענים?`)) return;
     setResendingId(c.id);
     try {
@@ -153,7 +155,7 @@ export default function CampaignHistory() {
                 <Button size="sm" variant="outline" onClick={() => setPreviewCampaign(c)}>
                   <Eye size={14} className="ml-1" /> צפייה
                 </Button>
-                <Button size="sm" onClick={() => handleResend(c)} disabled={resendingId === c.id}>
+                <Button size="sm" onClick={() => handleResend(c)} disabled={resendingId === c.id || !!c.greeting_key} title={c.greeting_key ? 'ברכות נשלחות רק במסלול הברכות המוגן מכפילויות' : undefined}>
                   {resendingId === c.id
                     ? <><Loader2 size={14} className="ml-1 animate-spin" /> שולח...</>
                     : <><Send size={14} className="ml-1" /> שלח מחדש</>}

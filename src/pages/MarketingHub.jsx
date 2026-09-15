@@ -12,6 +12,7 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import ComposeDialog from '@/components/marketing/ComposeDialog';
 import TemplateEditor from '@/components/marketing/TemplateEditor';
 import CampaignHistory from '@/components/marketing/CampaignHistory';
+import HolidayGreetingCard from '@/components/marketing/HolidayGreetingCard';
 import ViewToggle from '@/components/shared/ViewToggle';
 import BulkDeleteBar from '@/components/shared/BulkDeleteBar';
 
@@ -198,6 +199,7 @@ export default function MarketingHub() {
         </Link>
       </div>
 
+      {isAdmin && <HolidayGreetingCard />}
       {/* Message types */}
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
         {MESSAGE_TYPES.map(type => {
