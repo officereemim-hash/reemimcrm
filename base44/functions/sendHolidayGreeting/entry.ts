@@ -22,7 +22,7 @@ export default async function(req) {
       getSetting(base44, `uchat_tpl_${holiday}`), getSetting(base44, 'whatsapp_live_mode'), getSetting(base44, 'whatsapp_bot_enabled'), getSetting(base44, 'whatsapp_daily_limit', '100'),
       listAll(base44.asServiceRole.entities.Contact), listAll(base44.asServiceRole.entities.CampaignQueue, { whatsapp_template_key: holiday }),
     ]);
-    const dailyLimit = Math.max(0, Math.min(100, Number.isFinite(Number(limitSetting)) ? Math.floor(Number(limitSetting)) : 100));
+    const dailyLimit = Math.max(0, Math.min(150, Number.isFinite(Number(limitSetting)) ? Math.floor(Number(limitSetting)) : 150));
     const existing = new Set(queued.map(q => q.deduplication_key));
     const optedOutPhones = new Set(contacts.filter(c => c.mailing_opt_out).map(c => normalizePhone(c.phone)));
     const selected = new Map();

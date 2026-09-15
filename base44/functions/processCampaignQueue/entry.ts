@@ -13,7 +13,7 @@ export default async function(req) {
     const body = await req.json();
     const clock = await israelClock(base44);
     const [enabled, live, limitSetting] = await Promise.all([getSetting(base44, 'whatsapp_bot_enabled'), getSetting(base44, 'whatsapp_live_mode'), getSetting(base44, 'whatsapp_daily_limit', '100')]);
-    const dailyLimit = Math.max(0, Math.min(100, Number.isFinite(Number(limitSetting)) ? Math.floor(Number(limitSetting)) : 100));
+    const dailyLimit = Math.max(0, Math.min(150, Number.isFinite(Number(limitSetting)) ? Math.floor(Number(limitSetting)) : 150));
     if (body.dry_run === true) return Response.json({ success: true, dry_run: true, date: clock.date, daily_limit: dailyLimit, whatsapp_live: live === 'true' && enabled === 'true', message: 'בדיקת הגדרות בלבד — ללא שליחת הודעות או שינוי התור' });
     lock = await acquireLock(base44, 'campaign_dispatch_lock');
     if (!lock) return Response.json({ success: true, skipped: 'another_run_active' });
