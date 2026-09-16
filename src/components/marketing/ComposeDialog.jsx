@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { MessageCircle, Mail, Send } from 'lucide-react';
+import { MessageCircle, Mail, Send, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -332,6 +332,10 @@ export default function ComposeDialog({ open, onClose, contacts, onDone }) {
           {/* WhatsApp message */}
           {(form.channel === 'whatsapp' || form.channel === 'both') && (
             <div className="space-y-1">
+              <div className="flex items-start gap-2 bg-amber-50 border border-amber-300 rounded-lg px-3 py-2 text-xs text-amber-800">
+                <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+                <span>הודעת WhatsApp לניוזלטר אינה אפשרית כרגע במסגרת Meta רשמי, מכיוון שהתבנית אינה מאושרת. השליחה תוכל להתבצע רק לאחר אישור התבנית במטא.</span>
+              </div>
               <div className="flex items-center justify-between">
                 <Label>הודעת WhatsApp *</Label>
                 <EmojiPicker onSelect={(emoji) => {
