@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import EmailBlockEditor from './EmailBlockEditor';
 import EmailPreview from './EmailPreview';
 import EmojiPicker from './EmojiPicker';
+import WhatsAppTemplateWarning from './WhatsAppTemplateWarning';
 
 const TEMPLATE_TYPES = [
   { key: 'newsletter', label: 'ניוזלטר תקופתי' },
@@ -217,6 +218,7 @@ export default function TemplateEditor() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
+              <WhatsAppTemplateWarning type={selectedType} />
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
                   <Label className="text-xs">תוכן ההודעה</Label>
