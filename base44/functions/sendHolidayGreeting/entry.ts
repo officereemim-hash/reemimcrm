@@ -1,7 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.48';
 import { getSetting, listAll, firstName, normalizePhone, isEligible, israelClock, acquireLock, releaseLock, hashPreview, appendQueue } from '../../shared/greetingQueue.ts';
 
-const HOLIDAYS = { rosh_hashana: 'ראש השנה', pesach: 'פסח' };
+const HOLIDAYS = { general_holiday: 'ברכת חגים כללית', rosh_hashana: 'ראש השנה', pesach: 'פסח' };
 const AUDIENCES = { everyone: () => true, all_active: c => c.status === 'active_client', completed: c => c.status === 'completed', in_progress: c => ['in_progress', 'quote_sent'].includes(c.status), new_leads: c => c.status === 'new_lead' };
 
 export default async function(req) {
