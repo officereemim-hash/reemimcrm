@@ -6,6 +6,6 @@ export default function HolidayGreetingConfirmation({ preview, busy, onConfirm }
     <p className="text-sm text-muted-foreground">נוסח התבנית המאושרת בלבד, עם שם פרטי וכפתור ״הסר״; ללא שינוי הנוסח.</p>
     <p className="text-sm">{preview.message}</p>
     <p className="text-xs text-muted-foreground">עד {preview.daily_limit} הודעות דיוור ביום, עם השהיה בין שליחות. לחיצה על האישור מוסיפה לתור השליחה.</p>
-    <Button onClick={onConfirm} disabled={busy || !preview.can_send}>{busy ? 'מוסיף לתור...' : 'אישור והוספה לתור השליחה'}</Button>
+    <Button onClick={onConfirm} disabled={busy || !preview.can_send}>{busy ? 'מוסיף לתור...' : 'שלח עכשיו (סופי)'}</Button>
   </div>;
 }
