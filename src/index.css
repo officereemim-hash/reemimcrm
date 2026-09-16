@@ -34,6 +34,11 @@
 }
 
 @layer base {
+  :root, .dark {
+    --contact-inactive: 237 233 225;
+    --contact-inactive-foreground: 122 106 74;
+  }
+
   * {
     @apply border-border outline-ring/50;
   }

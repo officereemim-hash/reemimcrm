@@ -5,6 +5,7 @@ const contactStatusMap = {
   in_progress:   { label: 'בטיפול',        bg: '#E8EEF8', text: '#2952A3' },
   quote_sent:    { label: 'הצעה נשלחה',    bg: '#F8F0DC', text: '#A87B20' },
   active_client: { label: 'לקוח פעיל',     bg: '#DCF0E8', text: '#2E7A4A' },
+  inactive_client: { label: 'לקוח לא פעיל', bg: 'rgb(var(--contact-inactive))', text: 'rgb(var(--contact-inactive-foreground))' },
   completed:     { label: 'הושלם',         bg: '#D8EDD8', text: '#2A6A2A' },
   not_relevant:  { label: 'לא רלוונטי',    bg: '#EBEBEB', text: '#555555' },
   archived:      { label: 'ארכיון',        bg: '#D8D8D8', text: '#444444' },

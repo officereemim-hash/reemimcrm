@@ -56,6 +56,7 @@ export default function ContactFormDialog({ contact, onClose, onSave }) {
                   <SelectItem value="in_progress">בטיפול</SelectItem>
                   <SelectItem value="quote_sent">הצעה נשלחה</SelectItem>
                   <SelectItem value="active_client">לקוח פעיל</SelectItem>
+                  <SelectItem value="inactive_client">לקוח לא פעיל</SelectItem>
                   <SelectItem value="completed">הושלם</SelectItem>
                   <SelectItem value="not_relevant">לא רלוונטי</SelectItem>
                 </SelectContent>

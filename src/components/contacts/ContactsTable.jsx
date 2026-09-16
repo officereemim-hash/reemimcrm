@@ -7,8 +7,8 @@ import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
 
 export default function ContactsTable({ contacts, selectedIds, onToggleSelect, onToggleAll, onDelete, onEdit }) {
-  const allSelected = contacts.length > 0 && selectedIds.length === contacts.length;
-  const someSelected = selectedIds.length > 0 && selectedIds.length < contacts.length;
+  const allSelected = contacts.length > 0 && contacts.every(c => selectedIds.includes(c.id));
+  const someSelected = !allSelected && contacts.some(c => selectedIds.includes(c.id));
 
   return (
     <div className="border rounded-lg overflow-hidden">

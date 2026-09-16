@@ -13,6 +13,8 @@ module.exports = {
   			heebo: ['Heebo', 'sans-serif'],
   		},
   		colors: {
+        'contact-inactive': 'rgb(var(--contact-inactive) / <alpha-value>)',
+        'contact-inactive-foreground': 'rgb(var(--contact-inactive-foreground) / <alpha-value>)',
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',
   			success: 'hsl(var(--success))',

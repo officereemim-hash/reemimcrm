@@ -11,6 +11,8 @@ import { ContactStatusBadge, BotStatusBadge, SERVICE_TYPE_LABELS, SOURCE_LABELS 
 import { format } from 'date-fns';
 import ContactFormDialog from '@/components/contacts/ContactFormDialog';
 import ContactsTable from '@/components/contacts/ContactsTable';
+import ContactsLoadMore from '@/components/contacts/ContactsLoadMore';
+import loadAllContacts from '@/components/contacts/loadAllContacts';
 import ViewToggle from '@/components/shared/ViewToggle';
 import StatCard from '@/components/shared/StatCard';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
@@ -22,6 +24,7 @@ const TABS = [
   { key: 'in_progress', label: 'בטיפול' },
   { key: 'quote_sent', label: 'הצעה נשלחה' },
   { key: 'active_client', label: 'לקוחות פעילים' },
+  { key: 'inactive_client', label: 'לקוחות לא פעילים' },
   { key: 'not_relevant', label: 'לא רלוונטי' },
   { key: 'completed', label: 'הושלמו' },
   { key: 'no_response', label: 'ללא מענה', filterField: 'bot_status' },
@@ -33,6 +36,12 @@ export default function Contacts() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('all');
   const [search, setSearch] = useState('');
+  const [visibleCount, setVisibleCount] = useState(50);
+
+  useEffect(() => {
+    setVisibleCount(50);
+    setSelectedIds([]);
+  }, [activeTab, search]);
   const [showForm, setShowForm] = useState(false);
   const [viewMode, setViewMode] = useState('cards');
   const [selectedIds, setSelectedIds] = useState([]);
@@ -48,7 +57,8 @@ export default function Contacts() {
   }, [urlFilter]);
 
   const load = () => {
-    base44.entities.Contact.list('-created_date', 200).then(data => {
+    setLoading(true);
+    return loadAllContacts().then(data => {
       setContacts(filterForUser(data));
       setLoading(false);
     });
@@ -64,13 +74,16 @@ export default function Contacts() {
     const matchSearch = !search || c.full_name?.includes(search) || c.phone?.includes(search) || c.email?.includes(search);
     return matchTab && matchSearch;
   });
+  const visibleContacts = filtered.slice(0, visibleCount);
 
   const toggleSelect = (id) => {
     setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
 
   const toggleAll = () => {
-    setSelectedIds(prev => prev.length === filtered.length ? [] : filtered.map(c => c.id));
+    setSelectedIds(prev => visibleContacts.every(c => prev.includes(c.id))
+      ? prev.filter(id => !visibleContacts.some(c => c.id === id))
+      : [...new Set([...prev, ...visibleContacts.map(c => c.id)])]);
   };
 
   const handleDeleteConfirmed = async () => {
@@ -89,7 +102,7 @@ export default function Contacts() {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">לקוחות</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">{contacts.length} אנשי קשר במערכת</p>
+          <p className="text-muted-foreground text-sm mt-0.5">{loading ? 'טוען את כלל אנשי הקשר...' : `${contacts.length} אנשי קשר במערכת`}</p>
         </div>
         <div className="flex gap-2 items-center flex-wrap w-full md:w-auto">
           {selectedIds.length > 0 && (
@@ -107,7 +120,7 @@ export default function Contacts() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
         <StatCard label="סה״כ לקוחות" value={contacts.length} icon={Users} color="bg-primary/10 text-primary"
           to="/contacts" />
         <StatCard label="לידים חדשים" value={contacts.filter(c => c.status === 'new_lead').length} icon={Users} color="bg-[#EDE8F5] text-[#4A2C78]"
@@ -116,6 +129,8 @@ export default function Contacts() {
           to="/contacts?filter=in_progress" />
         <StatCard label="לקוחות פעילים" value={contacts.filter(c => c.status === 'active_client').length} icon={UserCheck} color="bg-success/10 text-success"
           to="/contacts?filter=active_client" />
+        <StatCard label="לקוחות לא פעילים" value={contacts.filter(c => c.status === 'inactive_client').length} icon={Users} color="bg-contact-inactive text-contact-inactive-foreground"
+          to="/contacts?filter=inactive_client" />
         <StatCard label="לא רלוונטי" value={contacts.filter(c => c.status === 'not_relevant').length} icon={XCircle} color="bg-muted text-muted-foreground"
           to="/contacts?filter=not_relevant" />
       </div>
@@ -155,7 +170,7 @@ export default function Contacts() {
         </div>
       ) : viewMode === 'table' ? (
         <ContactsTable
-          contacts={filtered}
+          contacts={visibleContacts}
           selectedIds={selectedIds}
           onToggleSelect={toggleSelect}
           onToggleAll={toggleAll}
@@ -166,7 +181,7 @@ export default function Contacts() {
         <div className="text-center text-muted-foreground py-16">לא נמצאו אנשי קשר</div>
       ) : (
         <div className="space-y-2">
-          {filtered.map(contact => (
+          {visibleContacts.map(contact => (
             <Card key={contact.id} className={`hover:shadow-md transition-all hover:border-primary/30 ${selectedIds.includes(contact.id) ? 'border-primary/50 bg-primary/5' : ''}`}>
               <CardContent className="p-4 flex items-center gap-4">
                 <Checkbox
@@ -215,6 +230,8 @@ export default function Contacts() {
           ))}
         </div>
       )}
+
+      {!loading && <ContactsLoadMore shown={visibleContacts.length} total={filtered.length} onLoadMore={() => setVisibleCount(count => count + 50)} />}
 
       {(showForm || editingContact) && (
         <ContactFormDialog

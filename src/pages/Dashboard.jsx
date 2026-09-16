@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { format, isToday, parseISO } from 'date-fns';
 import { he } from 'date-fns/locale';
 import SyncLeadsButton from '@/components/dashboard/SyncLeadsButton';
+import loadAllContacts from '@/components/contacts/loadAllContacts';
 
 export default function Dashboard() {
   const { isAdmin, filterForUser } = useCurrentUser();
@@ -18,7 +19,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     Promise.all([
-      base44.entities.Contact.list(),
+      loadAllContacts(),
       base44.entities.Meeting.list(),
       base44.entities.Task.list(),
       base44.entities.Communication.list(),
@@ -142,6 +143,7 @@ export default function Dashboard() {
             <PipelineBar label="בטיפול" value={inProgress} color="bg-[#E8EEF8]" textColor="text-[#2952A3]" to="/contacts?filter=in_progress" />
             <PipelineBar label="הצעה נשלחה" value={quoteSent} color="bg-[#F8F0DC]" textColor="text-[#A87B20]" to="/contacts?filter=quote_sent" />
             <PipelineBar label="לקוח פעיל" value={activeClients} color="bg-[#DCF0E8]" textColor="text-[#2E7A4A]" to="/contacts?filter=active_client" />
+            <PipelineBar label="לקוח לא פעיל" value={contacts.filter(c => c.status === 'inactive_client').length} color="bg-contact-inactive" textColor="text-contact-inactive-foreground" to="/contacts?filter=inactive_client" />
             <div className="pt-2 border-t border-border">
               <div className="flex justify-between items-center">
                 <span className="text-sm text-muted-foreground">שיעור המרה כולל</span>

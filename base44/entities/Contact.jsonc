@@ -34,11 +34,13 @@
         "in_progress",
         "quote_sent",
         "active_client",
+        "inactive_client",
         "completed",
         "not_relevant",
         "archived"
       ],
-      "default": "new_lead"
+      "default": "new_lead",
+      "description": "\u05e1\u05d8\u05d8\u05d5\u05e1 \u05d0\u05d9\u05e9 \u05e7\u05e9\u05e8 \u2014 active_client: \u05dc\u05e7\u05d5\u05d7 \u05e4\u05e2\u05d9\u05dc; inactive_client: \u05dc\u05e7\u05d5\u05d7 \u05dc\u05d0 \u05e4\u05e2\u05d9\u05dc"
     },
     "source": {
       "type": "string",
