@@ -49,6 +49,13 @@ function normalizeAnswer(text) {
   return String(text || '').trim().replace(/[*"'״]/g, '').replace(/[!?.,;:]+$/g, '').replace(/^[!?.,;:]+/g, '').toLowerCase();
 }
 
+const RESCHEDULE_KEYWORDS = ['להחליף מועד', 'להחליף את המועד', 'לשנות מועד', 'לשנות את המועד', 'שינוי מועד', 'החלפת מועד', 'לדחות את הפגישה', 'להזיז את הפגישה', 'לשנות את הפגישה', 'לבטל את הפגישה', 'לבטל פגישה', 'ביטול פגישה', 'להקדים את הפגישה', 'לדחות את הוובינר', 'להחליף וובינר', 'מועד אחר לוובינר'];
+
+function isRescheduleRequest(text) {
+  const normalized = normalizeAnswer(text);
+  return RESCHEDULE_KEYWORDS.some(keyword => normalized.includes(keyword));
+}
+
 function detectServiceType(text) {
   const serviceMap = {
     '1': 'retirement',
@@ -217,7 +224,10 @@ async function notifyHandoffByEmail(base44, contact, reason, lastText) {
       headers: { 'api-key': BREVO_API_KEY, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         sender: { name: 'קרנות ראמים — בוט', email: senderEmail },
-        to: [{ email: 'office.reemim@gmail.com', name: 'משרד ראמים' }],
+        to: [
+          { email: 'office.reemim@gmail.com', name: 'משרד ראמים' },
+          { email: 'bosmat@oryx-alt.com', name: 'בשמת' },
+        ],
         subject: `📞 שיחה הועברה לנציגה — ${contact?.full_name || contact?.phone || ''}`,
         htmlContent: `<div dir="rtl" style="font-family:Arial;font-size:16px">${body}</div>`,
       }),
@@ -452,8 +462,8 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ===== שער waiting_agent: הבוט שותק כשהשיחה אצל נציגה =====
-    if (contact && contact.bot_status === 'waiting_agent') {
+    // ===== שער waiting_agent: הבוט שותק כשהשיחה אצל נציגה, למעט בקשת שינוי/ביטול מועד =====
+    if (contact && contact.bot_status === 'waiting_agent' && !isRescheduleRequest(text)) {
       await logIncoming(base44, idMessage, phone, text, chatId, cachedConversationSettings[0]?.value || null, 'skipped');
       return Response.json({ ok: true, skipped: true, reason: 'waiting_agent' });
     }
@@ -1114,8 +1124,7 @@ Deno.serve(async (req) => {
     }
 
     // ===== FP-Reschedule: בקשת שינוי/ביטול מועד (פגישה או וובינר) → העברה לנציגה =====
-    const rescheduleKeywords = ['להחליף מועד', 'להחליף את המועד', 'לשנות מועד', 'לשנות את המועד', 'שינוי מועד', 'החלפת מועד', 'לדחות את הפגישה', 'להזיז את הפגישה', 'לשנות את הפגישה', 'לבטל את הפגישה', 'לבטל פגישה', 'ביטול פגישה', 'להקדים את הפגישה', 'לדחות את הוובינר', 'להחליף וובינר', 'מועד אחר לוובינר'];
-    if (contact && rescheduleKeywords.some(k => normalizeAnswer(text).includes(k))) {
+    if (contact && isRescheduleRequest(text)) {
       const meetingStatusesForReschedule = ['phone_meeting', 'meeting_scheduled', 'meeting_scheduled_frontal', 'meeting_scheduled_zoom'];
       const hasMeetingContext = serviceRequest && (serviceRequest.meeting_id || meetingStatusesForReschedule.includes(serviceRequest.status));
       const regsForReschedule = await base44.asServiceRole.entities.WebinarRegistration.filter({ contact_id: contact.id }, '-created_date', 5);
