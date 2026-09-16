@@ -35,7 +35,7 @@ export default function Dashboard() {
   const today = new Date();
   const todayStr = format(today, 'yyyy-MM-dd');
 
-  const newLeadsToday = contacts.filter(c => c.created_date?.startsWith(todayStr)).length;
+  const newLeadsToday = contacts.filter(c => c.created_date?.startsWith(todayStr) && c.source !== 'excel_import').length;
   const todayMeetings = meetings.filter(m => m.scheduled_at?.startsWith(todayStr)).length;
   const openTasks = tasks.filter(t => ['open', 'in_progress'].includes(t.status)).length;
   const noResponse = contacts.filter(c => c.bot_status === 'no_response').length;
