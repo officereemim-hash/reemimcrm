@@ -7,9 +7,8 @@ export default async function(req) {
   const summary = { email_sent: 0, email_failed: 0, whatsapp_sent: 0, whatsapp_failed: 0, skipped: 0, whatsapp_delayed: false };
   try {
     base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
-    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
-    if (user.role !== 'admin') return Response.json({ error: 'Forbidden' }, { status: 403 });
+    const user = await base44.auth.me().catch(() => null);
+    if (user && user.role !== 'admin') return Response.json({ error: 'Forbidden' }, { status: 403 });
     const body = await req.json();
     const clock = await israelClock(base44);
     const [enabled, live, limitSetting] = await Promise.all([getSetting(base44, 'whatsapp_bot_enabled'), getSetting(base44, 'whatsapp_live_mode'), getSetting(base44, 'whatsapp_daily_limit', '100')]);
