@@ -1,4 +1,6 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
+import { getCampaignReply } from '../../shared/campaignReply.ts';
+import { runCampaignReplyChecks } from '../../shared/campaignReplyChecks.ts';
 
 const AGENT_NAME = 'bot_reemim';
 
@@ -251,6 +253,13 @@ Deno.serve(async (req) => {
     const secretParam = url.searchParams.get('secret') || '';
     let body = await req.json();
 
+    if (body.action === 'check_campaign_reply_routing') {
+      const client = createClientFromRequest(req);
+      const user = await client.auth.me();
+      if (user?.role !== 'admin') return Response.json({ error: 'Forbidden' }, { status: 403 });
+      return Response.json(runCampaignReplyChecks());
+    }
+
     // ─── קליטת פורמט uChat: flow שולח External Request עם {phone, message, first_name, user_ns, secret} ───
     // ממירים למבנה שכל שאר הקוד כבר יודע לקרוא (Green: typeWebhook/senderData/messageData).
     // זיהוי uChat: מזהים לפי קיום phone (בלי דרישה ל-message — לחיצת כפתור עלולה להגיע בשדה אחר/ריק)
@@ -339,14 +348,8 @@ Deno.serve(async (req) => {
     const botEnabled = botEnabledSettings[0]?.value === 'true' || botEnabledSettings[0]?.value === true;
     const outgoingStatus = botEnabled ? 'replied' : 'skipped';
 
-    // אישור מיידי בתחילת שיחה חדשה — לפני האינדיקטור — כדי שהפונה (בעיקר מבוגר) יראה תגובה ודאית מיד
+    // אישור פתיחת שיחה יישלח רק אחרי בדיקת תגובה לדיוור, כדי לא לפתוח מסלול בטעות.
     const isNewConversation = cachedConversationSettings.length === 0;
-    if (isNewConversation) {
-      const instantAck = await getBotContent(base44, 'instant_ack');
-      if (instantAck) {
-        await sendWhatsApp(chatId, instantAck, botEnabled);
-      }
-    }
 
     // שליחת אינדיקטור "מקליד..." מיד — כדי שהפונה יראה שהבוט מגיב
     await sendTyping(chatId, 15, botEnabled);
@@ -466,6 +469,26 @@ Deno.serve(async (req) => {
     if (contact && contact.bot_status === 'waiting_agent' && !isRescheduleRequest(text)) {
       await logIncoming(base44, idMessage, phone, text, chatId, cachedConversationSettings[0]?.value || null, 'skipped');
       return Response.json({ ok: true, skipped: true, reason: 'waiting_agent' });
+    }
+
+    // Only authenticated uChat replies to a verified mailing, with no active route, reach this isolated LLM.
+    // No agent tools, Contact updates, ServiceRequest changes or webinar changes occur in this branch.
+    const campaignReply = isUchat && botEnabled && contact ? await getCampaignReply(base44, contact, phone, text) : null;
+    if (campaignReply) {
+      const { item, reply } = campaignReply;
+      const templateId = `campaign_reply_${item.id}`;
+      const incoming = await logIncoming(base44, idMessage, phone, text, chatId, null, 'replied');
+      await base44.asServiceRole.entities.Communication.create({ contact_id: contact.id, type: 'whatsapp', direction: 'inbound', content: text, template_id: templateId, sent_by: 'system', status: 'sent' });
+      const sent = await sendWhatsApp(chatId, reply, botEnabled);
+      await logOutgoing(base44, `${templateId}_${idMessage || Date.now()}`, phone, reply, chatId, null, sent ? 'replied' : 'error');
+      await base44.asServiceRole.entities.Communication.create({ contact_id: contact.id, type: 'whatsapp', direction: 'outbound', content: reply, template_id: templateId, sent_by: 'bot', is_automated: true, status: sent ? 'sent' : 'failed' });
+      if (!sent) await base44.asServiceRole.entities.WhatsAppMessageLog.update(incoming.id, { status: 'error' });
+      return Response.json({ ok: true, fast_path: 'campaign_reply_llm', replied: Boolean(sent) });
+    }
+
+    if (isNewConversation) {
+      const instantAck = await getBotContent(base44, 'instant_ack');
+      if (instantAck) await sendWhatsApp(chatId, instantAck, botEnabled);
     }
 
     // === FP-MissingField: השלמת פרט חסר אחרי ברכת ליד חדש (onNewLeadWelcome) ===
