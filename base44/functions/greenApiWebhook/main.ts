@@ -328,11 +328,28 @@ Deno.serve(async (req) => {
     ]);
 
     // ===== מצב בדיקה: אם הוגדרה רשימה לבנה — מגיבים רק למספרים שבה =====
+    // חריג: מי שנרשם לוובינר (יש לו WebinarRegistration) עובר תמיד — כדי לתרגל/להריץ
+    // את מסלול הוובינר עם נרשמים אמיתיים בלי להוסיף כל מספר לרשימה. מסלול השירות/ליד-חדש
+    // נשאר חסום לזרים (הבדיקה הזו כאן בלבד; onNewLeadWelcome לא משתנה).
     const allowedRaw = String(testModeSettings[0]?.value || '').trim();
     if (allowedRaw) {
       const allowedNumbers = allowedRaw.split(',').map(n => normalizeLocalPhone(n.trim())).filter(Boolean);
       if (!allowedNumbers.includes(localPhone)) {
-        return Response.json({ ok: true, skipped: true, reason: 'test_mode_not_allowed' });
+        // האם השולח נרשם לוובינר? Contact לפי 3 פורמטים → WebinarRegistration לפי contact_id
+        const [gcIntl, gcLocal, gcPlus] = await Promise.all([
+          base44.asServiceRole.entities.Contact.filter({ phone }),
+          base44.asServiceRole.entities.Contact.filter({ phone: localPhone }),
+          base44.asServiceRole.entities.Contact.filter({ phone: '+' + phone }),
+        ]);
+        const gateContact = gcIntl[0] || gcLocal[0] || gcPlus[0];
+        let isWebinarRegistrant = false;
+        if (gateContact) {
+          const gateRegs = await base44.asServiceRole.entities.WebinarRegistration.filter({ contact_id: gateContact.id });
+          isWebinarRegistrant = gateRegs.length > 0;
+        }
+        if (!isWebinarRegistrant) {
+          return Response.json({ ok: true, skipped: true, reason: 'test_mode_not_allowed' });
+        }
       }
     }
 
