@@ -8,6 +8,7 @@ import { format, isToday, parseISO } from 'date-fns';
 import { he } from 'date-fns/locale';
 import SyncLeadsButton from '@/components/dashboard/SyncLeadsButton';
 import loadAllContacts from '@/components/contacts/loadAllContacts';
+import BirthdayGreetingBadge from '@/components/dashboard/BirthdayGreetingBadge';
 
 export default function Dashboard() {
   const { isAdmin, filterForUser } = useCurrentUser();
@@ -15,6 +16,7 @@ export default function Dashboard() {
   const [meetings, setMeetings] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [communications, setCommunications] = useState([]);
+  const [birthdayGreetingStatuses, setBirthdayGreetingStatuses] = useState({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -23,11 +25,20 @@ export default function Dashboard() {
       base44.entities.Meeting.list(),
       base44.entities.Task.list(),
       base44.entities.Communication.list(),
-    ]).then(([c, m, t, comm]) => {
+      (async () => {
+        const { data } = await base44.functions.invoke('getIsraelTime', {});
+        const [day, month, year] = String(data.date).split('.');
+        return base44.entities.CampaignQueue.filter({ greeting_date: `${year}-${month}-${day}`, channel: 'whatsapp' }, '-created_date', 200);
+      })(),
+    ]).then(([c, m, t, comm, birthdayQueue]) => {
       setContacts(isAdmin ? c : filterForUser(c));
       setMeetings(isAdmin ? m : filterForUser(m, 'contact_id'));
       setTasks(isAdmin ? t : filterForUser(t));
       setCommunications(comm);
+      setBirthdayGreetingStatuses(birthdayQueue.reduce((statuses, item) => {
+        if (!statuses[item.contact_id]) statuses[item.contact_id] = item.status;
+        return statuses;
+      }, {}));
       setLoading(false);
     });
   }, [isAdmin]);
@@ -168,10 +179,11 @@ export default function Dashboard() {
                     <div className="w-8 h-8 rounded-full bg-gold/20 flex items-center justify-center text-sm font-bold text-gold">
                       {c.full_name?.charAt(0)}
                     </div>
-                    <div>
+                    <div className="min-w-0 flex-1">
                       <div className="text-sm font-medium">{c.full_name}</div>
                       <div className="text-xs text-muted-foreground">{c.phone}</div>
                     </div>
+                    <BirthdayGreetingBadge status={birthdayGreetingStatuses[c.id]} />
                   </Link>
                 ))}
               </div>
