@@ -155,6 +155,23 @@ Deno.serve(async (req) => {
     }
 
     const phone = normalizePhone(contact.phone);
+
+    // ⛔ מסלול השירות סגור למספרי בדיקה בלבד (זמני; נרשמי וובינר עוברים). פתיחה = לרוקן test_mode_allowed_numbers
+    {
+      const _tm = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'test_mode_allowed_numbers' });
+      const _raw = String(_tm[0]?.value || '').trim();
+      if (_raw) {
+        const _last9 = (p) => String(p || '').replace(/\D/g, '').slice(-9);
+        const _allowed = _raw.split(',').map(_last9).filter(Boolean);
+        let _ok = _allowed.includes(_last9(contact.phone));
+        if (!_ok) {
+          const _regs = await base44.asServiceRole.entities.WebinarRegistration.filter({ contact_id: contact.id });
+          _ok = _regs.length > 0;
+        }
+        if (!_ok) return Response.json({ ok: true, skipped: 'service_route_closed_test_mode' });
+      }
+    }
+
     const serviceType = serviceRequest.service_type || '';
     const firstName = (contact.full_name || '').split(' ')[0];
 
