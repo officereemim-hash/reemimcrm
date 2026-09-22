@@ -29,6 +29,8 @@ const TYPE_LABELS = { investments: 'השקעות', divorce: 'גירושין / א
 
 Deno.serve(async (req) => {
   try {
+    return Response.json({ ok: true, skipped: 'auto_invite_disabled_landing_page_only' });
+
     const base44 = createClientFromRequest(req);
     const body = await req.json();
     const reg = body.data || body.record || body;

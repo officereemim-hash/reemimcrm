@@ -31,9 +31,11 @@ export default async function(req) {
         if (reason) { await skipItem(base44, item, reason); summary.skipped++; continue; }
         if (channel === 'whatsapp') {
           const [botNow, liveNow] = await Promise.all([getSetting(base44, 'whatsapp_bot_enabled'), getSetting(base44, 'whatsapp_live_mode')]);
-          if (botNow !== 'true' || liveNow !== 'true' || usedToday >= dailyLimit) {
+          const israelHour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Jerusalem', hour: '2-digit', hour12: false, hourCycle: 'h23' }).format(new Date()));
+          const outsideWindow = israelHour < 8 || israelHour >= 20;
+          if (botNow !== 'true' || liveNow !== 'true' || usedToday >= dailyLimit || outsideWindow) {
             summary.whatsapp_delayed = true;
-            summary.whatsapp_delay_reason = usedToday >= dailyLimit ? 'מכסת הדיוור היומית נוצלה; התור ימתין ליום הבא' : 'שליחת WhatsApp או מצב שליחה אמיתית כבויים';
+            summary.whatsapp_delay_reason = outsideWindow ? 'מחוץ לחלון השליחה (08:00–20:00 שעון ישראל) — התור ימתין לבוקר' : usedToday >= dailyLimit ? 'מכסת הדיוור היומית נוצלה; התור ימתין ליום הבא' : 'שליחת WhatsApp או מצב שליחה אמיתית כבויים';
             break;
           }
           if (!(await getSetting(base44, `uchat_tpl_${item.whatsapp_template_key || 'campaign_broadcast'}`)).trim()) {
