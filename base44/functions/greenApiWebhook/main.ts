@@ -319,13 +319,61 @@ Deno.serve(async (req) => {
     const phone = chatId.replace('@c.us', '');
     const localPhone = normalizeLocalPhone(phone);
 
-    const [botEnabledSettings, cachedConversationSettings, blockList, duplicateMessages, testModeSettings] = await Promise.all([
-      base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' }),  
+    const [botEnabledSettings, cachedConversationSettings, blockList, duplicateMessages, testModeSettings, contactsByIntl, contactsByLocal, contactsByPlus] = await Promise.all([
+      base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' }),
       base44.asServiceRole.entities.SystemSetting.filter({ key: 'phone_conv_' + phone }),
       base44.asServiceRole.entities.WhatsAppBlockList.list(),
       idMessage ? base44.asServiceRole.entities.WhatsAppMessageLog.filter({ id_message: idMessage }) : Promise.resolve([]),
       base44.asServiceRole.entities.SystemSetting.filter({ key: 'test_mode_allowed_numbers' }),
+      base44.asServiceRole.entities.Contact.filter({ phone }),
+      base44.asServiceRole.entities.Contact.filter({ phone: localPhone }),
+      base44.asServiceRole.entities.Contact.filter({ phone: '+' + phone }),
     ]);
+    const contacts = contactsByIntl.length > 0 ? contactsByIntl : contactsByLocal.length > 0 ? contactsByLocal : contactsByPlus;
+    let contact = contacts[0] || null;
+    const botEnabled = botEnabledSettings[0]?.value === 'true' || botEnabledSettings[0]?.value === true;
+
+    // ===== הסרה מרשימת התפוצה דרך וואטסאפ (לפני שער test_mode — תמיד מכובד) =====
+    const UNSUBSCRIBE_KEYWORDS = ['הסר', 'הסרה', 'הסירו אותי', 'להסיר אותי', 'תסירו אותי', 'תפסיקו לשלוח', 'stop', 'unsubscribe'];
+    const normalizedForUnsub = normalizeAnswer(text);
+    if (UNSUBSCRIBE_KEYWORDS.includes(normalizedForUnsub)) {
+      const unsubContact = contacts[0] || null;
+      if (unsubContact) {
+        await base44.asServiceRole.entities.Contact.update(unsubContact.id, { mailing_opt_out: true });
+        const futureRegs = await base44.asServiceRole.entities.WebinarRegistration.filter({ contact_id: unsubContact.id });
+        for (const reg of futureRegs) {
+          if (reg.webinar_date && new Date(reg.webinar_date).getTime() > Date.now() && reg.attended !== true) {
+            await base44.asServiceRole.entities.WebinarRegistration.update(reg.id, { reminder_1h_sent: true, reminder_start_sent: true });
+          }
+        }
+        await base44.asServiceRole.entities.Communication.create({
+          contact_id: unsubContact.id,
+          type: 'whatsapp',
+          direction: 'inbound',
+          content: `הלקוח/ה ביקש/ה הסרה מרשימת התפוצה ("${text}")`,
+          sent_by: 'system',
+          is_automated: true,
+          status: 'sent',
+        });
+      }
+      const unsubMessage = await getBotContent(base44, 'unsubscribe_confirm') || 'הוסרת מרשימת התפוצה שלנו ✅';
+      await sendWhatsApp(chatId, unsubMessage, botEnabled);
+      return Response.json({ ok: true, unsubscribed: true });
+    }
+
+    // ===== תגובת דיוור מבודדת (לפני שער test_mode — תמיד מכובדת) =====
+    const campaignReply = isUchat && botEnabled && contact ? await getCampaignReply(base44, contact, phone, text) : null;
+    if (campaignReply) {
+      const { item, reply } = campaignReply;
+      const templateId = `campaign_reply_${item.id}`;
+      const incoming = await logIncoming(base44, idMessage, phone, text, chatId, null, 'replied');
+      await base44.asServiceRole.entities.Communication.create({ contact_id: contact.id, type: 'whatsapp', direction: 'inbound', content: text, template_id: templateId, sent_by: 'system', status: 'sent' });
+      const sent = await sendWhatsApp(chatId, reply, botEnabled);
+      await logOutgoing(base44, `${templateId}_${idMessage || Date.now()}`, phone, reply, chatId, null, sent ? 'replied' : 'error');
+      await base44.asServiceRole.entities.Communication.create({ contact_id: contact.id, type: 'whatsapp', direction: 'outbound', content: reply, template_id: templateId, sent_by: 'bot', is_automated: true, status: sent ? 'sent' : 'failed' });
+      if (!sent) await base44.asServiceRole.entities.WhatsAppMessageLog.update(incoming.id, { status: 'error' });
+      return Response.json({ ok: true, fast_path: 'campaign_reply_llm', replied: Boolean(sent) });
+    }
 
     // ===== מצב בדיקה: אם הוגדרה רשימה לבנה — מגיבים רק למספרים שבה =====
     // חריג: מי שנרשם לוובינר (יש לו WebinarRegistration) עובר תמיד — כדי לתרגל/להריץ
@@ -335,19 +383,14 @@ Deno.serve(async (req) => {
     if (allowedRaw) {
       const allowedNumbers = allowedRaw.split(',').map(n => normalizeLocalPhone(n.trim())).filter(Boolean);
       if (!allowedNumbers.includes(localPhone)) {
-        // האם השולח נרשם לוובינר? Contact לפי 3 פורמטים → WebinarRegistration לפי contact_id
-        const [gcIntl, gcLocal, gcPlus] = await Promise.all([
-          base44.asServiceRole.entities.Contact.filter({ phone }),
-          base44.asServiceRole.entities.Contact.filter({ phone: localPhone }),
-          base44.asServiceRole.entities.Contact.filter({ phone: '+' + phone }),
-        ]);
-        const gateContact = gcIntl[0] || gcLocal[0] || gcPlus[0];
+        const gateContact = contacts[0] || null;
         let isWebinarRegistrant = false;
         if (gateContact) {
           const gateRegs = await base44.asServiceRole.entities.WebinarRegistration.filter({ contact_id: gateContact.id });
           isWebinarRegistrant = gateRegs.length > 0;
         }
         if (!isWebinarRegistrant) {
+          await logIncoming(base44, idMessage, phone, text, chatId, cachedConversationSettings[0]?.value || null, 'skipped');
           return Response.json({ ok: true, skipped: true, reason: 'test_mode_not_allowed' });
         }
       }
@@ -362,7 +405,6 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, skipped: true, reason: 'blocked' });
     }
 
-    const botEnabled = botEnabledSettings[0]?.value === 'true' || botEnabledSettings[0]?.value === true;
     const outgoingStatus = botEnabled ? 'replied' : 'skipped';
 
     // אישור פתיחת שיחה יישלח רק אחרי בדיקת תגובה לדיוור, כדי לא לפתוח מסלול בטעות.
@@ -372,12 +414,7 @@ Deno.serve(async (req) => {
     await sendTyping(chatId, 15, botEnabled);
 
     // חיפוש Contact ב-3 פורמטים + בדיקת rate limit — הכל במקביל לחיסכון בזמן
-    const [recentLogs, contactsByIntl, contactsByLocal, contactsByPlus] = await Promise.all([
-      base44.asServiceRole.entities.WhatsAppMessageLog.filter({ phone }, '-created_date', 30),
-      base44.asServiceRole.entities.Contact.filter({ phone }),
-      base44.asServiceRole.entities.Contact.filter({ phone: localPhone }),
-      base44.asServiceRole.entities.Contact.filter({ phone: '+' + phone }),
-    ]);
+    const recentLogs = await base44.asServiceRole.entities.WhatsAppMessageLog.filter({ phone }, '-created_date', 30);
 
     const recentOutgoing = recentLogs.filter(log => log.direction === 'outgoing' && Date.now() - new Date(log.created_date).getTime() < 60 * 60 * 1000);
     if (botEnabled && recentOutgoing.length >= 20) {
@@ -434,38 +471,7 @@ Deno.serve(async (req) => {
     }
     // ===== END LOOP GUARD =====
 
-    const contacts = contactsByIntl.length > 0 ? contactsByIntl : contactsByLocal.length > 0 ? contactsByLocal : contactsByPlus;
-    let contact = contacts[0] || null;
 
-    // ===== הסרה מרשימת התפוצה דרך וואטסאפ =====
-    const UNSUBSCRIBE_KEYWORDS = ['הסר', 'הסרה', 'הסירו אותי', 'להסיר אותי', 'תסירו אותי', 'תפסיקו לשלוח', 'stop', 'unsubscribe'];
-    const normalizedForUnsub = normalizeAnswer(text);
-    if (UNSUBSCRIBE_KEYWORDS.includes(normalizedForUnsub)) {
-      const unsubContact = contacts[0] || null;
-      if (unsubContact) {
-        await base44.asServiceRole.entities.Contact.update(unsubContact.id, { mailing_opt_out: true });
-        // ביטול תזכורות וובינר עתידיות
-        const futureRegs = await base44.asServiceRole.entities.WebinarRegistration.filter({ contact_id: unsubContact.id });
-        for (const reg of futureRegs) {
-          if (reg.webinar_date && new Date(reg.webinar_date).getTime() > Date.now() && reg.attended !== true) {
-            await base44.asServiceRole.entities.WebinarRegistration.update(reg.id, { reminder_1h_sent: true, reminder_start_sent: true });
-          }
-        }
-        await base44.asServiceRole.entities.Communication.create({
-          contact_id: unsubContact.id,
-          type: 'whatsapp',
-          direction: 'inbound',
-          content: `הלקוח/ה ביקש/ה הסרה מרשימת התפוצה ("${text}")`,
-          sent_by: 'system',
-          is_automated: true,
-          status: 'sent',
-        });
-      }
-      const unsubMessage = await getBotContent(base44, 'unsubscribe_confirm') || 'הוסרת מרשימת התפוצה שלנו ✅';
-      await sendWhatsApp(chatId, unsubMessage, botEnabled);
-      return Response.json({ ok: true, unsubscribed: true });
-    }
-    // ===== סוף הסרה מתפוצה =====
 
     // ===== שער WhatsAppBotControl: השהיית בוט לפי מספר (נקבע ע"י האדמינית מסוכן המערכת) =====
     {
@@ -486,21 +492,6 @@ Deno.serve(async (req) => {
     if (contact && contact.bot_status === 'waiting_agent' && !isRescheduleRequest(text)) {
       await logIncoming(base44, idMessage, phone, text, chatId, cachedConversationSettings[0]?.value || null, 'skipped');
       return Response.json({ ok: true, skipped: true, reason: 'waiting_agent' });
-    }
-
-    // Only authenticated uChat replies to a verified mailing, with no active route, reach this isolated LLM.
-    // No agent tools, Contact updates, ServiceRequest changes or webinar changes occur in this branch.
-    const campaignReply = isUchat && botEnabled && contact ? await getCampaignReply(base44, contact, phone, text) : null;
-    if (campaignReply) {
-      const { item, reply } = campaignReply;
-      const templateId = `campaign_reply_${item.id}`;
-      const incoming = await logIncoming(base44, idMessage, phone, text, chatId, null, 'replied');
-      await base44.asServiceRole.entities.Communication.create({ contact_id: contact.id, type: 'whatsapp', direction: 'inbound', content: text, template_id: templateId, sent_by: 'system', status: 'sent' });
-      const sent = await sendWhatsApp(chatId, reply, botEnabled);
-      await logOutgoing(base44, `${templateId}_${idMessage || Date.now()}`, phone, reply, chatId, null, sent ? 'replied' : 'error');
-      await base44.asServiceRole.entities.Communication.create({ contact_id: contact.id, type: 'whatsapp', direction: 'outbound', content: reply, template_id: templateId, sent_by: 'bot', is_automated: true, status: sent ? 'sent' : 'failed' });
-      if (!sent) await base44.asServiceRole.entities.WhatsAppMessageLog.update(incoming.id, { status: 'error' });
-      return Response.json({ ok: true, fast_path: 'campaign_reply_llm', replied: Boolean(sent) });
     }
 
     if (isNewConversation) {
