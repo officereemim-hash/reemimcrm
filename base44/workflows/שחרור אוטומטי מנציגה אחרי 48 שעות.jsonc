@@ -1,0 +1,45 @@
+{
+  "name": "\u05e9\u05d7\u05e8\u05d5\u05e8 \u05d0\u05d5\u05d8\u05d5\u05de\u05d8\u05d9 \u05de\u05e0\u05e6\u05d9\u05d2\u05d4 \u05d0\u05d7\u05e8\u05d9 48 \u05e9\u05e2\u05d5\u05ea",
+  "description": "\u05db\u05dc \u05e9\u05e2\u05d4 \u2014 \u05de\u05d7\u05d6\u05d9\u05e8 \u05dc\u05d1\u05d5\u05d8 \u05e4\u05d5\u05e0\u05d9\u05dd \u05e9\u05de\u05de\u05ea\u05d9\u05e0\u05d9\u05dd \u05dc\u05e0\u05e6\u05d9\u05d2\u05d4 \u05d0\u05d5 \u05de\u05d5\u05e9\u05d4\u05d9\u05dd \u05d9\u05d3\u05e0\u05d9\u05ea \u05d9\u05d5\u05ea\u05e8 \u05de-48 \u05e9\u05e2\u05d5\u05ea, \u05d5\u05e9\u05d5\u05dc\u05d7 \u05de\u05d9\u05d9\u05dc \u05dc\u05d1\u05e9\u05de\u05ea \u05e2\u05dc \u05d4\u05e9\u05d4\u05d9\u05d5\u05ea \u05d9\u05d3\u05e0\u05d9\u05d5\u05ea",
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "release_stale_handoffs",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "release": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "releaseStaleHandoffs",
+            "args": {}
+          },
+          "then": "end",
+          "x-base44": {
+            "title": "\u05e9\u05d7\u05e8\u05d5\u05e8 \u05e4\u05d5\u05e0\u05d9\u05dd \u05ea\u05e7\u05d5\u05e2\u05d9\u05dd",
+            "description": "48 \u05e9\u05e2\u05d5\u05ea"
+          }
+        }
+      }
+    ]
+  },
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "scheduled",
+      "events": [],
+      "schedule_mode": "recurring",
+      "cron_expression": "0 * * * *",
+      "one_time_date": null,
+      "timezone": "Asia/Jerusalem",
+      "interval_value": null,
+      "interval_unit": null,
+      "interval_anchor": null,
+      "ends_type": "never",
+      "ends_on_date": null,
+      "ends_after_count": null
+    }
+  }
+}
