@@ -27,13 +27,13 @@ export default function FilesList({ serviceRequestId }) {
   const uploadMutation = useMutation({
     mutationFn: async (file) => {
       setUploading(true);
-      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      const { file_uri } = await base44.integrations.Core.UploadPrivateFile({ file });
       const ext = file.name.split('.').pop().toLowerCase();
       let file_type = 'other';
       if (['pdf'].includes(ext)) file_type = 'pdf';
       else if (['doc', 'docx'].includes(ext)) file_type = ext;
       else if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) file_type = 'image';
-      await base44.entities.ServiceRequestFile.create({ service_request_id: serviceRequestId, file_name: file.name, file_url, file_type, uploaded_by: 'admin' });
+      await base44.entities.ServiceRequestFile.create({ service_request_id: serviceRequestId, file_name: file.name, file_uri, file_url: '', file_type, uploaded_by: 'admin' });
       await base44.entities.ServiceRequestTimeline.create({ service_request_id: serviceRequestId, event_type: 'file_received', description: `קובץ הועלה: ${file.name}` });
     },
     onSuccess: () => {
@@ -44,6 +44,15 @@ export default function FilesList({ serviceRequestId }) {
     },
     onError: () => setUploading(false),
   });
+
+  const openDoc = async (doc) => {
+    if (!doc.file_uri) { window.open(doc.file_url, '_blank', 'noopener'); return; }
+    const w = window.open('', '_blank');
+    try {
+      const { signed_url } = await base44.integrations.Core.CreateFileSignedUrl({ file_uri: doc.file_uri, expires_in: 300 });
+      w.location.href = signed_url;
+    } catch (e) { w.close(); alert('לא הצלחתי לפתוח את הקובץ'); }
+  };
 
   const deleteMutation = useMutation({
     mutationFn: (id) => base44.entities.ServiceRequestFile.delete(id),
@@ -79,9 +88,11 @@ export default function FilesList({ serviceRequestId }) {
                     </div>
                   </div>
                   <div className="flex gap-1">
-                    <Button size="icon" variant="ghost" asChild>
-                      <a href={file.file_url} target="_blank" rel="noopener noreferrer"><ExternalLink className="w-3.5 h-3.5" /></a>
-                    </Button>
+                    {(file.file_uri || file.file_url) && (
+                      <Button size="icon" variant="ghost" onClick={() => openDoc(file)}>
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </Button>
+                    )}
                     <Button size="icon" variant="ghost" onClick={() => deleteMutation.mutate(file.id)}>
                       <Trash2 className="w-3.5 h-3.5 text-destructive" />
                     </Button>

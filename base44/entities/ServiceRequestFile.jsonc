@@ -14,6 +14,10 @@
       "type": "string",
       "description": "\u05e7\u05d9\u05e9\u05d5\u05e8 \u05dc\u05e7\u05d5\u05d1\u05e5"
     },
+    "file_uri": {
+      "type": "string",
+      "description": "\u05e0\u05ea\u05d9\u05d1 \u05d4\u05e7\u05d5\u05d1\u05e5 \u05d1\u05d0\u05d7\u05e1\u05d5\u05df \u05d4\u05e4\u05e8\u05d8\u05d9"
+    },
     "file_type": {
       "type": "string",
       "enum": [
@@ -39,7 +43,6 @@
   },
   "required": [
     "service_request_id",
-    "file_name",
-    "file_url"
+    "file_name"
   ]
 }

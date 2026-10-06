@@ -247,11 +247,11 @@ Deno.serve(async (req) => {
         for (const a of atts) {
           const data = await gmail(token, `messages/${id}/attachments/${a.attachmentId}`);
           const file = new File([b64ToBytes(data.data)], a.filename || 'document', { type: a.mimeType });
-          const up = await base44.asServiceRole.integrations.Core.UploadFile({ file });
-          uploaded.push({ ...a, file_url: up.file_url });
+          const up = await base44.asServiceRole.integrations.Core.UploadPrivateFile({ file });
+          uploaded.push({ ...a, file_uri: up.file_uri });
         }
 
-        const fileList = uploaded.map((u) => `• ${u.filename}: ${u.file_url}`).join('\n');
+        const fileList = uploaded.map((u) => `• ${u.filename}`).join('\n');
 
         // איתור הכרטיס: מייל השולח ← שם השולח (התאמה יחידה) ← כרטיס חדש
         const matches = await db.Contact.filter({ email: fromEmail });
@@ -280,7 +280,7 @@ Deno.serve(async (req) => {
           for (const u of uploaded) {
             await db.Document.create({
               contact_id: contact.id, service_request_id: sr?.id || '', name: u.filename,
-              category: guessCategory(u.filename), file_url: u.file_url,
+              category: guessCategory(u.filename), file_uri: u.file_uri,
               uploaded_by: `email:${fromEmail}`, gmail_message_id: id,
             });
           }

@@ -46,15 +46,20 @@ export default function DocumentsList({ contactId, documents, onRefresh, contact
   const handleSave = async () => {
     if (!form.name || (!editingDoc && !file)) return;
     setSaving(true);
-    let file_url = editingDoc?.file_url;
+    let fileFields = {};
     if (file) {
-      const upload = await base44.integrations.Core.UploadFile({ file });
-      file_url = upload.file_url;
+      if (form.category === 'agreements') {
+        const upload = await base44.integrations.Core.UploadFile({ file });
+        fileFields = { file_url: upload.file_url, file_uri: '' };
+      } else {
+        const upload = await base44.integrations.Core.UploadPrivateFile({ file });
+        fileFields = { file_uri: upload.file_uri, file_url: '' };
+      }
     }
     if (editingDoc) {
-      await base44.entities.Document.update(editingDoc.id, { ...form, file_url });
+      await base44.entities.Document.update(editingDoc.id, { ...form, ...fileFields });
     } else {
-      await base44.entities.Document.create({ ...form, contact_id: contactId, file_url });
+      await base44.entities.Document.create({ ...form, contact_id: contactId, ...fileFields });
     }
     setShowForm(false);
     setEditingDoc(null);
@@ -62,6 +67,15 @@ export default function DocumentsList({ contactId, documents, onRefresh, contact
     setForm({ name: '', category: 'identity' });
     onRefresh();
     setSaving(false);
+  };
+
+  const openDoc = async (doc) => {
+    if (!doc.file_uri) { window.open(doc.file_url, '_blank', 'noopener'); return; }
+    const w = window.open('', '_blank');
+    try {
+      const { signed_url } = await base44.integrations.Core.CreateFileSignedUrl({ file_uri: doc.file_uri, expires_in: 300 });
+      w.location.href = signed_url;
+    } catch (e) { w.close(); alert('לא הצלחתי לפתוח את הקובץ'); }
   };
 
   const deleteDocument = async (doc) => {
@@ -128,7 +142,7 @@ export default function DocumentsList({ contactId, documents, onRefresh, contact
                   {doc.signature_status === 'signed' && <span className="text-xs text-success">✍️ נחתם</span>}
                   <Button size="icon" variant="ghost" onClick={() => openEdit(doc)}><Edit size={14} /></Button>
                   <Button size="icon" variant="ghost" onClick={() => deleteDocument(doc)} className="text-destructive"><Trash2 size={14} /></Button>
-                  {doc.file_url && <a href={doc.file_url} target="_blank" rel="noreferrer" className="text-primary hover:text-primary/70"><ExternalLink size={14} /></a>}
+                  {(doc.file_uri || doc.file_url) && <button type="button" onClick={() => openDoc(doc)} className="text-primary hover:text-primary/70"><ExternalLink size={14} /></button>}
                 </div>
               ))}
             </div>
