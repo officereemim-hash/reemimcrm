@@ -21,7 +21,8 @@
         "tax",
         "reports",
         "agreements",
-        "pension_fund"
+        "pension_fund",
+        "other"
       ]
     },
     "file_url": {
@@ -50,6 +51,10 @@
         "signed"
       ],
       "default": "pending"
+    },
+    "gmail_message_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05d4\u05de\u05d9\u05d9\u05dc \u05e9\u05de\u05de\u05e0\u05d5 \u05d4\u05d2\u05d9\u05e2 \u05d4\u05de\u05e1\u05de\u05da"
     }
   },
   "required": [

@@ -81,6 +81,13 @@ export default function ContactDetail() {
             <h1 className="text-2xl font-bold">{contact.full_name}</h1>
             <ContactStatusBadge status={contact.status} />
             <BotStatusBadge status={contact.bot_status} />
+            {contact.shoranss_status && (
+              <a href={contact.shoranss_lead_url || undefined} target="_blank" rel="noreferrer"
+                title={contact.shoranss_status_at ? new Date(contact.shoranss_status_at).toLocaleString('he-IL') : ''}
+                className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-secondary text-secondary-foreground">
+                שורנס: {contact.shoranss_status}
+              </a>
+            )}
           </div>
           <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground flex-wrap">
             {contact.phone && <span className="flex items-center gap-1"><Phone size={13} />{contact.phone}</span>}

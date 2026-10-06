@@ -140,11 +140,8 @@ Deno.serve(async (req) => {
     const missing = [];
 
     if (c.source === 'shoranss') {
-      // מסלול שורנס — ברכה ייעודית ללא תפריט שירותים וללא pending
-      templateUsed = 'new_lead_welcome';
-      const template = await getBotContent('new_lead_welcome_shoranss')
-        || 'שלום {name} 🌿\nהגעת לקרנות ראמים — בשמת שערי-בלוך, משרד לתכנון פרישה ופנסיה.\nראינו שפנית אלינו דרך שורנס, ושמחים שאת/ה כאן! 🙏\n\nבכל שאלה מוזמנים לפנות אלינו למספר: 0544405554';
-      messageToSend = template.replaceAll('{name}', c.full_name || '');
+      await logSkipped('shoranss_no_message', 'ליד משורנס — לא שולחים הודעה עד קביעת פגישה (החלטת בשמת)');
+      return Response.json({ ok: true, skipped: 'shoranss_no_message' });
     } else {
       // מסלול רגיל — בדיקת פרטים חסרים
       if (!c.full_name || c.full_name.trim().length < 2) missing.push({ field: 'full_name', label: 'מה השם המלא שלך?' });
