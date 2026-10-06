@@ -51,7 +51,8 @@
         "referral",
         "excel_import",
         "manual",
-        "shoranss"
+        "shoranss",
+        "email"
       ]
     },
     "service_type": {

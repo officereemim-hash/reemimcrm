@@ -118,6 +118,7 @@ export const SOURCE_LABELS = {
   webinar: 'קמפיין מטא',
   referral: 'הפניה',
   excel_import: 'ייבוא אקסל',
+  email: 'מייל',
   manual: 'ידני',
   bot: 'בוט',
   bar_call: 'שיחת בר',

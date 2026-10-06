@@ -72,9 +72,15 @@ function emailOf(from) {
   const m = String(from || '').match(/<([^>]+)>/);
   return (m ? m[1] : String(from || '')).trim().toLowerCase();
 }
+function displayNameOf(from) {
+  const m = String(from || '').match(/^\s*"?([^"<]*?)"?\s*</);
+  return decodeRfc2047(m ? m[1] : '').trim();
+}
 
 // שולחים מערכתיים — לא מסמכים של לקוחות
 const SYSTEM_SENDER = /(surense\.com|base44|brevo|stripe\.com|uchat\.com\.au|cal\.com|cal\.eu|google\.com|green-api|zoom\.us|facebookmail|meta\.com|mailer-daemon|noreply|no-reply|no_reply|office\.reemim@gmail\.com)/i;
+// שולחים פנימיים (בשמת שמעבירה מייל) — לא פותחים להם כרטיס, רק משימה לשיוך ידני
+const INTERNAL_SENDER = /(bosmat@oryx-alt\.com|office\.reemim@gmail\.com)/i;
 
 function guessCategory(filename) {
   const f = String(filename || '');
@@ -136,7 +142,7 @@ Deno.serve(async (req) => {
     const ignoredSetting = await db.SystemSetting.filter({ key: 'ignored_shoranss_lead_ids' });
     const ignoredIds = new Set((ignoredSetting[0]?.value || '').split(',').filter(Boolean));
 
-    const stats = { scanned: ids.length, already: 0, lead_created: 0, lead_linked: 0, surense_update: 0, unmatched_surense: 0, documents: 0, unmatched_documents: 0, skipped: 0, errors: 0 };
+    const stats = { scanned: ids.length, already: 0, lead_created: 0, lead_linked: 0, surense_update: 0, unmatched_surense: 0, documents: 0, unmatched_documents: 0, new_contacts: 0, skipped: 0, errors: 0 };
 
     async function findByName(name) {
       if (!name || name.length < 3) return [];
@@ -245,9 +251,29 @@ Deno.serve(async (req) => {
           uploaded.push({ ...a, file_url: up.file_url });
         }
 
-        const matches = await db.Contact.filter({ email: fromEmail });
-        const contact = matches.length === 1 ? matches[0] : null;
         const fileList = uploaded.map((u) => `• ${u.filename}: ${u.file_url}`).join('\n');
+
+        // איתור הכרטיס: מייל השולח ← שם השולח (התאמה יחידה) ← כרטיס חדש
+        const matches = await db.Contact.filter({ email: fromEmail });
+        let contact = matches.length === 1 ? matches[0] : null;
+        let createdNew = false;
+        if (!contact && matches.length === 0 && !INTERNAL_SENDER.test(fromEmail)) {
+          const senderName = normName(displayNameOf(from));
+          const byName = await findByName(senderName);
+          if (byName.length === 1) {
+            contact = byName[0];
+            if (!contact.email) await db.Contact.update(contact.id, { email: fromEmail });
+          } else if (!byName.length) {
+            // שולח שלא קיים במערכת — נפתח כרטיס חדש, בלי שום הודעה ללקוח
+            contact = await db.Contact.create({
+              full_name: senderName || fromEmail.split('@')[0], email: fromEmail,
+              status: 'in_progress', source: 'email',
+            });
+            createdNew = true;
+            await note(contact.id, `נפתח כרטיס אוטומטית: התקבלו מסמכים במייל משולח שלא היה במערכת (${fromEmail}). לבדוק את השם ולהשלים טלפון.`, 'email_sender_contact_created');
+            stats.new_contacts++;
+          }
+        }
 
         if (contact) {
           const sr = await openRequest(contact.id);
@@ -264,20 +290,22 @@ Deno.serve(async (req) => {
           await note(contact.id, `התקבלו במייל ${uploaded.length} מסמכים:\n${fileList}`, 'email_documents_received');
           if (!quiet) {
             await db.Task.create({
-              title: `התקבל מסמך במייל — ${contact.full_name || fromEmail} (${uploaded.length})`,
+              title: createdNew
+                ? `כרטיס חדש ממייל עם מסמכים — ${contact.full_name} (${uploaded.length})`
+                : `התקבל מסמך במייל — ${contact.full_name || fromEmail} (${uploaded.length})`,
               type: 'document_collection', status: 'open', priority: 'normal', auto_generated: true,
-              assigned_to: 'yael', contact_id: contact.id, service_request_id: sr?.id || '',
-              notes: `לבדוק את המסמכים ולסמן "מסמכים התקבלו" רק כשהכל הגיע.\nנושא המייל: ${subject}\n${fileList}`,
+              assigned_to: 'basmat', contact_id: contact.id, service_request_id: sr?.id || '',
+              notes: `${createdNew ? 'הכרטיס נפתח אוטומטית. לבדוק את השם ולהשלים טלפון.\n' : ''}לבדוק את המסמכים ולסמן "מסמכים התקבלו" רק כשהכל הגיע.\nנושא המייל: ${subject}\n${fileList}`,
             });
           }
-          await log(id, 'documents', contact.id, `${fromEmail} | ${uploaded.length}`); stats.documents++;
+          await log(id, createdNew ? 'documents_new_contact' : 'documents', contact.id, `${fromEmail} | ${uploaded.length}`); stats.documents++;
         } else {
           if (!quiet) {
             await db.Task.create({
-              title: `מסמך במייל משולח לא מזוהה — ${from}`,
+              title: `מסמך במייל — לשייך ידנית — ${from}`,
               type: 'document_collection', status: 'open', priority: 'normal', auto_generated: true,
-              assigned_to: 'yael',
-              notes: `לא נמצא לקוח עם המייל ${fromEmail}${matches.length > 1 ? ' (נמצאו כמה כרטיסים)' : ''}. לשייך ידנית לכרטיס הנכון.\nנושא המייל: ${subject}\n${fileList}`,
+              assigned_to: 'basmat',
+              notes: `${INTERNAL_SENDER.test(fromEmail) ? 'המייל הועבר מכתובת פנימית' : 'נמצאו כמה כרטיסים מתאימים'} (${fromEmail}). לשייך ידנית לכרטיס הנכון.\nנושא המייל: ${subject}\n${fileList}`,
             });
           }
           await log(id, 'unmatched_documents', '', `${fromEmail} | ${fileList}`); stats.unmatched_documents++;
