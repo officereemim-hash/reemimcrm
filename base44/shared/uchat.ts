@@ -59,11 +59,17 @@ export async function getUchatTemplateName(base44: any, key: string) {
   return r[0]?.value || '';
 }
 
-export async function uchatSendTemplate(phone972: string, firstName: string, templateName: string, bodyParams: any[]) {
+export async function uchatSendTemplate(phone972: string, firstName: string, templateName: string, bodyParams: any[], base44?: any) {
   const namespace = await templateNamespace(templateName);
   if (!namespace) { console.error(`uchat: template '${templateName}' not found/synced`); return null; }
   const params: Record<string, string> = {};
   (bodyParams || []).forEach((v, i) => { params[`BODY_{{${i + 1}}}`] = String(v ?? ''); });
+  try {
+    if (base44) {
+      const imgSetting = await base44.asServiceRole.entities.SystemSetting.filter({ key: `uchat_tpl_img_${templateName}` });
+      if (imgSetting[0]?.value) params['HEADER_IMAGE'] = imgSetting[0].value;
+    }
+  } catch (_) { /* בלי תמונה — שולחים כרגיל */ }
   const res = await fetch(`${UCHAT_BASE}/subscriber/send-whatsapp-template-by-user-id`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${UCHAT_TOKEN}` },
@@ -84,5 +90,5 @@ export async function uchatSend(base44: any, phone: string, tplKey: string, firs
   const p = toIntlPhone(phone);
   const tplName = await getUchatTemplateName(base44, tplKey);
   if (!tplName) { console.log(`uchat: שם תבנית ל-'${tplKey}' לא מוגדר (uchat_tpl_${tplKey})`); return false; }
-  return !!(await uchatSendTemplate(p, firstName, tplName, params || []));
+  return !!(await uchatSendTemplate(p, firstName, tplName, params || [], base44));
 }

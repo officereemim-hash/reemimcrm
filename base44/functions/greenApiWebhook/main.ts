@@ -546,7 +546,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    if (contact && (!contact.full_name || !contact.phone || !contact.email)) contact = null;
+    if (contact && (!contact.full_name || !contact.phone)) contact = null;
 
     let serviceRequest = null;
     if (contact) {
@@ -762,6 +762,12 @@ Deno.serve(async (req) => {
       }
       pending.phone = localPhone; // תמיד מספר השולח
       if (nameCandidate) pending.name = nameCandidate;
+      // מייל נדרש רק אם קיים כרטיס אחר באותו שם (חשד לכפילות) — בדיקה חד-פעמית
+      if (pending.name && !pending.name_checked) {
+        const sameName = await base44.asServiceRole.entities.Contact.filter({ full_name: pending.name });
+        pending.needs_email = sameName.some((c) => normalizeLocalPhone(c.phone) !== localPhone);
+        pending.name_checked = true;
+      }
 
       // שמירה ב-SystemSetting
       const settingValue = JSON.stringify(pending);
@@ -774,16 +780,14 @@ Deno.serve(async (req) => {
       // שאלה עם "?" → להעביר לסוכן (מייל/טלפון כבר נקלטו ל-pending, האיסוף ממשיך בהודעה הבאה)
       if (!isQuestion) {
         const missingName = !pending.name;
-        const missingEmail = !pending.email;
+        const missingEmail = pending.needs_email === true && !pending.email;
 
         let askMessage;
-        if (missingName && missingEmail) {
-          askMessage = await getBotContent(base44, 'ask_missing_details') || 'כמעט שם! 😊 כדי שנוכל לפתוח לך תיק, נשמח לשם המלא ולכתובת המייל שלך';
-        } else if (missingEmail) {
-          askMessage = (await getBotContent(base44, 'ask_missing_email') || 'תודה {name}! 😊 נשאר רק פרט אחרון — מה כתובת המייל שלך?')
-            .replaceAll('{name}', pending.name || '');
-        } else if (missingName) {
+        if (missingName) {
           askMessage = await getBotContent(base44, 'ask_missing_name') || 'כמעט סיימנו 😊 מה השם המלא שלך?';
+        } else if (missingEmail) {
+          askMessage = (await getBotContent(base44, 'ask_missing_email') || 'תודה {name}! 😊 כדי לוודא שאין לנו כבר כרטיס על שמך — מה כתובת המייל שלך?')
+            .replaceAll('{name}', pending.name || '');
         } else {
           // הכל קיים — בדיקה: האם השתנה פרט ב-pending?
           const changedSomething =
@@ -792,11 +796,13 @@ Deno.serve(async (req) => {
             (nameCandidate && pending.name !== oldPending.name);
           if (changedSomething) {
             // השתנה פרט → שולחים תבנית אישור מעודכנת
-            const confirmTemplate = await getBotContent(base44, 'contact_details_confirm');
-            askMessage = (confirmTemplate || 'הפרטים שלך:\n📛 שם: {name}\n📱 טלפון: {phone}\n📧 מייל: {email}\n\nהאם הכל נכון? כתוב/י *כן* לאישור.')
+            const confirmTemplate = pending.email
+              ? (await getBotContent(base44, 'contact_details_confirm') || 'הפרטים שלך:\n📛 שם: {name}\n📱 טלפון: {phone}\n📧 מייל: {email}\n\nהאם הכל נכון? כתוב/י *כן* לאישור.')
+              : (await getBotContent(base44, 'contact_details_confirm_no_email') || 'הפרטים שלך:\n📛 שם: {name}\n📱 טלפון: {phone}\n\nהאם הכל נכון? כתוב/י *כן* לאישור או תקן/י את הפרט השגוי.');
+            askMessage = confirmTemplate
               .replaceAll('{name}', pending.name)
               .replaceAll('{phone}', pending.phone)
-              .replaceAll('{email}', pending.email);
+              .replaceAll('{email}', pending.email || '');
           } else {
             // מעקף: תשובות פונקציונליות (כן/לא/נציגה) עוברות ישירות לשרשרת — לא נתפסות כאן
             const PASSTHROUGH_ANSWERS = ['כן','כ','נכון','הכל נכון','בטח','כמובן','אוקי','ok','סבבה','👍','✅','לא','נציגה'];
@@ -848,17 +854,33 @@ Deno.serve(async (req) => {
         const createdContact = existingContacts[0] || await base44.asServiceRole.entities.Contact.create({
           full_name: details.name,
           phone: contactPhone,
-          email: details.email,
+          ...(details.email ? { email: details.email } : {}),
           source: 'manual',
           status: 'new_lead',
           ...(extraPhoneNote ? { notes: extraPhoneNote } : {}),
         });
 
+        // אותו מייל בכרטיס קיים עם טלפון אחר — לא נוגעים בכרטיס הקיים, משימה לבשמת
+        if (existingContacts.length === 0 && details.email) {
+          const byEmail = await base44.asServiceRole.entities.Contact.filter({ email: details.email });
+          const other = byEmail.find((c) => c.id !== createdContact.id && normalizeLocalPhone(c.phone) !== contactPhone);
+          if (other) {
+            await base44.asServiceRole.entities.Task.create({
+              contact_id: createdContact.id,
+              title: `ייתכן כרטיס כפול — ${details.name}: אותו מייל כמו כרטיס קיים, טלפון אחר`,
+              type: 'followup',
+              assigned_to: 'basmat',
+              auto_generated: true,
+              notes: `כרטיס חדש: ${details.name} | ${details.email} | ${contactPhone} | ${createdContact.id}\nכרטיס קיים: ${other.full_name || ''} | ${other.email || ''} | ${other.phone || ''} | ${other.id}`,
+            });
+          }
+        }
+
         const serviceRequestData = {
           contact_id: createdContact.id,
           contact_name: details.name,
           contact_phone: contactPhone,
-          contact_email: details.email,
+          ...(details.email ? { contact_email: details.email } : {}),
           status: 'new',
           source: 'bot',
           conversation_id: conversationId,
