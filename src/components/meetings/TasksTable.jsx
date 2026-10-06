@@ -5,6 +5,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { TaskStatusBadge, PriorityBadge } from '@/components/StatusBadge';
 import { Pencil, Trash2, CheckCircle2 } from 'lucide-react';
 import { format } from 'date-fns';
+import { staffLabel } from '@/lib/staffLabels';
 
 const TYPE_LABELS = {
   followup: 'פולו-אפ', pre_meeting_checklist: 'צ׳ק לפני פגישה', post_meeting_checklist: 'צ׳ק אחרי פגישה',
@@ -56,7 +57,7 @@ export default function TasksTable({ tasks, contacts, onEdit, onDelete, onMarkDo
                 <TableCell><PriorityBadge priority={t.priority} /></TableCell>
                 <TableCell><TaskStatusBadge status={t.status} /></TableCell>
                 <TableCell className="text-xs text-muted-foreground">{t.due_date ? format(new Date(t.due_date), 'dd/MM/yy') : '—'}</TableCell>
-                <TableCell className="text-xs">{t.assigned_to || '—'}</TableCell>
+                <TableCell className="text-xs">{t.assigned_to ? staffLabel(t.assigned_to) : '—'}</TableCell>
                 <TableCell>
                   <div className="flex gap-1">
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit(t)}><Pencil size={14} /></Button>

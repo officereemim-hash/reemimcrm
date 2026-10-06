@@ -7,9 +7,15 @@ async function uchatTemplateNamespace(templateName) {
   const listOnce = async () => { try { const r = await fetch(`${UCHAT_BASE}/whatsapp-template/list`, { method: 'POST', headers: { Authorization: `Bearer ${UCHAT_TOKEN}` } }); if (!r.ok) return null; const j = await r.json(); const arr = j?.data || j?.templates || j || []; const t = (Array.isArray(arr) ? arr : []).find(x => x?.name === templateName || x?.template_name === templateName); return t?.namespace || null; } catch { return null; } };
   let ns = await listOnce(); if (!ns) { try { await fetch(`${UCHAT_BASE}/whatsapp-template/sync`, { method: 'POST', headers: { Authorization: `Bearer ${UCHAT_TOKEN}` } }); } catch {} ns = await listOnce(); } return ns;
 }
-async function uchatSendTemplate(phone972, firstName, templateName, bodyParams) {
+async function uchatSendTemplate(phone972, firstName, templateName, bodyParams, base44) {
   const namespace = await uchatTemplateNamespace(templateName); if (!namespace) { console.error(`uchat: template '${templateName}' not found/synced`); return null; }
   const params = {}; (bodyParams || []).forEach((v, i) => { params[`BODY_{{${i + 1}}}`] = String(v ?? ''); });
+  try {
+    if (base44) {
+      const imgSetting = await base44.asServiceRole.entities.SystemSetting.filter({ key: `uchat_tpl_img_${templateName}` });
+      if (imgSetting[0]?.value) params['HEADER_IMAGE'] = imgSetting[0].value;
+    }
+  } catch (_) { /* בלי תמונה — שולחים כרגיל */ }
   const res = await fetch(`${UCHAT_BASE}/subscriber/send-whatsapp-template-by-user-id`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${UCHAT_TOKEN}` }, body: JSON.stringify({ user_id: phone972, create_if_not_found: 'yes', contact: { first_name: firstName || '' }, content: { namespace, name: templateName, lang: 'he', params } }) });
   if (!res.ok) { console.error('uchat template http', res.status, await res.text().catch(() => '')); return null; }
   const j = await res.json().catch(() => ({})); const mid = j?.mid || j?.data?.mid || null; if (j?.status === 'ok' && mid) return { ...j, mid }; console.error('uchat template not ok:', JSON.stringify(j)); return null;
@@ -17,7 +23,7 @@ async function uchatSendTemplate(phone972, firstName, templateName, bodyParams) 
 async function uchatSend(base44, phone, tplKey, firstName, params) {
   let p = String(phone || '').replace(/[\s\-\+\(\)]/g, ''); if (p.startsWith('0')) p = '972' + p.substring(1);
   const tplName = await getUchatTemplateName(base44, tplKey); if (!tplName) { console.log(`uchat: שם תבנית ל-'${tplKey}' לא מוגדר (uchat_tpl_${tplKey})`); return false; }
-  return !!(await uchatSendTemplate(p, firstName, tplName, params || []));
+  return !!(await uchatSendTemplate(p, firstName, tplName, params || [], base44));
 }
 
 

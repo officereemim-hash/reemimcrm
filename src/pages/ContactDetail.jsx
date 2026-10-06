@@ -13,6 +13,7 @@ import TaskCard from '@/components/contacts/TaskCard';
 import CommunicationLog from '@/components/contacts/CommunicationLog';
 import DocumentsList from '@/components/contacts/DocumentsList';
 import MeetingsList from '@/components/contacts/MeetingsList';
+import { staffLabel } from '@/lib/staffLabels';
 
 export default function ContactDetail() {
   const { id } = useParams();
@@ -107,7 +108,7 @@ export default function ContactDetail() {
             {contact.phone && <span className="flex items-center gap-1"><Phone size={13} />{contact.phone}</span>}
             {contact.email && <span className="flex items-center gap-1"><Mail size={13} />{contact.email}</span>}
             {contact.service_type && <span>{SERVICE_TYPE_LABELS[contact.service_type]}</span>}
-            {contact.assigned_to && <span>מטופל/ת ע"י: <strong>{contact.assigned_to}</strong></span>}
+            {contact.assigned_to && <span>מטופל/ת ע"י: <strong>{staffLabel(contact.assigned_to)}</strong></span>}
           </div>
         </div>
         <Button variant="outline" onClick={() => setEditOpen(true)} className="gap-2">

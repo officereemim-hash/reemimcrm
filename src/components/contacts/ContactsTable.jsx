@@ -5,6 +5,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Trash2, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
+import { staffLabel } from '@/lib/staffLabels';
 
 export default function ContactsTable({ contacts, selectedIds, onToggleSelect, onToggleAll, onDelete, onEdit }) {
   const allSelected = contacts.length > 0 && contacts.every(c => selectedIds.includes(c.id));
@@ -57,7 +58,7 @@ export default function ContactsTable({ contacts, selectedIds, onToggleSelect, o
               <TableCell><BotStatusBadge status={c.bot_status} /></TableCell>
               <TableCell className="text-xs">{SERVICE_TYPE_LABELS[c.service_type] || '—'}</TableCell>
               <TableCell className="text-xs">{SOURCE_LABELS[c.source] || '—'}</TableCell>
-              <TableCell className="text-xs">{c.assigned_to || '—'}</TableCell>
+              <TableCell className="text-xs">{c.assigned_to ? staffLabel(c.assigned_to) : '—'}</TableCell>
               <TableCell className="text-xs text-muted-foreground">{c.created_date ? format(new Date(c.created_date), 'dd/MM/yy') : '—'}</TableCell>
               <TableCell>
                 <div className="flex items-center gap-1">

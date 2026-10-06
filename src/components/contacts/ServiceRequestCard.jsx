@@ -122,7 +122,7 @@ export default function ServiceRequestCard({ contactId, serviceRequests, onRefre
                 <Select value={form.source} onValueChange={v => setForm(f => ({ ...f, source: v }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="manual">ידני</SelectItem><SelectItem value="bot">בוט</SelectItem><SelectItem value="bar_call">שיחת בר</SelectItem><SelectItem value="webinar">וובינר</SelectItem><SelectItem value="excel_import">ייבוא אקסל</SelectItem>
+                    <SelectItem value="manual">ידני</SelectItem><SelectItem value="bot">בוט</SelectItem><SelectItem value="bar_call">שיחת א. תיאום</SelectItem><SelectItem value="webinar">וובינר</SelectItem><SelectItem value="excel_import">ייבוא אקסל</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

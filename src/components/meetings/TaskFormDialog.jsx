@@ -95,7 +95,13 @@ export default function TaskFormDialog({ open, onClose, onSave, contacts, editIt
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label>הקצאה ל</Label>
-              <Input value={form.assigned_to} onChange={e => setForm({ ...form, assigned_to: e.target.value })} placeholder="בר / יעל / בשמת" />
+              <Select value={form.assigned_to || ''} onValueChange={v => setForm({ ...form, assigned_to: v })}>
+                <SelectTrigger><SelectValue placeholder="בחר..." /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="bar">א. תיאום</SelectItem>
+                  <SelectItem value="basmat">בשמת</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label>תאריך יעד</Label>

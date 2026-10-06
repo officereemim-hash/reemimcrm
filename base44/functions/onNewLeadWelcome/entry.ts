@@ -31,11 +31,17 @@ async function uchatTemplateNamespace(templateName) {
 }
 
 // שליחת תבנית יזומה + יצירת איש קשר תקין באותה קריאה (תיקון הרפאים — פנטהרי 8.7)
-async function uchatSendTemplate(phone972, firstName, templateName, bodyParams) {
+async function uchatSendTemplate(phone972, firstName, templateName, bodyParams, base44) {
   const namespace = await uchatTemplateNamespace(templateName);
   if (!namespace) { console.error(`uchat: template '${templateName}' not found/synced`); return null; }
   const params = {};
   (bodyParams || []).forEach((v, i) => { params[`BODY_{{${i + 1}}}`] = String(v ?? ''); });
+  try {
+    if (base44) {
+      const imgSetting = await base44.asServiceRole.entities.SystemSetting.filter({ key: `uchat_tpl_img_${templateName}` });
+      if (imgSetting[0]?.value) params['HEADER_IMAGE'] = imgSetting[0].value;
+    }
+  } catch (_) { /* בלי תמונה — שולחים כרגיל */ }
   const res = await fetch(`${UCHAT_BASE}/subscriber/send-whatsapp-template-by-user-id`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${UCHAT_TOKEN}` },
@@ -193,7 +199,7 @@ Deno.serve(async (req) => {
       sendStatus = 'failed';
       console.log(`uchat: שם תבנית ל-'${uchatTplKey}' לא מוגדר (SystemSetting uchat_tpl_${uchatTplKey}) — דולג`);
     } else {
-      providerResponse = await uchatSendTemplate(phone972, c.full_name || '', tplName, [c.full_name || 'שלום', sourceLabel || 'לאחרונה']);
+      providerResponse = await uchatSendTemplate(phone972, c.full_name || '', tplName, [c.full_name || 'שלום', sourceLabel || 'לאחרונה'], base44);
       sendStatus = providerResponse ? 'sent' : 'failed';
     }
 

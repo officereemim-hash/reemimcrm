@@ -26,7 +26,7 @@ const SR_STATUS_OPTIONS = [
 
 const SOURCE_OPTIONS = [
   { value: 'bot', label: 'בוט' },
-  { value: 'bar_call', label: 'שיחת בר' },
+  { value: 'bar_call', label: 'שיחת א. תיאום' },
   { value: 'excel_import', label: 'ייבוא אקסל' },
   { value: 'manual', label: 'ידני' },
   { value: 'webinar', label: 'וובינר' },

@@ -98,8 +98,7 @@ export default function ContactFormDialog({ contact, onClose, onSave }) {
               <Select value={form.assigned_to || ''} onValueChange={v => set('assigned_to', v)}>
                 <SelectTrigger><SelectValue placeholder="בחר..." /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="bar">בר</SelectItem>
-                  <SelectItem value="yael">יעל</SelectItem>
+                  <SelectItem value="bar">א. תיאום</SelectItem>
                   <SelectItem value="basmat">בשמת</SelectItem>
                 </SelectContent>
               </Select>

@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { staffLabel } from '@/lib/staffLabels';
 
 const TYPE_ICONS = {
   whatsapp: MessageSquare,
@@ -69,7 +70,7 @@ export default function CommunicationLog({ contactId, communications, onRefresh 
                     <span className="text-xs text-muted-foreground">
                       {comm.direction === 'inbound' ? '← נכנס' : '→ יוצא'}
                     </span>
-                    {comm.sent_by && <span className="text-xs text-muted-foreground">ע"י: {comm.sent_by}</span>}
+                    {comm.sent_by && <span className="text-xs text-muted-foreground">ע"י: {staffLabel(comm.sent_by)}</span>}
                     {comm.is_automated && <span className="text-xs bg-muted px-1.5 rounded">אוטומטי</span>}
                   </div>
                   <p className="text-sm mt-1 text-foreground break-words">{comm.content}</p>

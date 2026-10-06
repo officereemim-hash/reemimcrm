@@ -3,6 +3,7 @@ import { base44 } from '@/api/base44Client';
 import { Link } from 'react-router-dom';
 import { Phone, MoreHorizontal } from 'lucide-react';
 import { BotStatusBadge, ContactStatusBadge } from '@/components/StatusBadge';
+import { staffLabel } from '@/lib/staffLabels';
 
 const COLUMNS = [
   { key: 'new_waiting', label: 'פניות חדשות', statuses: ['new', 'waiting_agent'], color: '#EDE8F5', textColor: '#4A2C78' },
@@ -65,7 +66,7 @@ export default function LeadsPipeline() {
                         <BotStatusBadge status={c.bot_status} />
                       </div>
                       {c.assigned_to && (
-                        <div className="mt-1 text-xs text-muted-foreground">→ {c.assigned_to}</div>
+                        <div className="mt-1 text-xs text-muted-foreground">→ {staffLabel(c.assigned_to)}</div>
                       )}
                     </div>
                   </Link>

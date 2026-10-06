@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { format } from 'date-fns';
+import { staffLabel } from '@/lib/staffLabels';
 
 const STATUS_OPTIONS = [
   { value: 'open', label: 'פתוח' }, { value: 'in_progress', label: 'בביצוע' }, { value: 'done', label: 'הושלם' }, { value: 'cancelled', label: 'בוטל' },
@@ -85,7 +86,7 @@ export default function TaskCard({ contactId, tasks, onRefresh }) {
             <PriorityBadge priority={task.priority} />
           </div>
           <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
-            {task.assigned_to && <span>מטופל/ת: {task.assigned_to}</span>}
+            {task.assigned_to && <span>מטופל/ת: {staffLabel(task.assigned_to)}</span>}
             {task.due_date && <span>יעד: {format(new Date(task.due_date), 'dd/MM/yyyy')}</span>}
             {task.category && <span className="px-1.5 py-0.5 bg-muted rounded">{task.category === 'operational' ? 'תפעולי' : 'מכירות'}</span>}
           </div>

@@ -21,11 +21,17 @@ async function uchatTemplateNamespace(templateName) {
   if (!ns) { try { await fetch(`${UCHAT_BASE}/whatsapp-template/sync`, { method: 'POST', headers: { Authorization: `Bearer ${UCHAT_TOKEN}` } }); } catch {} ns = await listOnce(); }
   return ns;
 }
-async function uchatSendTemplate(phone972, firstName, templateName, bodyParams) {
+async function uchatSendTemplate(phone972, firstName, templateName, bodyParams, base44) {
   const namespace = await uchatTemplateNamespace(templateName);
   if (!namespace) { console.error(`uchat: template '${templateName}' not found/synced`); return null; }
   const params = {};
   (bodyParams || []).forEach((v, i) => { params[`BODY_{{${i + 1}}}`] = String(v ?? ''); });
+  try {
+    if (base44) {
+      const imgSetting = await base44.asServiceRole.entities.SystemSetting.filter({ key: `uchat_tpl_img_${templateName}` });
+      if (imgSetting[0]?.value) params['HEADER_IMAGE'] = imgSetting[0].value;
+    }
+  } catch (_) { /* בלי תמונה — שולחים כרגיל */ }
   const res = await fetch(`${UCHAT_BASE}/subscriber/send-whatsapp-template-by-user-id`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${UCHAT_TOKEN}` },
@@ -115,7 +121,7 @@ async function sendMeetingReminder(base44, contact, meeting) {
     console.log(`uchat: שם תבנית ל-'${TEMPLATE_KEY}' לא מוגדר (uchat_tpl_${TEMPLATE_KEY})`);
     return { ok: false, params, error: 'template_not_mapped' };
   }
-  const r = await uchatSendTemplate(normalizePhone972(contact.phone), firstName, tplName, params);
+  const r = await uchatSendTemplate(normalizePhone972(contact.phone), firstName, tplName, params, base44);
   return { ok: !!r, params, error: r ? '' : 'uchat_template_failed' };
 }
 

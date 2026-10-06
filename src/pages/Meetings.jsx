@@ -15,6 +15,7 @@ import MeetingFormDialog from '@/components/meetings/MeetingFormDialog';
 import TaskFormDialog from '@/components/meetings/TaskFormDialog';
 import StatCard from '@/components/shared/StatCard';
 import { CheckSquare, AlertTriangle, Clock as ClockIcon } from 'lucide-react';
+import { staffLabel } from '@/lib/staffLabels';
 
 const LOCATION_LABELS = { modiin: 'מודיעין', petah_tikva_wednesday: 'פ"ת', zoom: 'זום', phone: 'טלפון' };
 
@@ -281,7 +282,7 @@ function TaskCardItem({ task, getContact, onEdit, onDelete, onMarkDone }) {
           </div>
           <div className="text-xs text-muted-foreground mt-1 flex gap-2 flex-wrap">
             {contact && <Link to={`/contacts/${task.contact_id}`} className="text-primary hover:underline">{contact.full_name}</Link>}
-            {task.assigned_to && <span>→ {task.assigned_to}</span>}
+            {task.assigned_to && <span>→ {staffLabel(task.assigned_to)}</span>}
             {task.due_date && <span>יעד: {format(new Date(task.due_date), 'dd/MM/yy')}</span>}
           </div>
         </div>

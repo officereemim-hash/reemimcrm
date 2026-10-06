@@ -121,7 +121,7 @@ export const SOURCE_LABELS = {
   email: 'מייל',
   manual: 'ידני',
   bot: 'בוט',
-  bar_call: 'שיחת בר',
+  bar_call: 'שיחת א. תיאום',
   shoranss: 'שורנס',
   calcom: 'קביעת פגישה עצמאית (Cal.com)',
 };

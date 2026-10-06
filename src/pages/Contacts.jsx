@@ -17,6 +17,7 @@ import ViewToggle from '@/components/shared/ViewToggle';
 import StatCard from '@/components/shared/StatCard';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { Users, UserCheck, FileText, XCircle } from 'lucide-react';
+import { staffLabel } from '@/lib/staffLabels';
 
 const TABS = [
   { key: 'all', label: 'הכל' },
@@ -211,7 +212,7 @@ export default function Contacts() {
                         <span>{SERVICE_TYPE_LABELS[contact.service_type]}</span>
                       )}
                       {contact.assigned_to && (
-                        <span>מטופל/ת ע"י: {contact.assigned_to}</span>
+                        <span>מטופל/ת ע"י: {staffLabel(contact.assigned_to)}</span>
                       )}
                       <span className="flex items-center gap-1">
                         <Calendar size={12} />

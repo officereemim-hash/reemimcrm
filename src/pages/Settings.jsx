@@ -194,7 +194,7 @@ export default function Settings() {
               <div className="text-xs text-muted-foreground">גישה לכל הרשומות, מחיקות, ייצוא, הגדרות אוטומציה, שגיאות מערכת</div>
             </div>
             <div className="p-3 bg-muted rounded-lg">
-              <div className="font-semibold mb-1">Staff — יעל, בר</div>
+              <div className="font-semibold mb-1">צוות: א. תיאום</div>
               <div className="text-xs text-muted-foreground">רק רשומות שהוקצו להן (assigned_to = currentUser)</div>
             </div>
           </CardContent>
