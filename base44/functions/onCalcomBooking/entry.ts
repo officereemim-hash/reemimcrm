@@ -204,14 +204,25 @@ async function findContact(base44, attendee) {
   return null;
 }
 
-async function findServiceRequest(base44, contactId, serviceType) {
-  const requests = await base44.asServiceRole.entities.ServiceRequest.filter({ contact_id: contactId }, '-updated_date', 20);
-  const open = requests.find(request => !['completed', 'cancelled', 'closed_lost', 'followup_closed'].includes(request.status));
-  if (open) return open;
-  if (requests[0]) return requests[0];
-  const requestData = { contact_id: contactId, source: 'calcom', status: 'new' };
-  if (serviceType) requestData.service_type = serviceType;
-  return await base44.asServiceRole.entities.ServiceRequest.create(requestData);
+function normalizeName(name) {
+  return String(name || '').replace(/[^\p{L}\s]/gu, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+function similarNames(a, b) {
+  const na = normalizeName(a);
+  const nb = normalizeName(b);
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+  const ta = na.split(' ').sort().join(' ');
+  const tb = nb.split(' ').sort().join(' ');
+  return ta === tb;
+}
+
+// ליד שורנס בלי טלפון — התאמה לפי שם דומה
+async function findShoranssLeadByName(base44, name) {
+  if (!name || normalizeName(name).length < 3) return [];
+  const leads = await base44.asServiceRole.entities.Contact.filter({ source: 'shoranss' }, '-created_date', 200);
+  return leads.filter(c => !c.phone && similarNames(c.full_name, name));
 }
 
 async function createGoogleCalendarEvent(base44, meeting, contact, detected) {
@@ -326,7 +337,30 @@ Deno.serve(async (req) => {
     const slug = getSlug(payload);
     const attendee = getAttendee(payload);
     const detected = detectMeeting(slug);
-    const contact = await findContact(base44, attendee);
+    let contact = await findContact(base44, attendee);
+    let duplicateMatches = [];
+    if (!contact && attendee.name) {
+      const matches = await findShoranssLeadByName(base44, attendee.name);
+      if (matches.length === 1) contact = matches[0];
+      else if (matches.length > 1) duplicateMatches = matches;
+    }
+
+    let contactCreated = false;
+    if (!contact && (attendee.name || attendee.email || attendee.phone)) {
+      const newContact = { full_name: attendee.name || attendee.email || attendee.phone, status: 'in_progress', source: 'manual' };
+      if (attendee.phone) newContact.phone = normalizePhone(attendee.phone);
+      if (attendee.email) newContact.email = attendee.email.toLowerCase().trim();
+      contact = await base44.asServiceRole.entities.Contact.create(newContact);
+      contactCreated = true;
+      if (duplicateMatches.length > 0) {
+        await base44.asServiceRole.entities.Task.create({
+          contact_id: contact.id,
+          title: `בדיקת כפילות — ${contact.full_name} (נמצאו ${duplicateMatches.length} לידים בשם דומה)`,
+          type: 'followup', category: 'operational', assigned_to: 'bar', auto_generated: true,
+          notes: duplicateMatches.map(c => `${c.full_name} (${c.id})`).join('\n'),
+        });
+      }
+    }
 
     if (!contact) {
       await base44.asServiceRole.entities.Communication.create({
@@ -343,7 +377,28 @@ Deno.serve(async (req) => {
       contact.email = cleanEmail;
     }
 
-    const serviceRequest = await findServiceRequest(base44, contact.id, detected.serviceType || contact.service_type);
+    if (attendee.phone && !contact.phone) {
+      const cleanPhone = normalizePhone(attendee.phone);
+      await base44.asServiceRole.entities.Contact.update(contact.id, { phone: cleanPhone });
+      contact.phone = cleanPhone;
+    }
+
+    const srList = await base44.asServiceRole.entities.ServiceRequest.filter({ contact_id: contact.id }, '-updated_date', 20);
+    const openSR = srList.find(r => !['completed', 'cancelled', 'closed_lost', 'followup_closed'].includes(r.status));
+    const isExistingClient = !contactCreated && ['active_client', 'inactive_client', 'completed'].includes(contact.status);
+    let serviceRequest = openSR;
+    if (!serviceRequest) {
+      const requestData = {
+        contact_id: contact.id, contact_name: contact.full_name, contact_phone: contact.phone, contact_email: contact.email,
+        source: 'calcom', status: 'new', skip_prep: isExistingClient,
+      };
+      const st = detected.serviceType || contact.service_type;
+      if (st) requestData.service_type = st === 'annual_service' ? 'annual_service_call' : st;
+      serviceRequest = await base44.asServiceRole.entities.ServiceRequest.create(requestData);
+    }
+    if (isExistingClient && contact.status !== 'active_client') {
+      await base44.asServiceRole.entities.Contact.update(contact.id, { status: 'active_client' });
+    }
     const startTime = payload.startTime || payload.start_time || payload.start || payload.booking?.startTime;
     const endTime = payload.endTime || payload.end_time || payload.end || payload.booking?.endTime;
     const duration = startTime && endTime ? Math.max(15, Math.round((new Date(endTime).getTime() - new Date(startTime).getTime()) / 60000)) : 60;
@@ -413,7 +468,7 @@ Deno.serve(async (req) => {
       await base44.asServiceRole.entities.WebinarRegistration.update(webinarRegs[0].id, { meeting_scheduled: true, meeting_id: meeting.id });
     }
 
-    return Response.json({ success: true, meeting_id: meeting.id, service_request_id: serviceRequest.id, messages_via: 'status_automation' });
+    return Response.json({ success: true, meeting_id: meeting.id, service_request_id: serviceRequest.id, existing_client: isExistingClient, messages_via: 'status_automation' });
   } catch (error) {
     console.error('onCalcomBooking error:', error.message);
     return Response.json({ error: error.message }, { status: 500 });

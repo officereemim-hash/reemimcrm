@@ -183,6 +183,26 @@ async function getBotContent(base44, key) {
   return records[0]?.content || '';
 }
 
+function questionnaireAlreadyFilled(contact, serviceRequest) {
+  return contact?.shoranss_questionnaire === 'filled' || serviceRequest?.questionnaire_completed === true;
+}
+
+const QUESTION_WORDS = ['מה', 'למה', 'איך', 'מתי', 'איפה', 'האם', 'כמה', 'מי', 'אפשר'];
+function isQuestionText(text) {
+  return String(text || '').includes('?') || QUESTION_WORDS.includes(normalizeAnswer(String(text || '').trim().split(/\s+/)[0]));
+}
+
+async function buildIdRequestMessage(base44, contact) {
+  const needsEmail = !contact.email;
+  let tpl = await getBotContent(base44, needsEmail ? 'questionnaire_id_email_request' : 'questionnaire_id_request');
+  if (!tpl && needsEmail) {
+    tpl = await getBotContent(base44, 'questionnaire_id_request');
+    if (tpl) tpl += '\n\n📧 וגם — מה כתובת המייל שלך?';
+  }
+  if (!tpl) tpl = 'אשמח לקראת הפגישה שתכתוב/י לנו את *מספר תעודת הזהות* ו*תאריך הלידה*.\n\n👈 בהודעה אחת, לדוגמה: 123456789 01/01/1960';
+  return tpl.replaceAll('{name}', contact.full_name || '');
+}
+
 async function getServiceContentUrl(base44, query) {
   const records = await base44.asServiceRole.entities.ServiceContent.filter({ ...query, is_active: true });
   return records[0]?.url || '';
@@ -536,6 +556,52 @@ Deno.serve(async (req) => {
         last_bot_interaction_at: new Date().toISOString(),
         bot_status: contact.bot_status === 'new' ? 'in_conversation' : contact.bot_status,
       });
+    }
+
+    // ===== FP-WaitingMeetingReply: תשובה ראשונה אחרי אישור פגישה שנשלח בתבנית (חלון היה סגור) → המשך הרצף =====
+    // חריגים: בקשת שינוי/ביטול מועד ושאלה — ממשיכים למסלול הקיים (השלב נשאר waiting_meeting_reply)
+    if (contact && serviceRequest && serviceRequest.current_step === 'waiting_meeting_reply' && !isRescheduleRequest(text) && !isQuestionText(text)) {
+      const wmConvId = cachedConversationSettings[0]?.value || null;
+      const apptType = serviceRequest.last_appointment_type || '';
+      const isOffice = apptType === 'modiin' || apptType.includes('petah_tikva');
+      let wmMsg = '';
+      let wmPath = '';
+      if (isOffice) {
+        wmMsg = (await getBotContent(base44, 'car_plate_request') || 'כדי שנסדר לך חניה — מה מספר הרכב שלך? אם אין צורך, כתוב/י "אין צורך"').replaceAll('{name}', contact.full_name || '');
+        await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: 'waiting_car_plate' });
+        await base44.asServiceRole.entities.Contact.update(contact.id, { bot_status: 'waiting_user_reply' });
+        wmPath = 'fp_meeting_reply_car_plate';
+      } else if (serviceRequest.skip_prep) {
+        wmMsg = await getBotContent(base44, 'meeting_prep_done') || 'תודה! הכל מוכן לפגישה, נתראה 🌷';
+        await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: '' });
+        await base44.asServiceRole.entities.Contact.update(contact.id, { bot_status: 'closed' });
+        wmPath = 'fp_meeting_reply_skip_prep';
+      } else if (questionnaireAlreadyFilled(contact, serviceRequest)) {
+        wmMsg = await buildIdRequestMessage(base44, contact);
+        await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: 'waiting_id_details' });
+        await base44.asServiceRole.entities.Contact.update(contact.id, { bot_status: 'waiting_user_reply' });
+        wmPath = 'fp_meeting_reply_id_request';
+      } else {
+        const WM_SUBTYPE = { retirement: 'shoranss_retirement', economic_feasibility: 'shoranss_economic', investments: 'shoranss_investments', divorce_split: 'shoranss_divorce', tax_advisory: 'shoranss_tax', annual_service_call: 'shoranss_retirement' };
+        const wmSub = WM_SUBTYPE[serviceRequest.service_type];
+        const wmUrl = wmSub ? await getServiceContentUrl(base44, { content_type: 'questionnaire', sub_type: wmSub }) : '';
+        if (wmUrl) {
+          const qTpl = await getBotContent(base44, 'questionnaire_request') || 'לקראת הפגישה, נשמח שתמלא/י את השאלון:\n{questionnaire_link}\n\n👈 לאחר המילוי — השב/י כאן "מילאתי" ונמשיך 🙂';
+          wmMsg = qTpl.replaceAll('{name}', contact.full_name || '').replaceAll('{questionnaire_link}', wmUrl);
+          await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: 'waiting_questionnaire' });
+          await base44.asServiceRole.entities.Contact.update(contact.id, { bot_status: 'waiting_user_reply', shoranss_questionnaire: 'sent' });
+          wmPath = 'fp_meeting_reply_questionnaire';
+        } else {
+          wmMsg = await getBotContent(base44, 'service_type_clarify') || 'כדי שנוכל לכוון אותך נכון — מה התחום שמעניין אותך?\n1. ייעוץ פרישה\n2. היתכנות כלכלית\n3. תכנון השקעות\n4. איזון אקטוארי בגירושין\n5. ייעוץ מס\n\n👈 השב/י במספר המתאים';
+          await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: '', pending_service_clarify: true });
+          await base44.asServiceRole.entities.Contact.update(contact.id, { bot_status: 'waiting_user_reply' });
+          wmPath = 'fp_meeting_reply_clarify';
+        }
+      }
+      const wmSent = await sendWhatsApp(chatId, wmMsg, botEnabled);
+      await logIncoming(base44, idMessage, phone, text, chatId, wmConvId);
+      await logOutgoing(base44, wmSent?.idMessage || `out_${Date.now()}_fp_meeting_reply`, phone, wmMsg, chatId, wmConvId, outgoingStatus);
+      return Response.json({ ok: true, fast_path: wmPath });
     }
 
     // ===== FP-Greeting: פונה מוכר (פרטים מלאים) שפותח בברכה → תפריט השירותים ישירות, לא סוכן =====
@@ -917,13 +983,20 @@ Deno.serve(async (req) => {
           service_type: clarifiedType,
           pending_service_clarify: false,
         });
-        const questionnaireUrl = await getServiceContentUrl(base44, { content_type: 'questionnaire', sub_type: clarifySubType });
-        const questionnaireTemplate = await getBotContent(base44, 'questionnaire_request');
-        const message = (questionnaireTemplate || 'מצורף שאלון קצר למילוי לקראת הפגישה:\n{questionnaire_link}')
-          .replaceAll('{name}', contact.full_name || '')
-          .replaceAll('{questionnaire_link}', questionnaireUrl);
+        let message;
+        if (questionnaireAlreadyFilled(contact, serviceRequest)) {
+          message = await buildIdRequestMessage(base44, contact);
+          await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: 'waiting_id_details' });
+          await base44.asServiceRole.entities.Contact.update(contact.id, { bot_status: 'waiting_user_reply' });
+        } else {
+          const questionnaireUrl = await getServiceContentUrl(base44, { content_type: 'questionnaire', sub_type: clarifySubType });
+          const questionnaireTemplate = await getBotContent(base44, 'questionnaire_request');
+          message = (questionnaireTemplate || 'מצורף שאלון קצר למילוי לקראת הפגישה:\n{questionnaire_link}')
+            .replaceAll('{name}', contact.full_name || '')
+            .replaceAll('{questionnaire_link}', questionnaireUrl);
+          await base44.asServiceRole.entities.Contact.update(contact.id, { bot_status: 'waiting_user_reply', shoranss_questionnaire: 'sent' });
+        }
         const sent = await sendWhatsApp(chatId, message, botEnabled);
-        await base44.asServiceRole.entities.Contact.update(contact.id, { bot_status: 'waiting_user_reply', shoranss_questionnaire: 'sent' });
         await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
         await logOutgoing(base44, sent?.idMessage || `out_${Date.now()}_fp_clarify`, phone, message, chatId, conversationId, outgoingStatus);
         try {
@@ -1443,7 +1516,15 @@ Deno.serve(async (req) => {
         const questionnaireUrl = qSubType ? await getServiceContentUrl(base44, { content_type: 'questionnaire', sub_type: qSubType }) : '';
         await new Promise(resolve => setTimeout(resolve, 2000));
         let followupMsg = '';
-        if (questionnaireUrl) {
+        if (serviceRequest.skip_prep) {
+          followupMsg = await getBotContent(base44, 'meeting_prep_done') || 'תודה! הכל מוכן לפגישה, נתראה 🌷';
+          await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: '' });
+          await base44.asServiceRole.entities.Contact.update(contact.id, { bot_status: 'closed' });
+        } else if (questionnaireAlreadyFilled(contact, serviceRequest)) {
+          followupMsg = await buildIdRequestMessage(base44, contact);
+          await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: 'waiting_id_details' });
+          await base44.asServiceRole.entities.Contact.update(contact.id, { bot_status: 'waiting_user_reply' });
+        } else if (questionnaireUrl) {
           const qTpl = await getBotContent(base44, 'questionnaire_request') || 'לקראת הפגישה, נשמח שתמלא/י את השאלון:\n{questionnaire_link}\n\n👈 לאחר המילוי — השב/י כאן "מילאתי" ונמשיך 🙂';
           followupMsg = qTpl.replaceAll('{name}', contact.full_name || '').replaceAll('{questionnaire_link}', questionnaireUrl);
           await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: 'waiting_questionnaire' });
@@ -1462,6 +1543,38 @@ Deno.serve(async (req) => {
         return Response.json({ ok: true, fast_path: 'fp_car_plate_then_questionnaire', location: isPetahTikva ? 'petah_tikva' : 'modiin' });
       }
       // לא מספר רכב ולא "אין צורך" — שאלה או הבהרה: ממשיכים לסוכן AI (בלי לספור ניסיון כושל)
+    }
+
+    // ===== FP-AttendanceConfirm: אישור הגעה בטקסט אחרי תזכורת פגישה =====
+    {
+      const attNorm = normalizeAnswer(text);
+      const attWords = attNorm.split(/\s+/);
+      const ATT_NEGATIVE = ['בטל', 'ביטול', 'לדחות', 'לשנות', 'להזיז'];
+      const isNegative = attWords.includes('לא') || ATT_NEGATIVE.some(k => attNorm.includes(k));
+      const ATT_EXACT = ['כן', 'מאשר', 'מאשרת', 'מאושר', 'אגיע', 'נגיע', 'בטח', 'כמובן'];
+      const ATT_INCLUDES = ['מגיע', 'מגיעה', 'אגיע', 'מאשר', 'מאשרת'];
+      const isConfirm = !isNegative && (ATT_EXACT.includes(attNorm) || (attWords.length <= 5 && ATT_INCLUDES.some(k => attNorm.includes(k))));
+      if (contact && isConfirm) {
+        const now = Date.now();
+        const upcoming = await base44.asServiceRole.entities.Meeting.filter({ contact_id: contact.id, status: 'scheduled' }, 'scheduled_at', 10);
+        const attMeeting = upcoming.find(m => {
+          const t = new Date(m.scheduled_at).getTime();
+          return t > now && t - now <= 48 * 60 * 60 * 1000 && (m.reminder_d1_sent || m.reminder_h1_sent) && !m.attendance_confirmed;
+        });
+        if (attMeeting) {
+          await base44.asServiceRole.entities.Meeting.update(attMeeting.id, { attendance_confirmed: true, attendance_confirmed_at: new Date().toISOString() });
+          const attMsg = (await getBotContent(base44, 'attendance_confirmed_ack') || 'תודה שאישרת {name}, נתראה בפגישה 🌷').replaceAll('{name}', contact.full_name || '');
+          const attSent = await sendWhatsApp(chatId, attMsg, botEnabled);
+          await logIncoming(base44, idMessage, phone, text, chatId, conversationId);
+          await logOutgoing(base44, attSent?.idMessage || `out_${Date.now()}_fp_attendance`, phone, attMsg, chatId, conversationId, outgoingStatus);
+          await base44.asServiceRole.entities.Communication.create({
+            contact_id: contact.id, type: 'whatsapp', direction: 'inbound', sent_by: 'system', is_automated: true,
+            template_id: 'attendance_confirmed', status: 'sent', content: `הלקוח/ה אישר/ה הגעה לפגישה ("${text}")`,
+          });
+          try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `[לקוח כתב]: ${text}\n\n${attMsg}` }); } catch (_) {}
+          return Response.json({ ok: true, fast_path: 'fp_attendance_confirmed', meeting_id: attMeeting.id });
+        }
+      }
     }
 
     // ===== FP-Polite: תגובת נימוס קצרה במצב המתנה — מענה קצר בלי סוכן =====

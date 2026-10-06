@@ -182,6 +182,7 @@ Deno.serve(async (req) => {
 
     const serviceType = serviceRequest.service_type || '';
     const firstName = (contact.full_name || '').split(' ')[0];
+    const questionnaireAlreadyFilled = contact.shoranss_questionnaire === 'filled' || serviceRequest.questionnaire_completed === true;
 
     async function getContent(key) {
       const records = await base44.asServiceRole.entities.BotContent.filter({ key, is_active: true });
@@ -351,6 +352,28 @@ Deno.serve(async (req) => {
         } catch (e) { console.error('send_fail_alert failed:', e.message); }
       }
       await addMessageToConversation(content, result);
+    }
+
+    // בקשת ת"ז + תאריך לידה (ומייל אם חסר) והעברה לשלב waiting_id_details
+    async function sendIdRequestNow() {
+      const needsEmail = !contact.email;
+      const idRequestKey = needsEmail ? 'questionnaire_id_email_request' : 'questionnaire_id_request';
+      let idRequestTemplate = await getContent(idRequestKey);
+      if (!idRequestTemplate && needsEmail) {
+        idRequestTemplate = await getContent('questionnaire_id_request');
+        if (idRequestTemplate) idRequestTemplate += '\n\n📧 וגם — מה כתובת המייל שלך?';
+      }
+      if (idRequestTemplate) {
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        const idRequestMessage = fillTemplate(idRequestTemplate, { name: contact.full_name || '' });
+        const idRequestResult = await sendWhatsApp(idRequestMessage, idRequestKey, [contact.full_name || '']);
+        await logCommunication(idRequestMessage, idRequestKey, idRequestResult);
+      }
+      await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: 'waiting_id_details' });
+      await base44.asServiceRole.entities.Contact.update(contact.id, {
+        bot_status: 'waiting_user_reply',
+        last_bot_interaction_at: new Date().toISOString(),
+      });
     }
 
     if (pendingChanged && newPending === 'send_basmat_schedule') {
@@ -524,8 +547,24 @@ Deno.serve(async (req) => {
 
       const confirmTemplate = await getContent(templateKey);
       const confirmMessage = fillTemplate(confirmTemplate || '{name}, הפגישה עם בשמת נקבעה בהצלחה במועד: {time}', values);
-      const confirmResult = await sendWhatsApp(confirmMessage, templateKey, [contact.full_name || '', serviceRequest.last_appointment_time_str || '', zoomLink || wazeLink || '']);
+      const isModiin = templateKey === 'meeting_scheduled_modiin';
+      const isPT = templateKey === 'meeting_scheduled_petah_tikva';
+      const isPhone = templateKey === 'meeting_scheduled_phone';
+      const tplLocation = isModiin ? 'משרדנו במודיעין' : isPT ? 'משרדנו בפתח תקווה' : isPhone ? 'שיחת טלפון' : 'פגישת זום';
+      const tplLink = (isModiin || isPT) ? (wazeLink || '-') : isPhone ? (values.caller_phone || '0544405554') : (zoomLink || '-');
+      const confirmParams = [contact.full_name || '', serviceRequest.last_appointment_time_str || 'המועד שנקבע', tplLocation, tplLink];
+      const confirmResult = await sendWhatsApp(confirmMessage, templateKey, confirmParams);
       await logCommunication(confirmMessage, templateKey, confirmResult);
+
+      // נשלח בתבנית (חלון סגור) — ממתינים לתשובת הלקוח שתפתח את החלון ותמשיך את הרצף
+      if (confirmResult?.errorDetail === 'sent_via_template_fallback') {
+        await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: 'waiting_meeting_reply' });
+        await base44.asServiceRole.entities.Contact.update(contact.id, {
+          bot_status: 'waiting_user_reply',
+          last_bot_interaction_at: new Date().toISOString(),
+        });
+        return Response.json({ ok: true, action: 'waiting_meeting_reply', template: templateKey });
+      }
 
       // רצף חניה: בפגישה פרונטלית מבקשים מספר רכב כהודעה נפרדת ועוצרים.
       // השאלון נשלח רק אחרי מענה הרכב (greenApiWebhook / FP-CarPlate) — בקשה אחת בכל פעם.
@@ -547,6 +586,17 @@ Deno.serve(async (req) => {
           last_bot_interaction_at: new Date().toISOString(),
         });
         return Response.json({ ok: true, action: 'waiting_car_plate', template: templateKey });
+      }
+
+      // לקוח קיים — אישור בלבד, בלי הכנה
+      if (serviceRequest.skip_prep) {
+        await base44.asServiceRole.entities.Contact.update(contact.id, { bot_status: 'closed', last_bot_interaction_at: new Date().toISOString() });
+        return Response.json({ ok: true, action: 'skip_prep_confirmation_only', template: templateKey });
+      }
+      // השאלון כבר מולא — ישר לבקשת ת"ז
+      if (questionnaireAlreadyFilled) {
+        await sendIdRequestNow();
+        return Response.json({ ok: true, action: 'questionnaire_already_filled_id_request', template: templateKey });
       }
 
       // Part 7: מסלול הוובינר ממשיך מכאן בדיוק כמו מסלול השירות —
@@ -671,29 +721,8 @@ Deno.serve(async (req) => {
         await logCommunication(thanksMessage, 'questionnaire_completed_thanks', thanksResult);
       }
 
-      const needsEmail = !contact.email;
-      const idRequestKey = needsEmail ? 'questionnaire_id_email_request' : 'questionnaire_id_request';
-      let idRequestTemplate = await getContent(idRequestKey);
-      if (!idRequestTemplate && needsEmail) {
-        idRequestTemplate = await getContent('questionnaire_id_request');
-        if (idRequestTemplate) idRequestTemplate += '\n\n📧 וגם — מה כתובת המייל שלך?';
-      }
-      if (idRequestTemplate) {
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        const idRequestMessage = fillTemplate(idRequestTemplate, values);
-        const idRequestResult = await sendWhatsApp(idRequestMessage, idRequestKey, [contact.full_name || '']);
-        await logCommunication(idRequestMessage, idRequestKey, idRequestResult);
-      }
-
-      await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, {
-        current_step: 'waiting_id_details',
-      });
-
-      await base44.asServiceRole.entities.Contact.update(contact.id, {
-        bot_status: 'waiting_user_reply',
-        shoranss_questionnaire: 'filled',
-        last_bot_interaction_at: new Date().toISOString(),
-      });
+      await sendIdRequestNow();
+      await base44.asServiceRole.entities.Contact.update(contact.id, { shoranss_questionnaire: 'filled' });
 
       return Response.json({ ok: true, action: 'questionnaire_completed_waiting_id' });
     }

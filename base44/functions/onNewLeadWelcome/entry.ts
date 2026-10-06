@@ -193,7 +193,7 @@ Deno.serve(async (req) => {
       sendStatus = 'failed';
       console.log(`uchat: שם תבנית ל-'${uchatTplKey}' לא מוגדר (SystemSetting uchat_tpl_${uchatTplKey}) — דולג`);
     } else {
-      providerResponse = await uchatSendTemplate(phone972, c.full_name || '', tplName, [c.full_name || c.phone || '']);
+      providerResponse = await uchatSendTemplate(phone972, c.full_name || '', tplName, [c.full_name || 'שלום', sourceLabel || 'לאחרונה']);
       sendStatus = providerResponse ? 'sent' : 'failed';
     }
 

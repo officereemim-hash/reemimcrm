@@ -115,6 +115,7 @@ Deno.serve(async (req) => {
         const contacts = await base44.asServiceRole.entities.Contact.filter({ id: requestItem.contact_id });
         const contact = contacts[0];
         if (!contact?.phone) { skipped++; continue; }
+        if (contact.shoranss_questionnaire === 'filled' || contact.shoranss_lead_id) { skipped++; continue; }
 
         const questionnaireUrl = urlBySubType[SHORANSS_SUBTYPE[requestItem.service_type]] || '';
 
