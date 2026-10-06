@@ -550,8 +550,12 @@ Deno.serve(async (req) => {
       const isModiin = templateKey === 'meeting_scheduled_modiin';
       const isPT = templateKey === 'meeting_scheduled_petah_tikva';
       const isPhone = templateKey === 'meeting_scheduled_phone';
-      const tplLocation = isModiin ? 'משרדנו במודיעין' : isPT ? 'משרדנו בפתח תקווה' : isPhone ? 'שיחת טלפון' : 'פגישת זום';
-      const tplLink = (isModiin || isPT) ? (wazeLink || '-') : isPhone ? (values.caller_phone || '0544405554') : (zoomLink || '-');
+      const tplLocation = isModiin ? ((await getSetting('address_modiin')) || 'משרד קרנות ראמים, מודיעין')
+        : isPT ? ((await getSetting('address_petah_tikva')) || 'משרד קרנות ראמים, פתח תקווה')
+        : isPhone ? 'שיחה טלפונית' : 'פגישת Zoom';
+      const tplLink = (isModiin || isPT) ? (wazeLink ? `קישור לניווט: ${wazeLink}` : 'נשמח לראותך במשרד')
+        : isPhone ? `בשמת תתקשר אליך מהמספר ${values.caller_phone || '0544405554'}`
+        : (zoomLink ? `קישור לפגישה: ${zoomLink}` : 'קישור לפגישה יישלח בנפרד');
       const confirmParams = [contact.full_name || '', serviceRequest.last_appointment_time_str || 'המועד שנקבע', tplLocation, tplLink];
       const confirmResult = await sendWhatsApp(confirmMessage, templateKey, confirmParams);
       await logCommunication(confirmMessage, templateKey, confirmResult);
