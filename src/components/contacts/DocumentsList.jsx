@@ -134,7 +134,7 @@ export default function DocumentsList({ contactId, documents, onRefresh, contact
                   <FileText size={16} className="text-primary flex-shrink-0" />
                   <span className="text-sm flex-1">{doc.name}</span>
                   <span className="text-xs text-muted-foreground">{doc.created_date ? format(new Date(doc.created_date), 'dd/MM/yy') : ''}</span>
-                  {doc.signature_status === 'pending' && (
+                  {doc.signature_status === 'pending' && doc.category === 'agreements' && doc.file_url && (
                     <Button size="sm" variant="ghost" onClick={() => openSigDialog(doc.id, doc.name)} className="gap-1 h-6">
                       <Send size={13} />לחתימה
                     </Button>
