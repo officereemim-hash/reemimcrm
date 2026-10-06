@@ -39,84 +39,131 @@ async function uchatSendTemplate(phone972, firstName, templateName, bodyParams) 
   return null;
 }
 
-function fillMessage(template, contact, meeting) {
-  const scheduled = meeting.scheduled_at ? new Date(meeting.scheduled_at) : null;
-  const time = scheduled ? new Intl.DateTimeFormat('he-IL', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit' }).format(scheduled) : '';
-  return template
-    .replaceAll('{שם}', contact?.full_name || meeting.contact_name || '')
-    .replaceAll('{name}', contact?.full_name || meeting.contact_name || '')
-    .replaceAll('{time}', time)
-    .replaceAll('{location}', meeting.location || '')
-    .replaceAll('{location_details}', meeting.location || '');
+// ===== תזכורת פגישה — תבנית מטא אחת: reemim_meeting_reminder (מיפוי: uchat_tpl_meeting_reminder) =====
+// 5 משתנים, אף אחד לא ריק ובלי ירידות שורה (מטא דוחה \n בפרמטר):
+// {{1}} שם פרטי · {{2}} תאריך · {{3}} שעה · {{4}} מיקום · {{5}} קישור/פרט לפי סוג הפגישה
+const TEMPLATE_KEY = 'meeting_reminder';
+
+async function getSetting(base44, key) {
+  const r = await base44.asServiceRole.entities.SystemSetting.filter({ key });
+  return r[0]?.value || '';
 }
 
-async function sendWhatsApp(base44, phone, message, tplKey, firstName, params) {
-  let cleanPhone = phone.replace(/[\s\-\+\(\)]/g, '');
-  if (cleanPhone.startsWith('0')) cleanPhone = '972' + cleanPhone.substring(1);
-  const tplName = await getUchatTemplateName(base44, tplKey);
-  if (!tplName) { console.log(`uchat: שם תבנית ל-'${tplKey}' לא מוגדר (uchat_tpl_${tplKey})`); return false; }
-  const r = await uchatSendTemplate(cleanPhone, firstName, tplName, params || []);
-  return !!r;
+async function getExternalLink(base44, subType) {
+  const r = await base44.asServiceRole.entities.ServiceContent.filter({ content_type: 'external_link', sub_type: subType, is_active: true });
+  return r[0]?.url || '';
+}
+
+function normalizePhone972(phone) {
+  let p = String(phone || '').replace(/[\s\-\+\(\)]/g, '');
+  if (p.startsWith('0')) p = '972' + p.substring(1);
+  return p;
+}
+
+function formatDate(date) {
+  const weekday = new Intl.DateTimeFormat('he-IL', { timeZone: 'Asia/Jerusalem', weekday: 'long' }).format(date);
+  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Jerusalem', day: 'numeric', month: 'numeric', year: '2-digit' }).formatToParts(date);
+  const get = (t) => parts.find(p => p.type === t)?.value || '';
+  return `${weekday}, ${get('day')}/${get('month')}/${get('year')}`;
+}
+
+function formatTime(date) {
+  return new Intl.DateTimeFormat('he-IL', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(date);
+}
+
+// {{4}}+{{5}} לפי Meeting.location (modiin / petah_tikva_* / phone / zoom)
+async function buildLocation(base44, meeting) {
+  const loc = String(meeting.location || '');
+  if (loc === 'modiin') {
+    const address = (await getSetting(base44, 'address_modiin')) || 'משרד קרנות ראמים, מודיעין';
+    const waze = await getExternalLink(base44, 'waze_modiin');
+    return { location: address, detail: waze ? `🔗 ניווט: ${waze}` : 'נשמח לראותך במשרד' };
+  }
+  if (loc.startsWith('petah_tikva')) {
+    const address = (await getSetting(base44, 'address_petah_tikva')) || 'משרד קרנות ראמים, פתח תקווה';
+    const waze = await getExternalLink(base44, 'waze_petah_tikva');
+    return { location: address, detail: waze ? `🔗 ניווט: ${waze}` : 'נשמח לראותך במשרד' };
+  }
+  if (loc === 'phone') {
+    return { location: 'שיחה טלפונית', detail: 'בשמת תתקשר אליך במועד הפגישה' };
+  }
+  const link = String(meeting.calendar_link || '').includes('zoom.us')
+    ? meeting.calendar_link
+    : await getExternalLink(base44, 'zoom_personal_room');
+  return { location: 'פגישת Zoom', detail: link ? `🔗 קישור לפגישה: ${link}` : 'קישור לפגישה יישלח בנפרד' };
+}
+
+// אותו שער כמו autoServiceRequestUpdated: כל עוד test_mode_allowed_numbers לא ריק —
+// שולחים רק למספרי בדיקה או לנרשמי וובינר. ריקון הרשימה = פתיחה לכולם.
+async function passesTestModeGate(base44, contact) {
+  const raw = String(await getSetting(base44, 'test_mode_allowed_numbers')).trim();
+  if (!raw) return true;
+  const last9 = (p) => String(p || '').replace(/\D/g, '').slice(-9);
+  if (raw.split(',').map(last9).filter(Boolean).includes(last9(contact.phone))) return true;
+  const regs = await base44.asServiceRole.entities.WebinarRegistration.filter({ contact_id: contact.id });
+  return regs.length > 0;
+}
+
+async function sendMeetingReminder(base44, contact, meeting) {
+  const scheduled = new Date(meeting.scheduled_at);
+  const firstName = String(contact.full_name || meeting.contact_name || '').trim().split(' ')[0] || 'שלום';
+  const { location, detail } = await buildLocation(base44, meeting);
+  const params = [firstName, formatDate(scheduled), formatTime(scheduled), location, detail];
+
+  const tplName = await getUchatTemplateName(base44, TEMPLATE_KEY);
+  if (!tplName) {
+    console.log(`uchat: שם תבנית ל-'${TEMPLATE_KEY}' לא מוגדר (uchat_tpl_${TEMPLATE_KEY})`);
+    return { ok: false, params, error: 'template_not_mapped' };
+  }
+  const r = await uchatSendTemplate(normalizePhone972(contact.phone), firstName, tplName, params);
+  return { ok: !!r, params, error: r ? '' : 'uchat_template_failed' };
+}
+
+function renderForLog(params) {
+  const [name, date, time, location, detail] = params;
+  return `[תבנית reemim_meeting_reminder] שלום ${name}, תזכורת לפגישתך עם בשמת.\n📅 ${date} · 🕐 ${time}\n📍 ${location}\n${detail}`;
 }
 
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
 
-    const botRow = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' });
-    if (botRow[0]?.value !== 'true') {
+    if ((await getSetting(base44, 'whatsapp_bot_enabled')) !== 'true') {
       return Response.json({ ok: true, skipped: 'bot_disabled' });
     }
 
-    const template = 'בעוד שעה הפגישה שלנו! 🌿 {location}\nנתראה, קרנות ראמים';
-
-    const now = new Date();
-    const windowStart = new Date(now.getTime() + 45 * 60 * 1000);
-    const windowEnd = new Date(now.getTime() + 75 * 60 * 1000);
+    const now = Date.now();
+    const windowStart = now + 45 * 60 * 1000;
+    const windowEnd = now + 75 * 60 * 1000;
     const meetings = await base44.asServiceRole.entities.Meeting.filter({ status: 'scheduled', reminder_h1_sent: false });
 
-    let sent = 0;
-    let failed = 0;
-    let skipped = 0;
+    let sent = 0, failed = 0, skipped = 0;
 
     for (const meeting of meetings) {
-      if (!meeting.scheduled_at) {
-        skipped++;
-        continue;
-      }
-      const scheduledAt = new Date(meeting.scheduled_at);
-      if (scheduledAt < windowStart || scheduledAt > windowEnd) {
-        skipped++;
-        continue;
-      }
+      const at = meeting.scheduled_at ? new Date(meeting.scheduled_at).getTime() : NaN;
+      if (!Number.isFinite(at) || at < windowStart || at > windowEnd) { skipped++; continue; }
 
-      const contacts = await base44.asServiceRole.entities.Contact.filter({ id: meeting.contact_id });
-      const contact = contacts[0];
-      if (!contact?.phone) {
-        skipped++;
-        continue;
-      }
+      const contact = (await base44.asServiceRole.entities.Contact.filter({ id: meeting.contact_id }))[0];
+      if (!contact?.phone || contact.mailing_opt_out === true) { skipped++; continue; }
+      if (!(await passesTestModeGate(base44, contact))) { skipped++; continue; }
 
-      const message = fillMessage(template, contact, meeting);
-      const ok = await sendWhatsApp(base44, contact.phone, message, 'meeting_reminder_h1', contact?.full_name || meeting.contact_name || '', [contact?.full_name || meeting.contact_name || '', meeting.location || '']);
+      const result = await sendMeetingReminder(base44, contact, meeting);
 
       await base44.asServiceRole.entities.Communication.create({
         contact_id: contact.id,
         type: 'whatsapp',
         direction: 'outbound',
-        content: message,
+        content: renderForLog(result.params),
         sent_by: 'system',
         is_automated: true,
         template_id: 'meeting_day_reminder',
-        status: ok ? 'sent' : 'failed',
+        status: result.ok ? 'sent' : 'failed',
+        error_detail: result.error,
       });
 
-      if (ok) {
-        await base44.asServiceRole.entities.Meeting.update(meeting.id, { reminder_h1_sent: true });
-        sent++;
-      } else {
-        failed++;
-      }
+      // מסמנים גם בכישלון — הקרון רץ כל 30 דק' וחלון ה-45–75 דק' היה תופס את אותה פגישה פעמיים
+      await base44.asServiceRole.entities.Meeting.update(meeting.id, { reminder_h1_sent: true });
+      if (result.ok) sent++; else failed++;
     }
 
     return Response.json({ success: true, sent, failed, skipped, total: meetings.length });
