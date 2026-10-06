@@ -25,6 +25,12 @@ export default function ContactDetail() {
   const [meetings, setMeetings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editOpen, setEditOpen] = useState(false);
+  const [tab, setTab] = useState('general');
+
+  const markReviewed = async () => {
+    await base44.entities.Contact.update(id, { documents_review: 'reviewed' });
+    load();
+  };
 
   const load = async () => {
     const [c, srs, ts, comms, docs, meets] = await Promise.all([
@@ -88,6 +94,14 @@ export default function ContactDetail() {
                 שורנס: {contact.shoranss_status}
               </a>
             )}
+            {contact.documents_review === 'to_review' && (
+              <>
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-accent text-accent-foreground">
+                  התקבלו מסמכים חדשים
+                </span>
+                <Button size="sm" variant="outline" className="h-7" onClick={() => setTab('documents')}>לבדיקה</Button>
+              </>
+            )}
           </div>
           <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground flex-wrap">
             {contact.phone && <span className="flex items-center gap-1"><Phone size={13} />{contact.phone}</span>}
@@ -103,7 +117,7 @@ export default function ContactDetail() {
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="general" dir="rtl">
+      <Tabs value={tab} onValueChange={setTab} dir="rtl">
         <TabsList className="grid grid-cols-6 w-full md:w-auto">
           <TabsTrigger value="general">כללי</TabsTrigger>
           <TabsTrigger value="requests">פניות ({serviceRequests.length})</TabsTrigger>
@@ -150,6 +164,11 @@ export default function ContactDetail() {
         </TabsContent>
 
         <TabsContent value="documents" className="mt-4">
+          {contact.documents_review === 'to_review' && (
+            <div className="flex justify-end mb-3">
+              <Button size="sm" onClick={markReviewed}>סיימתי לבדוק ✓</Button>
+            </div>
+          )}
           <DocumentsList contactId={id} documents={documents} onRefresh={load} contact={contact} />
         </TabsContent>
 

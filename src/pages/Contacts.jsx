@@ -28,6 +28,7 @@ const TABS = [
   { key: 'not_relevant', label: 'לא רלוונטי' },
   { key: 'completed', label: 'הושלמו' },
   { key: 'no_response', label: 'ללא מענה', filterField: 'bot_status' },
+  { key: 'to_review', label: 'התקבלו מסמכים חדשים', filterField: 'documents_review' },
 ];
 
 export default function Contacts() {
@@ -70,7 +71,7 @@ export default function Contacts() {
 
   const activeTabObj = TABS.find(t => t.key === activeTab);
   const filtered = contacts.filter(c => {
-    const matchTab = activeTab === 'all' || (activeTabObj?.filterField === 'bot_status' ? c.bot_status === activeTab : c.status === activeTab);
+    const matchTab = activeTab === 'all' || (activeTabObj?.filterField ? c[activeTabObj.filterField] === activeTab : c.status === activeTab);
     const matchSearch = !search || c.full_name?.includes(search) || c.phone?.includes(search) || c.email?.includes(search);
     return matchTab && matchSearch;
   });

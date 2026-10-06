@@ -284,9 +284,14 @@ Deno.serve(async (req) => {
               uploaded_by: `email:${fromEmail}`, gmail_message_id: id,
             });
           }
-          if (sr && sr.documents_status !== 'complete') {
-            await db.ServiceRequest.update(sr.id, { documents_status: 'partial' });
-          }
+          // סטטוס מסמכים בכרטיס — כדי שבשמת תראה מי קיבל מסמכים חדשים
+          if (contact.documents_review !== 'to_review') await db.Contact.update(contact.id, { documents_review: 'to_review' });
+          const srUpd = {};
+          if (sr && sr.documents_status !== 'complete') srUpd.documents_status = 'partial';
+          // אישור אוטומטי ללקוח (נשלח מ-autoServiceRequestUpdated): רק על מייל חדש, לא בריצת השלמה שקטה
+          const recentMail = Date.now() - new Date(mailDate).getTime() < 48 * 60 * 60 * 1000;
+          if (sr && !sr.documents_arrived_at && !quiet && recentMail) srUpd.documents_arrived_at = mailDate;
+          if (sr && Object.keys(srUpd).length) await db.ServiceRequest.update(sr.id, srUpd);
           await note(contact.id, `התקבלו במייל ${uploaded.length} מסמכים:\n${fileList}`, 'email_documents_received');
           if (!quiet) {
             await db.Task.create({

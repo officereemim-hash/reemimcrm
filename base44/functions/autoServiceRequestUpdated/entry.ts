@@ -144,8 +144,16 @@ Deno.serve(async (req) => {
     const questionnaireFilled = serviceRequest.questionnaire_completed === true && previousServiceRequest.questionnaire_completed !== true;
     const documentsJustReceived = serviceRequest.documents_received === true && previousServiceRequest.documents_received !== true;
 
-    if (!statusChanged && !pendingChanged && !questionnaireFilled && !documentsJustReceived) {
+    // מסמכים ראשונים זוהו במייל המשרד (readShoranssLeadEmails) — אישור אוטומטי ללקוח
+    const documentsArrived = !!serviceRequest.documents_arrived_at && !previousServiceRequest.documents_arrived_at && serviceRequest.documents_received !== true;
+
+    if (!statusChanged && !pendingChanged && !questionnaireFilled && !documentsJustReceived && !documentsArrived) {
       return Response.json({ ok: true, skipped: 'no_change' });
+    }
+
+    // בשמת סימנה ידנית "מסמכים התקבלו" — המסמכים נבדקו
+    if (documentsJustReceived) {
+      try { await base44.asServiceRole.entities.Contact.update(serviceRequest.contact_id, { documents_review: 'reviewed' }); } catch (e) { console.error('documents_review update failed:', e.message); }
     }
 
     const contacts = await base44.asServiceRole.entities.Contact.filter({ id: serviceRequest.contact_id });
@@ -272,6 +280,32 @@ Deno.serve(async (req) => {
       } catch (err) {
         console.warn('conversation_injection_skipped:', err.message);
       }
+    }
+
+    async function sendDocumentsConfirmedEmail(text) {
+      if (!contact.email || contact.email_invalid) return;
+      try {
+        const BREVO_API_KEY = Deno.env.get('BREVO_API_KEY') || '';
+        const senderEmail = await getSetting('mailing_sender_email');
+        if (!BREVO_API_KEY || !senderEmail) return;
+        const senderName = (await getSetting('mailing_sender_name')) || 'קרנות ראמים';
+        const safe = String(text || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+        const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+          method: 'POST',
+          headers: { 'api-key': BREVO_API_KEY, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sender: { name: senderName, email: senderEmail },
+            to: [{ email: contact.email, name: contact.full_name || '' }],
+            subject: 'קיבלנו את המסמכים ✅',
+            htmlContent: `<div dir="rtl" style="font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.7;color:#2b2b2b;text-align:right">${safe.replace(/\n/g, '<br>')}<br><br>צוות קרנות ראמים</div>`,
+          }),
+        });
+        await base44.asServiceRole.entities.Communication.create({
+          contact_id: serviceRequest.contact_id, type: 'email', direction: 'outbound', sent_by: 'system', is_automated: true,
+          template_id: 'documents_confirmed_email', status: res.ok ? 'sent' : 'failed',
+          content: `אישור קבלת מסמכים נשלח במייל ל-${contact.email} (חלון הוואטסאפ סגור)`,
+        });
+      } catch (e) { console.error('documents_confirmed_email failed:', e.message); }
     }
 
     async function logCommunication(content, templateId, result) {
@@ -586,12 +620,20 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, action: 'route_c_not_interested', whatsapp_sent: sent });
     }
 
-    if (documentsJustReceived) {
+    if (documentsJustReceived || documentsArrived) {
+      // אישור ללקוח — גם אוטומטי (המסמכים הגיעו במייל) וגם ידני (בשמת סימנה "מסמכים התקבלו"), כמו היום
       const confirmedTemplate = await getContent('documents_confirmed');
       if (confirmedTemplate) {
         const confirmedMessage = fillTemplate(confirmedTemplate, { name: contact.full_name || '' });
         const confirmedResult = await sendWhatsApp(confirmedMessage, 'documents_confirmed', [contact.full_name || '']);
         await logCommunication(confirmedMessage, 'documents_confirmed', confirmedResult);
+        // עברו 24 שעות מההודעה האחרונה של הלקוח — וואטסאפ חסום, שולחים את האישור במייל
+        if (confirmedResult?.errorDetail === 'window_closed_24h') await sendDocumentsConfirmedEmail(confirmedMessage);
+      }
+
+      // אישור אוטומטי — רק הודעת האישור. השלב והסגירה החמה נשארים של הבוט ("שלחתי") ושל הסימון הידני
+      if (documentsArrived && !documentsJustReceived) {
+        return Response.json({ ok: true, action: 'documents_arrived_confirmed' });
       }
 
       {
