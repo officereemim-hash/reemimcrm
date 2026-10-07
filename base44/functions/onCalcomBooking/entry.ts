@@ -122,6 +122,18 @@ function getSlug(payload) {
   return decodeURIComponent(String(raw)) + ' ' + String(extra);
 }
 
+// הנושא שהלקוח כתב בטופס ההזמנה בקאלקום: שאלה שהמפתח או התווית שלה כוללים "נושא" / subject / topic
+function getClientSubject(payload) {
+  const responses = payload.responses || payload.userFieldsResponses || {};
+  for (const [key, r] of Object.entries(responses)) {
+    const label = r && typeof r === 'object' ? String(r.label || '') : '';
+    const value = r && typeof r === 'object' ? r.value : r;
+    if (typeof value !== 'string' || !value.trim()) continue;
+    if (/נושא|subject|topic/i.test(`${key} ${label}`)) return value.replace(/\s+/g, ' ').trim();
+  }
+  return '';
+}
+
 function getAttendee(payload) {
   const attendees = payload.attendees || payload.booking?.attendees || [];
   const attendee = attendees[0] || payload.attendee || payload.responses || {};
@@ -418,6 +430,7 @@ Deno.serve(async (req) => {
       type: detected.meetingType, meeting_source: 'bot', location: detected.location,
       scheduled_at: new Date(startTime).toISOString(), duration_minutes: duration,
       calcom_event_id: calcomId ? String(calcomId) : '',
+      calcom_subject: getClientSubject(payload),
       calendar_link: meetingUrl || await getServiceUrl(base44, detected.location === 'phone' ? 'phone_calendar' : detected.location === 'modiin' ? 'modiin_calendar' : detected.location === 'petah_tikva_wednesday' ? 'petah_tikva_calendar' : 'zoom_personal_room'),
       status: 'scheduled',
     };

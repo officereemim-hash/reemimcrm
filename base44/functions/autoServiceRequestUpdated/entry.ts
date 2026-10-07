@@ -360,6 +360,49 @@ Deno.serve(async (req) => {
       await addMessageToConversation(content, result);
     }
 
+    // 6 פרמטרים לתבנית reemim_meeting_scheduled. בלי ירידות שורה ובלי ערך ריק (מטא דוחה).
+    async function meetingScheduledParams(templateKey, apptType, zoomLink, wazeLink, callerPhone) {
+      // {{2}} משלים את "נקבעה פגישה ___.":
+      // הנושא שהלקוח כתב בקאלקום → "בנושא: <הנושא>". אין נושא, או ארוך מ-40 תווים → "עם בשמת שערי-בלוך, קרנות ראמים".
+      const meeting = serviceRequest.meeting_id
+        ? (await base44.asServiceRole.entities.Meeting.filter({ id: serviceRequest.meeting_id }))[0]
+        : null;
+      const subject = String(meeting?.calcom_subject || '').replace(/\s+/g, ' ').trim().replace(/[.!?,;:]+$/, '').trim();
+      const kind = (subject && subject.length <= 40)
+        ? `בנושא: ${subject}`
+        : 'עם בשמת שערי-בלוך, קרנות ראמים';
+
+      // תאריך ושעה בנפרד: קודם מהפגישה עצמה, ואם אין, מפרקים את last_appointment_time_str
+      let date = '', time = '';
+      {
+        const at = meeting?.scheduled_at ? new Date(meeting.scheduled_at) : null;
+        if (at && !isNaN(at.getTime())) {
+          date = new Intl.DateTimeFormat('he-IL', { timeZone: 'Asia/Jerusalem', dateStyle: 'full' }).format(at);
+          time = new Intl.DateTimeFormat('he-IL', { timeZone: 'Asia/Jerusalem', hour: 'numeric', minute: '2-digit', hourCycle: 'h23' }).format(at);
+        }
+      }
+      if (!date) {
+        const s = String(serviceRequest.last_appointment_time_str || '').trim();
+        const mt = s.match(/^(.*?)[\s,]*(?:בשעה\s*)?(\d{1,2}:\d{2})$/);
+        date = (mt ? mt[1] : s) || 'המועד שנקבע';
+        time = (mt ? mt[2] : '') || 'שנקבעה';
+      }
+
+      const isModiin = templateKey === 'meeting_scheduled_modiin' || apptType === 'modiin';
+      const isPT = templateKey === 'meeting_scheduled_petah_tikva' || apptType.includes('petah_tikva');
+      const isPhone = templateKey === 'meeting_scheduled_phone' || apptType === 'phone';
+      const location = isModiin ? ((await getSetting('address_modiin')) || 'משרד קרנות ראמים, מודיעין')
+        : isPT ? ((await getSetting('address_petah_tikva')) || 'משרד קרנות ראמים, פתח תקווה')
+        : isPhone ? 'שיחה טלפונית' : 'פגישת Zoom';
+      const callFrom = /\d{9,}/.test(String(callerPhone || '').replace(/\D/g, '')) ? callerPhone : '0544405554';
+      const link = (isModiin || isPT) ? (wazeLink || 'נשמח לראותך במשרד')
+        : isPhone ? `השיחה תגיע מהמספר ${callFrom}`
+        : (zoomLink || 'קישור לפגישה יישלח בנפרד');
+
+      const clean = (v) => String(v || '').replace(/\s*\n+\s*/g, ' ').trim();
+      return [contact.full_name || 'לקוח יקר', kind, date, time, location, link].map(clean);
+    }
+
     // בקשת ת"ז + תאריך לידה (ומייל אם חסר) והעברה לשלב waiting_id_details
     async function sendIdRequestNow() {
       const needsEmail = !contact.email;
@@ -502,7 +545,8 @@ Deno.serve(async (req) => {
       if (!serviceRequest.last_appointment_time_str) {
         message = message.replace(/\s*במועד:\s*\n\s*/g, '\n');
       }
-      const sent = await sendWhatsApp(message, 'meeting_scheduled_phone', [contact.full_name || '', serviceRequest.last_appointment_time_str || '', callerPhone]);
+      const phoneParams = await meetingScheduledParams('meeting_scheduled_phone', 'phone', '', '', callerPhone);
+      const sent = await sendWhatsApp(message, 'meeting_scheduled_phone', phoneParams);
       await logCommunication(message, 'meeting_scheduled_phone', sent);
       await base44.asServiceRole.entities.Contact.update(contact.id, {
         bot_status: 'waiting_agent',
@@ -553,16 +597,7 @@ Deno.serve(async (req) => {
 
       const confirmTemplate = await getContent(templateKey);
       const confirmMessage = fillTemplate(confirmTemplate || '{name}, הפגישה עם בשמת נקבעה בהצלחה במועד: {time}', values);
-      const isModiin = templateKey === 'meeting_scheduled_modiin';
-      const isPT = templateKey === 'meeting_scheduled_petah_tikva';
-      const isPhone = templateKey === 'meeting_scheduled_phone';
-      const tplLocation = isModiin ? ((await getSetting('address_modiin')) || 'משרד קרנות ראמים, מודיעין')
-        : isPT ? ((await getSetting('address_petah_tikva')) || 'משרד קרנות ראמים, פתח תקווה')
-        : isPhone ? 'שיחה טלפונית' : 'פגישת Zoom';
-      const tplLink = (isModiin || isPT) ? (wazeLink ? `קישור לניווט: ${wazeLink}` : 'נשמח לראותך במשרד')
-        : isPhone ? `בשמת תתקשר אליך מהמספר ${values.caller_phone || '0544405554'}`
-        : (zoomLink ? `קישור לפגישה: ${zoomLink}` : 'קישור לפגישה יישלח בנפרד');
-      const confirmParams = [contact.full_name || '', serviceRequest.last_appointment_time_str || 'המועד שנקבע', tplLocation, tplLink];
+      const confirmParams = await meetingScheduledParams(templateKey, apptType, zoomLink, wazeLink, values.caller_phone);
       const confirmResult = await sendWhatsApp(confirmMessage, templateKey, confirmParams);
       await logCommunication(confirmMessage, templateKey, confirmResult);
 

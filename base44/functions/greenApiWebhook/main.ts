@@ -84,6 +84,23 @@ function detectServiceType(text) {
   return serviceMap[normalized] || serviceMap[String(text || '').trim()] || '';
 }
 
+// זיהוי סלחני לשם השירות — רק לתשובות קצרות, כשעוד לא נבחר שירות
+const SERVICE_KEYWORDS = [
+  [/איזון|גירוש/, 'divorce_split'],
+  [/היתכנות|התכנות/, 'economic_feasibility'],
+  [/השקע/, 'investments'],
+  [/(^|\s)[ובלה]?(מס|מסים|מיסים|מיסוי)(?=$|\s)/, 'tax_advisory'], // לא תופס "מספר", "מסמכים", "מסלול"
+  [/פרישה|פנסי/, 'retirement'],
+];
+function detectServiceTypeLoose(text) {
+  const exact = detectServiceType(text);
+  if (exact) return exact;
+  const normalized = normalizeAnswer(text);
+  if (normalized.length > 40) return ''; // משפט ארוך = כנראה שאלה — שהסוכן יענה
+  for (const [re, type] of SERVICE_KEYWORDS) if (re.test(normalized)) return type;
+  return '';
+}
+
 function extractContactDetails(text) {
   const emailMatch = String(text || '').match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
   const compactText = String(text || '').replace(/[\-\s]/g, '');
@@ -601,6 +618,16 @@ Deno.serve(async (req) => {
       const wmSent = await sendWhatsApp(chatId, wmMsg, botEnabled);
       await logIncoming(base44, idMessage, phone, text, chatId, wmConvId);
       await logOutgoing(base44, wmSent?.idMessage || `out_${Date.now()}_fp_meeting_reply`, phone, wmMsg, chatId, wmConvId, outgoingStatus);
+      // לעדכן את הסוכן במה שנשלח (כמו בשאר ה-FP), כדי שלא יכחיש או יחזור על השאלה
+      try {
+        const wmConvForAgent = serviceRequest.conversation_id || wmConvId;
+        if (wmConvForAgent) {
+          const wmConv = await base44.asServiceRole.agents.getConversation(wmConvForAgent);
+          await base44.asServiceRole.agents.addMessage(wmConv, { role: 'assistant', content: `[לקוח כתב]: ${text}
+
+${wmMsg}` });
+        }
+      } catch (_) { /* לא לעצור את המסלול */ }
       return Response.json({ ok: true, fast_path: wmPath });
     }
 
@@ -989,7 +1016,7 @@ Deno.serve(async (req) => {
 
     // ===== FP-ServiceClarify: מענה על בירור תחום (כשהשאלון לא נשלח כי התחום לא זוהה) =====
     if (contact && serviceRequest && serviceRequest.pending_service_clarify) {
-      const clarifiedType = detectServiceType(text);
+      const clarifiedType = detectServiceTypeLoose(text);
       const SHORANSS_SUBTYPE = {
         retirement: 'shoranss_retirement',
         economic_feasibility: 'shoranss_economic',
@@ -1041,7 +1068,9 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, fast_path: 'fp_service_clarify_escalated' });
     }
 
-    const selectedServiceType = detectServiceType(text);
+    const noServiceYet = !serviceRequest || !serviceRequest.service_type
+      || ['completed', 'cancelled', 'closed_lost', 'followup_closed'].includes(serviceRequest?.status);
+    const selectedServiceType = noServiceYet ? detectServiceTypeLoose(text) : detectServiceType(text);
 
     // "6" / "אחר" → בירור תחום במקום פתיחת שירות שנתי
     if (selectedServiceType === '__other__' && contact) {
@@ -1574,7 +1603,7 @@ Deno.serve(async (req) => {
       const ATT_NEGATIVE = ['בטל', 'ביטול', 'לדחות', 'לשנות', 'להזיז'];
       const isNegative = attWords.includes('לא') || ATT_NEGATIVE.some(k => attNorm.includes(k));
       const ATT_EXACT = ['כן', 'מאשר', 'מאשרת', 'מאושר', 'אגיע', 'נגיע', 'בטח', 'כמובן'];
-      const ATT_INCLUDES = ['מגיע', 'מגיעה', 'אגיע', 'מאשר', 'מאשרת'];
+      const ATT_INCLUDES = ['מגיע', 'מגיעה', 'אגיע', 'מאשר', 'מאשרת', 'אישור'];
       const isConfirm = !isNegative && (ATT_EXACT.includes(attNorm) || (attWords.length <= 5 && ATT_INCLUDES.some(k => attNorm.includes(k))));
       if (contact && isConfirm) {
         const now = Date.now();
@@ -1583,7 +1612,22 @@ Deno.serve(async (req) => {
           const t = new Date(m.scheduled_at).getTime();
           return t > now && t - now <= 48 * 60 * 60 * 1000 && (m.reminder_d1_sent || m.reminder_h1_sent) && !m.attendance_confirmed;
         });
-        if (attMeeting) {
+        // "כן" / "בטח" / "כמובן" לבד — אישור הגעה רק אם התזכורת היא ההודעה האחרונה שהלקוח קיבל מאיתנו.
+        // אחרת זו כנראה תשובה לשאלה אחרת של הבוט או הסוכן, וההודעה ממשיכה במסלול הרגיל.
+        let attOk = !!attMeeting;
+        if (attOk && ['כן', 'בטח', 'כמובן'].includes(attNorm)) {
+          try {
+            const toMs = (d) => { const s = String(d || ''); return s ? new Date(/Z$|[+-]\d\d:?\d\d$/.test(s) ? s : s + 'Z').getTime() : 0; };
+            const [rD1, rH1, lastOut] = await Promise.all([
+              base44.asServiceRole.entities.Communication.filter({ contact_id: contact.id, template_id: 'pre_meeting_reminder' }, '-created_date', 1),
+              base44.asServiceRole.entities.Communication.filter({ contact_id: contact.id, template_id: 'meeting_day_reminder' }, '-created_date', 1),
+              base44.asServiceRole.entities.WhatsAppMessageLog.filter({ phone, direction: 'outgoing' }, '-created_date', 1),
+            ]);
+            const reminderAt = Math.max(toMs(rD1[0]?.created_date), toMs(rH1[0]?.created_date));
+            attOk = reminderAt > 0 && reminderAt > toMs(lastOut[0]?.created_date);
+          } catch (_) { attOk = false; }
+        }
+        if (attOk) {
           await base44.asServiceRole.entities.Meeting.update(attMeeting.id, { attendance_confirmed: true, attendance_confirmed_at: new Date().toISOString() });
           const attMsg = (await getBotContent(base44, 'attendance_confirmed_ack') || 'תודה שאישרת {name}, נתראה בפגישה 🌷').replaceAll('{name}', contact.full_name || '');
           const attSent = await sendWhatsApp(chatId, attMsg, botEnabled);
