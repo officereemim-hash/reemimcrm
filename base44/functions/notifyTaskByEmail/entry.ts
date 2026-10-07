@@ -14,8 +14,15 @@ Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
     const body = await req.json().catch(() => ({}));
-    const task = body.data || body.record || body;
-    if (!task?.title) return Response.json({ ok: true, skipped: 'no_task' });
+    // אבטחה: הפונקציה נגישה מבחוץ. לא סומכים על תוכן הבקשה — טוענים את המשימה מהמערכת לפי המזהה,
+    // ושולחים רק על משימה שנוצרה ב-10 הדקות האחרונות (האוטומציה רצה מיד כשמשימה נוצרת).
+    const taskId = body.data?.id || body.event?.entity_id || '';
+    if (!taskId) return Response.json({ ok: true, skipped: 'no_task_id' });
+    const task = (await base44.asServiceRole.entities.Task.filter({ id: taskId }))[0];
+    if (!task?.title) return Response.json({ ok: true, skipped: 'task_not_found' });
+    const created = String(task.created_date || '');
+    const createdMs = new Date(/Z$|[+-]\d\d:?\d\d$/.test(created) ? created : created + 'Z').getTime();
+    if (!(Date.now() - createdMs < 10 * 60 * 1000)) return Response.json({ ok: true, skipped: 'task_not_new' });
 
     const BREVO_API_KEY = Deno.env.get('BREVO_API_KEY') || '';
     if (!BREVO_API_KEY) return Response.json({ ok: false, skipped: 'no_brevo_key' });

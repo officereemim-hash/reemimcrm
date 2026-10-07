@@ -50,8 +50,9 @@ export default function FilesList({ serviceRequestId }) {
     const w = window.open('', '_blank');
     try {
       const { signed_url } = await base44.integrations.Core.CreateFileSignedUrl({ file_uri: doc.file_uri, expires_in: 300 });
-      w.location.href = signed_url;
-    } catch (e) { w.close(); alert('לא הצלחתי לפתוח את הקובץ'); }
+      if (w) w.location.href = signed_url;
+      else window.location.href = signed_url; // חוסם חלונות — פותחים באותה לשונית
+    } catch (e) { w?.close(); alert('לא הצלחתי לפתוח את הקובץ'); }
   };
 
   const deleteMutation = useMutation({

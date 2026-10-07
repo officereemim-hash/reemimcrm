@@ -5,6 +5,9 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 // לא שולח שום הודעת וואטסאפ ללקוח. רק מעדכן כרטיסים, ציר זמן, מסמכים ומשימות.
 // דדופ: ישות InboxLog לפי gmail_message_id (בלי תוויות Gmail).
 // גוף בקשה אופציונלי: { days: 60, quiet: true } — backfill; quiet = בלי משימות (ולכן בלי מיילים לבשמת).
+// אבטחה: הפונקציה נגישה מבחוץ — days/quiet מתקבלים רק ממשתמשת admin; האוטומציה רצה תמיד עם ברירת המחדל.
+// עמידות: שורת InboxLog נכתבת בתחילת הטיפול (processing). מייל שנכשל באמצע לא מעובד שוב אוטומטית
+// (כדי לא ליצור כפילויות) — נרשם כ-error ונפתחת משימה לבדיקה ידנית.
 // ============================================================
 
 function b64(data) {
@@ -123,9 +126,21 @@ Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
     const body = await req.json().catch(() => ({}));
-    const days = Math.min(Math.max(Number(body.days) || 2, 1), 90);
-    const quiet = body.quiet === true;
+    const user = await base44.auth.me().catch(() => null);
+    const isAdmin = user?.role === 'admin';
+    const days = isAdmin ? Math.min(Math.max(Number(body.days) || 2, 1), 90) : 2;
+    const quiet = isAdmin && body.quiet === true;
     const db = base44.asServiceRole.entities;
+
+    // נעילה: לא מריצים שתי סריקות במקביל (מונע עיבוד כפול של אותו מייל). נעילה ישנה (ריצה שנקטעה) פגה אחרי 6 דקות.
+    const LOCK_KEY = 'inbox_reader_running_since';
+    const lockRows = await db.SystemSetting.filter({ key: LOCK_KEY });
+    const lockAt = lockRows[0]?.value ? new Date(lockRows[0].value).getTime() : 0;
+    if (lockAt && Date.now() - lockAt < 6 * 60 * 1000) return Response.json({ ok: true, skipped: 'already_running' });
+    const lockRow = lockRows[0]
+      ? await db.SystemSetting.update(lockRows[0].id, { value: new Date().toISOString() }).then(() => lockRows[0])
+      : await db.SystemSetting.create({ key: LOCK_KEY, value: new Date().toISOString(), category: 'flow' });
+    try {
 
     const { accessToken: token } = await base44.asServiceRole.connectors.getConnection('gmail');
 
@@ -155,20 +170,46 @@ Deno.serve(async (req) => {
     async function note(contactId, content, templateId) {
       await db.Communication.create({ contact_id: contactId, type: 'note', direction: 'inbound', sent_by: 'system', is_automated: true, status: 'sent', template_id: templateId, content });
     }
+    // שורת InboxLog של המייל הנוכחי נוצרת בתחילת הטיפול (processing) ומתעדכנת בסוף
+    let currentRow = null;
     async function log(id, kind, contactId, summary) {
-      await db.InboxLog.create({ gmail_message_id: id, kind, contact_id: contactId || '', summary: String(summary || '').slice(0, 500) });
+      const data = { kind, contact_id: contactId || '', summary: String(summary || '').slice(0, 500) };
+      if (currentRow) await db.InboxLog.update(currentRow.id, data);
+      else await db.InboxLog.create({ gmail_message_id: id, ...data });
     }
+    function parseDate(d) {
+      const s = String(d || '');
+      return new Date(/Z$|[+-]\d\d:?\d\d$/.test(s) ? s : s + 'Z').getTime();
+    }
+    // מיילים שכבר טופלו (טעינה אחת במקום שאילתה לכל מייל)
+    const seenRows = new Map();
+    for (const r of await db.InboxLog.list('-created_date', 2000)) if (!seenRows.has(r.gmail_message_id)) seenRows.set(r.gmail_message_id, r);
 
     for (const id of ids) {
+      currentRow = null;
+      let meta = '';
       try {
-        const done = await db.InboxLog.filter({ gmail_message_id: id });
-        if (done.length) { stats.already++; continue; }
+        const prev = seenRows.get(id);
+        if (prev) {
+          // ריצה קודמת נקטעה באמצע המייל הזה — לא מעבדים שוב (כפילויות), מסמנים לבדיקה ידנית
+          if (prev.kind === 'processing' && Date.now() - parseDate(prev.created_date) > 10 * 60 * 1000) {
+            await db.InboxLog.update(prev.id, { kind: 'error', summary: 'העיבוד נקטע באמצע — לבדוק ידנית' });
+            if (!quiet) await db.Task.create({
+              title: 'מייל במשרד לא נקלט עד הסוף — לבדוק ידנית',
+              type: 'document_collection', status: 'open', priority: 'normal', auto_generated: true, assigned_to: 'basmat',
+              notes: `מזהה המייל ב-Gmail: ${id}. לבדוק בתיבת office.reemim ולהכניס ידנית מה שחסר.`,
+            });
+          }
+          stats.already++; continue;
+        }
+        currentRow = await db.InboxLog.create({ gmail_message_id: id, kind: 'processing', contact_id: '', summary: '' });
 
         const msg = await gmail(token, `messages/${id}?format=full`);
         const headers = Object.fromEntries((msg.payload?.headers || []).map((h) => [h.name.toLowerCase(), h.value]));
         const from = headers['from'] || '';
         const fromEmail = emailOf(from);
         const subject = decodeRfc2047(headers['subject'] || '');
+        meta = `מאת: ${from}\nנושא: ${subject}`;
         const mailDate = msg.internalDate ? new Date(Number(msg.internalDate)).toISOString() : new Date().toISOString();
         const text = extractText(msg.payload);
         const isSurense = /surense\.com/i.test(fromEmail) || (/bosmat@oryx-alt\.com/i.test(fromEmail) && /app\.surense\.com/.test(text));
@@ -239,6 +280,11 @@ Deno.serve(async (req) => {
 
         // ================= מסמכים מלקוחות =================
         if (SYSTEM_SENDER.test(fromEmail)) { await log(id, 'skip_system', '', fromEmail); stats.skipped++; continue; }
+        // דיוור ורשימות תפוצה (לא מסמכים של לקוחות). ספאם ש-Gmail זיהה לא מגיע לכאן בכלל.
+        const autoSubmitted = headers['auto-submitted'] || '';
+        if (headers['list-unsubscribe'] || /bulk|list|junk/i.test(headers['precedence'] || '') || (autoSubmitted && !/^no$/i.test(autoSubmitted))) {
+          await log(id, 'skip_bulk', '', fromEmail); stats.skipped++; continue;
+        }
         const atts = listAttachments(msg.payload);
         if (!atts.length) { await log(id, 'skip_no_attachment', '', fromEmail); stats.skipped++; continue; }
 
@@ -253,26 +299,22 @@ Deno.serve(async (req) => {
 
         const fileList = uploaded.map((u) => `• ${u.filename}`).join('\n');
 
-        // איתור הכרטיס: מייל השולח ← שם השולח (התאמה יחידה) ← כרטיס חדש
+        // איתור הכרטיס לפי מייל השולח בלבד. לא משייכים לפי שם (שני אנשים עם אותו שם) —
+        // שולח לא מוכר מקבל כרטיס חדש, ואם יש כרטיס באותו שם בשמת מקבלת משימה לבדוק כפילות.
         const matches = await db.Contact.filter({ email: fromEmail });
         let contact = matches.length === 1 ? matches[0] : null;
         let createdNew = false;
+        let sameName = [];
         if (!contact && matches.length === 0 && !INTERNAL_SENDER.test(fromEmail)) {
           const senderName = normName(displayNameOf(from));
-          const byName = await findByName(senderName);
-          if (byName.length === 1) {
-            contact = byName[0];
-            if (!contact.email) await db.Contact.update(contact.id, { email: fromEmail });
-          } else if (!byName.length) {
-            // שולח שלא קיים במערכת — נפתח כרטיס חדש, בלי שום הודעה ללקוח
-            contact = await db.Contact.create({
-              full_name: senderName || fromEmail.split('@')[0], email: fromEmail,
-              status: 'in_progress', source: 'email',
-            });
-            createdNew = true;
-            await note(contact.id, `נפתח כרטיס אוטומטית: התקבלו מסמכים במייל משולח שלא היה במערכת (${fromEmail}). לבדוק את השם ולהשלים טלפון.`, 'email_sender_contact_created');
-            stats.new_contacts++;
-          }
+          sameName = await findByName(senderName);
+          contact = await db.Contact.create({
+            full_name: senderName || fromEmail.split('@')[0], email: fromEmail,
+            status: 'in_progress', source: 'email',
+          });
+          createdNew = true;
+          await note(contact.id, `נפתח כרטיס אוטומטית: התקבלו מסמכים במייל משולח שלא היה במערכת (${fromEmail}). לבדוק את השם ולהשלים טלפון.`, 'email_sender_contact_created');
+          stats.new_contacts++;
         }
 
         if (contact) {
@@ -296,11 +338,11 @@ Deno.serve(async (req) => {
           if (!quiet) {
             await db.Task.create({
               title: createdNew
-                ? `כרטיס חדש ממייל עם מסמכים — ${contact.full_name} (${uploaded.length})`
+                ? `${sameName.length ? 'ייתכן כרטיס כפול — ' : ''}כרטיס חדש ממייל עם מסמכים — ${contact.full_name} (${uploaded.length})`
                 : `התקבל מסמך במייל — ${contact.full_name || fromEmail} (${uploaded.length})`,
               type: 'document_collection', status: 'open', priority: 'normal', auto_generated: true,
               assigned_to: 'basmat', contact_id: contact.id, service_request_id: sr?.id || '',
-              notes: `${createdNew ? 'הכרטיס נפתח אוטומטית. לבדוק את השם ולהשלים טלפון.\n' : ''}לבדוק את המסמכים ולסמן "מסמכים התקבלו" רק כשהכל הגיע.\nנושא המייל: ${subject}\n${fileList}`,
+              notes: `${createdNew ? 'הכרטיס נפתח אוטומטית. לבדוק את השם ולהשלים טלפון.\n' : ''}${sameName.length ? `קיים כבר כרטיס באותו שם: ${sameName.map((c) => `${c.full_name} | ${c.phone || ''} | ${c.id}`).join(', ')}. אם זה אותו אדם — לאחד את הכרטיסים.\n` : ''}לבדוק את המסמכים ולסמן "מסמכים התקבלו" רק כשהכל הגיע.\nנושא המייל: ${subject}\n${fileList}`,
             });
           }
           await log(id, createdNew ? 'documents_new_contact' : 'documents', contact.id, `${fromEmail} | ${uploaded.length}`); stats.documents++;
@@ -318,11 +360,26 @@ Deno.serve(async (req) => {
       } catch (e) {
         stats.errors++;
         console.error('office inbox message failed', id, e.message);
-        // לא כותבים InboxLog — ננסה שוב בריצה הבאה
+        // לא מעבדים שוב אוטומטית (כדי לא ליצור כפילויות) — מסמנים שגיאה ופותחים משימה לבדיקה ידנית.
+        // אם שורת processing עוד לא נוצרה — לא פותחים משימה, והריצה הבאה תנסה שוב.
+        try {
+          if (currentRow) {
+            await db.InboxLog.update(currentRow.id, { kind: 'error', summary: String(e.message || '').slice(0, 300) });
+            if (!quiet) await db.Task.create({
+              title: 'מייל במשרד לא נקלט עד הסוף — לבדוק ידנית',
+              type: 'document_collection', status: 'open', priority: 'normal', auto_generated: true, assigned_to: 'basmat',
+              notes: `${meta}\nמזהה המייל ב-Gmail: ${id}\nשגיאה: ${e.message}`,
+            });
+          }
+        } catch (_) { /* לא לעצור את שאר המיילים */ }
       }
     }
 
     return Response.json({ ok: true, days, quiet, ...stats });
+    } finally {
+      // שחרור הנעילה
+      try { await db.SystemSetting.update(lockRow.id, { value: '' }); } catch (_) {}
+    }
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
   }

@@ -52,12 +52,28 @@ Deno.serve(async (req) => {
     const reqUrl = new URL(req.url);
     APP_FUNCTIONS_BASE = `${reqUrl.origin}${reqUrl.pathname.replace(/\/sendReviewRequestEmail$/, '')}`;
     const base44 = createClientFromRequest(req);
+    // אבטחה: הפונקציה נגישה מבחוץ, ולכן לא סומכים על מה שכתוב בבקשה.
+    // • לחיצה מתוך המערכת (משתמשת admin מחוברת): כל לקוח, כולל מייל בדיקה (test_to).
+    // • הפעלה אוטומטית (אוטומציה, בלי משתמש): רק לפנייה שבאמת הסתיימה במערכת (status completed),
+    //   והמייל נשלח ללקוח של הפנייה. test_to לא מתקבל.
+    const user = await base44.auth.me().catch(() => null);
+    const isAdmin = user?.role === 'admin';
     const body = await req.json().catch(() => ({}));
-    const contactId = body.contact_id || body.data?.contact_id || '';
-    const testTo = String(body.test_to || '').trim();
+    const db = base44.asServiceRole.entities;
+
+    let contactId = '';
+    let testTo = '';
+    if (isAdmin) {
+      contactId = body.contact_id || body.data?.contact_id || '';
+      testTo = String(body.test_to || '').trim();
+    } else {
+      const srId = body.data?.id || body.service_request_id || '';
+      const sr = srId ? (await db.ServiceRequest.filter({ id: srId }))[0] : null;
+      if (!sr || sr.status !== 'completed') return Response.json({ ok: true, skipped: 'service_not_completed' });
+      contactId = sr.contact_id || '';
+    }
     if (!contactId) return Response.json({ ok: true, skipped: 'no_contact_id' });
 
-    const db = base44.asServiceRole.entities;
     const contact = (await db.Contact.filter({ id: contactId }))[0];
     if (!contact) return Response.json({ ok: true, skipped: 'contact_not_found' });
 
@@ -65,7 +81,7 @@ Deno.serve(async (req) => {
       if (!contact.email || contact.email_invalid) return Response.json({ ok: true, skipped: 'no_valid_email' });
       if (contact.mailing_opt_out) return Response.json({ ok: true, skipped: 'opted_out' });
       const prior = await db.Communication.filter({ contact_id: contact.id, template_id: TEMPLATE_ID });
-      if (prior.length) return Response.json({ ok: true, skipped: 'already_sent' });
+      if (prior.some((c) => c.status === 'sent')) return Response.json({ ok: true, skipped: 'already_sent' });
     }
 
     const BREVO_API_KEY = Deno.env.get('BREVO_API_KEY') || '';

@@ -343,6 +343,12 @@ Deno.serve(async (req) => {
     const slug = getSlug(payload);
     const attendee = getAttendee(payload);
     const detected = detectMeeting(slug);
+    const startTime = payload.startTime || payload.start_time || payload.start || payload.booking?.startTime;
+    const endTime = payload.endTime || payload.end_time || payload.end || payload.booking?.endTime;
+    const duration = startTime && endTime ? Math.max(15, Math.round((new Date(endTime).getTime() - new Date(startTime).getTime()) / 60000)) : 60;
+    const calcomId = payload.uid || payload.id || payload.bookingId || payload.booking?.id;
+    const meetingUrl = payload.conferenceUrl || payload.meetingUrl || payload.videoCallUrl || payload.location?.link || '';
+    if (!startTime) return Response.json({ error: 'Missing startTime' }, { status: 400 });
     let contact = await findContact(base44, attendee);
     let duplicateMatches = [];
     if (!contact && attendee.name) {
@@ -405,12 +411,6 @@ Deno.serve(async (req) => {
     if (isExistingClient && contact.status !== 'active_client') {
       await base44.asServiceRole.entities.Contact.update(contact.id, { status: 'active_client' });
     }
-    const startTime = payload.startTime || payload.start_time || payload.start || payload.booking?.startTime;
-    const endTime = payload.endTime || payload.end_time || payload.end || payload.booking?.endTime;
-    const duration = startTime && endTime ? Math.max(15, Math.round((new Date(endTime).getTime() - new Date(startTime).getTime()) / 60000)) : 60;
-    const calcomId = payload.uid || payload.id || payload.bookingId || payload.booking?.id;
-    const meetingUrl = payload.conferenceUrl || payload.meetingUrl || payload.videoCallUrl || payload.location?.link || '';
-    if (!startTime) return Response.json({ error: 'Missing startTime' }, { status: 400 });
 
     const existingMeetings = calcomId ? await base44.asServiceRole.entities.Meeting.filter({ calcom_event_id: String(calcomId) }) : [];
     const meetingData = {
