@@ -1,0 +1,41 @@
+{
+  "name": "\u05d2\u05d9\u05d1\u05d5\u05d9 \u05de\u05e1\u05de\u05db\u05d9 \u05dc\u05e7\u05d5\u05d7\u05d5\u05ea \u05dc\u05d3\u05e8\u05d9\u05d9\u05d1 (\u05dc\u05d9\u05dc\u05d9)",
+  "description": "\u05de\u05d2\u05d1\u05d4 \u05db\u05dc \u05dc\u05d9\u05dc\u05d4 \u05d0\u05ea \u05de\u05e1\u05de\u05db\u05d9 \u05d4\u05dc\u05e7\u05d5\u05d7\u05d5\u05ea \u05dc\u05d2\u05d5\u05d2\u05dc \u05d3\u05e8\u05d9\u05d9\u05d1 \u05e9\u05dc \u05d4\u05de\u05e9\u05e8\u05d3",
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "scheduled",
+      "events": [],
+      "schedule_mode": "recurring",
+      "cron_expression": "0 23 * * *",
+      "one_time_date": null,
+      "timezone": "UTC",
+      "interval_value": null,
+      "interval_unit": null,
+      "interval_anchor": null,
+      "ends_type": "never",
+      "ends_on_date": null,
+      "ends_after_count": null
+    }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "backupdocumentstodrive",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "run_function": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "backupDocumentsToDrive",
+            "args": {}
+          },
+          "then": "end"
+        }
+      }
+    ]
+  }
+}
