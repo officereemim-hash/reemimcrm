@@ -178,14 +178,6 @@ Deno.serve(async (req) => {
           messageToSend = messageToSend.replace(/ראינו שפנית אלינו\s*,?\s*/g, '');
         }
 
-        const settingKey = 'pending_missing_field_' + normalizeIntlPhone(c.phone);
-        const existingSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: settingKey });
-        const pendingData = JSON.stringify({ contact_id: c.id, field: missing[0].field });
-        if (existingSettings.length > 0) {
-          await base44.asServiceRole.entities.SystemSetting.update(existingSettings[0].id, { value: pendingData });
-        } else {
-          await base44.asServiceRole.entities.SystemSetting.create({ key: settingKey, value: pendingData, category: 'flow' });
-        }
       }
     }
 

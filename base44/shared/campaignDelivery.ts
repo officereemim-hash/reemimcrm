@@ -1,5 +1,5 @@
 import { secrets } from 'base44:runtime';
-import { uchatSend } from './uchat.ts';
+import { uchatSend, lastUchatNote } from './uchat.ts';
 import { firstName, getSetting, isEligible, normalizePhone, assertLock } from './greetingQueue.ts';
 
 export async function claimItem(base44, item, lock, day) {
@@ -16,13 +16,15 @@ export async function skipItem(base44, item, reason) {
 }
 export async function deliverItem(base44, item, contact, day) {
   let messageId = '';
+  let waNote = '';
   if (item.channel === 'whatsapp') {
     const name = firstName(contact.full_name);
     const key = item.whatsapp_template_key || 'campaign_broadcast';
     const params = item.whatsapp_template_key ? [name] : [item.contact_name || '', item.content || ''];
     // No text fallback, no changes to the approved greeting/button; uchatSend resumes the bot.
     const ok = await uchatSend(base44, item.recipient, key, name, params);
-    if (!ok) throw new Error('uChat לא אישר את השליחה; לא יבוצע ניסיון חוזר אוטומטי');
+    waNote = lastUchatNote;
+    if (!ok) throw new Error(`uChat לא אישר את השליחה; לא יבוצע ניסיון חוזר אוטומטי. ${waNote}`.trim());
   } else {
     const key = secrets.get('BREVO_API_KEY');
     const senderEmail = await getSetting(base44, 'mailing_sender_email');
@@ -36,10 +38,11 @@ export async function deliverItem(base44, item, contact, day) {
     if (!res.ok) throw new Error(`Brevo: ${res.status} ${data.message || ''}`);
     messageId = data.messageId || '';
   }
-  await base44.asServiceRole.entities.CampaignQueue.update(item.id, { status: 'sent', sent_at: new Date().toISOString(), error_message: '', ...(messageId ? { brevo_message_id: messageId } : {}) });
+  await base44.asServiceRole.entities.CampaignQueue.update(item.id, { status: 'sent', sent_at: new Date().toISOString(), error_message: waNote, ...(messageId ? { brevo_message_id: messageId } : {}) });
   await base44.asServiceRole.entities.Communication.create({
     contact_id: item.contact_id, type: item.channel, direction: 'outbound', content: item.channel === 'email' ? `[דיוור] נושא: ${item.subject}` : `[דיוור] ${item.content || ''}`,
     sent_by: 'system', is_automated: true, template_id: item.whatsapp_template_key === 'birthday' ? 'birthday_greeting' : item.deduplication_key?.startsWith('birthday:') && item.channel === 'email' ? 'birthday_greeting_email' : `campaign_${item.campaign_id}`, status: 'sent',
+    ...(waNote ? { error_detail: waNote } : {}),
   });
   await base44.asServiceRole.entities.Contact.update(contact.id, { last_contact_date: day });
 }

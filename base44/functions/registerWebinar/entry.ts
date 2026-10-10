@@ -21,32 +21,46 @@ async function uchatTemplateNamespace(templateName) {
   if (!ns) { try { await fetch(`${UCHAT_BASE}/whatsapp-template/sync`, { method: 'POST', headers: { Authorization: `Bearer ${UCHAT_TOKEN}` } }); } catch {} ns = await listOnce(); }
   return ns;
 }
-async function uchatSendTemplate(phone972, firstName, templateName, bodyParams, base44) {
-  const namespace = await uchatTemplateNamespace(templateName);
-  if (!namespace) { console.error(`uchat: template '${templateName}' not found/synced`); return null; }
-  const params = {};
-  (bodyParams || []).forEach((v, i) => { params[`BODY_{{${i + 1}}}`] = String(v ?? ''); });
-  try {
-    if (base44) {
-      const imgSetting = await base44.asServiceRole.entities.SystemSetting.filter({ key: `uchat_tpl_img_${templateName}` });
-      if (imgSetting[0]?.value) params['HEADER_IMAGE'] = imgSetting[0].value;
-    }
-  } catch (_) { /* בלי תמונה — שולחים כרגיל */ }
+async function uchatPostTemplate(phone972, firstName, namespace, templateName, params) {
   const res = await fetch(`${UCHAT_BASE}/subscriber/send-whatsapp-template-by-user-id`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${UCHAT_TOKEN}` },
     body: JSON.stringify({ user_id: phone972, create_if_not_found: 'yes', contact: { first_name: firstName || '' }, content: { namespace, name: templateName, lang: 'he', params } }),
   });
-  if (!res.ok) { console.error('uchat template http', res.status, await res.text().catch(() => '')); return null; }
-  const j = await res.json().catch(() => ({}));
-  const mid = j?.mid || j?.data?.mid || null;
-  if (j?.status === 'ok' && mid) {
+  const text = await res.text().catch(() => '');
+  let j = {};
+  try { j = JSON.parse(text); } catch (_) { /* תשובה שאינה JSON */ }
+  return { ok: res.ok, status: res.status, j, text };
+}
+async function uchatSendTemplate(phone972, firstName, templateName, bodyParams, base44) {
+  const namespace = await uchatTemplateNamespace(templateName);
+  if (!namespace) { console.error(`uchat: template '${templateName}' not found/synced`); return null; }
+  const params = {};
+  (bodyParams || []).forEach((v, i) => { params[`BODY_{{${i + 1}}}`] = String(v ?? ''); });
+  let image = '';
+  try {
+    if (base44) {
+      const imgSetting = await base44.asServiceRole.entities.SystemSetting.filter({ key: `uchat_tpl_img_${templateName}` });
+      image = imgSetting[0]?.value || '';
+    }
+  } catch (_) { /* בלי תמונה — שולחים כרגיל */ }
+  if (image) params['HEADER_IMAGE'] = image;
+  let r = await uchatPostTemplate(phone972, firstName, namespace, templateName, params);
+  // רשת ביטחון לתמונה: uChat דחה שליחה עם תמונה → ניסיון אחד נוסף בלי התמונה (רק כשברור שלא נשלח כלום)
+  if (image && (!r.ok || r.j?.status !== 'ok')) {
+    console.error('uchat template with HEADER_IMAGE rejected, retrying without image:', r.status, r.text.slice(0, 300));
+    delete params['HEADER_IMAGE'];
+    r = await uchatPostTemplate(phone972, firstName, namespace, templateName, params);
+  }
+  if (!r.ok) { console.error('uchat template http', r.status, r.text); return null; }
+  const mid = r.j?.mid || r.j?.data?.mid || null;
+  if (r.j?.status === 'ok' && mid) {
     // uChat משהה את האוטומציה אחרי שליחת תבנית (מפרש כמענה נציג) —
     // בלי resume לחיצה על כפתור בתבנית לא תפעיל את ה-Flow והבוט משתתק.
     await resumeUchatBot(phone972);
-    return { ...j, mid };
+    return { ...r.j, mid };
   }
-  console.error('uchat template not ok:', JSON.stringify(j));
+  console.error('uchat template not ok:', r.text);
   return null;
 }
 async function resumeUchatBot(phone972) {
