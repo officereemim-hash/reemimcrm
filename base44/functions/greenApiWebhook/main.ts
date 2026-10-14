@@ -1,6 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 import { getCampaignReply } from '../../shared/campaignReply.ts';
 import { runCampaignReplyChecks } from '../../shared/campaignReplyChecks.ts';
+import { maybeAboutExistingMeeting, classifyMeetingIntent } from '../../shared/meetingIntent.ts';
 
 const AGENT_NAME = 'bot_reemim';
 
@@ -573,6 +574,47 @@ Deno.serve(async (req) => {
         last_bot_interaction_at: new Date().toISOString(),
         bot_status: contact.bot_status === 'new' ? 'in_conversation' : contact.bot_status,
       });
+    }
+
+    // ===== FP-ExistingMeeting: מספר לא מוכר / בלי פנייה פתוחה שכותב על פגישה קיימת → לא פותחים מסלול ליד חדש =====
+    if ((!contact || !serviceRequest) && maybeAboutExistingMeeting(text)) {
+      const llmPromise = classifyMeetingIntent(base44, text).catch((e) => { console.error('meeting intent llm:', e.message); return null; });
+      let intent = await Promise.race([llmPromise, new Promise(r => setTimeout(() => r('__slow__'), 4000))]);
+      if (intent === '__slow__') {
+        const holdMsg = await getBotContent(base44, 'llm_holding_message') || 'קיבלנו את ההודעה 🙏 העוזר הדיגיטלי של בשמת עובר עליה ומיד נמשיך.';
+        await sendWhatsApp(chatId, holdMsg, botEnabled);
+        intent = await Promise.race([llmPromise, new Promise(r => setTimeout(() => r(null), 12000))]);
+      }
+      if (intent && intent.about_existing_meeting) {
+        const knownContact = contact || contacts[0] || null;
+        const plate = String(intent.car_plate || '').replace(/\D/g, '');
+        if (knownContact && plate.length >= 5) await base44.asServiceRole.entities.Contact.update(knownContact.id, { car_plate: plate });
+        const emConvId = cachedConversationSettings[0]?.value || null;
+        const ackKey = plate.length >= 5 ? 'existing_meeting_car_ack' : 'existing_meeting_ack';
+        const ackFallback = plate.length >= 5
+          ? 'תודה, מספר הרכב התקבל ויועבר לחניה 🙏 נתראה בפגישה!\nבשמת שערי-בלוך, קרנות ראמים'
+          : 'תודה על העדכון 🙏 העברנו את הבקשה לבשמת והיא תחזור אליך בהקדם. יום טוב!\nבשמת שערי-בלוך, קרנות ראמים';
+        const ackMsg = await getBotContent(base44, ackKey) || ackFallback;
+        const emSent = await sendWhatsApp(chatId, ackMsg, botEnabled);
+        await logIncoming(base44, idMessage, phone, text, chatId, emConvId);
+        await logOutgoing(base44, emSent?.idMessage || `out_${Date.now()}_fp_existing_meeting`, phone, ackMsg, chatId, emConvId, outgoingStatus);
+        // השיחה עוברת לבשמת — הבוט לא יפתח מסלול ליד חדש בהודעה הבאה
+        if (knownContact) {
+          await base44.asServiceRole.entities.Contact.update(knownContact.id, { bot_status: 'waiting_agent', conversation_owner: 'bar' });
+          await base44.asServiceRole.entities.Communication.create({ contact_id: knownContact.id, type: 'whatsapp', direction: 'inbound', content: text.substring(0, 500), sent_by: 'system', is_automated: true, status: 'sent' });
+        } else {
+          await base44.asServiceRole.entities.WhatsAppBotControl.create({ phone, mode: 'paused', set_by: 'auto', note: 'כתב/ה על פגישה קיימת ממספר לא מוכר' });
+        }
+        // משימה לבשמת (מייל נשלח אוטומטית על כל משימה חדשה)
+        await base44.asServiceRole.entities.Task.create({
+          ...(knownContact ? { contact_id: knownContact.id } : {}),
+          title: `פנייה על פגישה קיימת — ${knownContact?.full_name || localPhone}: ${String(intent.summary || '').substring(0, 80)}`,
+          type: 'followup', category: 'operational', priority: 'high', assigned_to: 'basmat', auto_generated: true,
+          due_date: new Date().toISOString().split('T')[0],
+          notes: `טלפון: ${localPhone}\nההודעה: "${text.substring(0, 500)}"${plate.length >= 5 ? `\nמספר רכב: ${plate}` : ''}${knownContact ? '' : '\nהמספר לא מוכר במערכת — יש לאתר את הפגישה ולשייך. הבוט הושהה למספר הזה ל-48 שעות.'}`,
+        });
+        return Response.json({ ok: true, fast_path: 'fp_existing_meeting', known_contact: !!knownContact });
+      }
     }
 
     // ===== FP-WaitingMeetingReply: תשובה ראשונה אחרי אישור פגישה שנשלח בתבנית (חלון היה סגור) → המשך הרצף =====
