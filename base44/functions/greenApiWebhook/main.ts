@@ -285,11 +285,62 @@ async function notifyHandoffByEmail(base44, contact, reason, lastText) {
   } catch (e) { console.error('notifyHandoffByEmail failed:', e.message); }
 }
 
+// הבוט נכשל באמצע טיפול בהודעה: לא עונים ללקוח אוטומטית, אבל ההודעה לא נעלמת —
+// נרשמת ביומן בסטטוס error, ובשמת מקבלת מייל "הבוט לא ענה" (לכל היותר מייל אחד לאותו מספר בחצי שעה)
+async function reportUnanswered(req, ctx, errMsg) {
+  try {
+    const db = createClientFromRequest(req).asServiceRole.entities;
+    const recentErrors = await db.WhatsAppMessageLog.filter({ phone: ctx.phone, direction: 'incoming', status: 'error' }, '-created_date', 1);
+    const alreadyAlerted = recentErrors[0] && Date.now() - new Date(recentErrors[0].created_date).getTime() < 30 * 60 * 1000;
+    await db.WhatsAppMessageLog.create({
+      id_message: `err_${ctx.phone}_${Date.now()}`,
+      phone: ctx.phone,
+      direction: 'incoming',
+      text: String(ctx.text || '').substring(0, 500),
+      status: 'error',
+    });
+    if (alreadyAlerted) return;
+    const BREVO_API_KEY = Deno.env.get('BREVO_API_KEY') || '';
+    const senderEmail = (await db.SystemSetting.filter({ key: 'mailing_sender_email' }))[0]?.value || '';
+    if (!BREVO_API_KEY || !senderEmail) return;
+    const local = normalizeLocalPhone(ctx.phone);
+    const contact = (await db.Contact.filter({ phone: ctx.phone }))[0]
+      || (await db.Contact.filter({ phone: local }))[0]
+      || (await db.Contact.filter({ phone: '+' + ctx.phone }))[0] || null;
+    const name = contact?.full_name || ctx.name || local;
+    const when = new Intl.DateTimeFormat('he-IL', { timeZone: 'Asia/Jerusalem', dateStyle: 'short', timeStyle: 'short' }).format(new Date());
+    const esc = (v) => String(v || '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+    await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: { 'api-key': BREVO_API_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sender: { name: 'קרנות ראמים — בוט', email: senderEmail },
+        to: [
+          { email: 'office.reemim@gmail.com', name: 'משרד ראמים' },
+          { email: 'bosmat@oryx-alt.com', name: 'בשמת' },
+        ],
+        subject: `⚠️ הבוט לא ענה — ${name}`,
+        htmlContent: `<div dir="rtl" style="font-family:Arial;font-size:16px;line-height:1.6">${esc(name)} (${esc(local)}) כתב/ה בוואטסאפ ב-${when}:<br/><br/>"${esc(String(ctx.text || '').substring(0, 500))}"<br/><br/>הבוט לא ענה להודעה הזו. כדאי לחזור ללקוח/ה.</div>`,
+      }),
+    });
+  } catch (e) { console.error('reportUnanswered failed:', e.message, '| original error:', errMsg); }
+}
+
 Deno.serve(async (req) => {
+  const ctx = { phone: '', text: '', name: '' };
   try {
     const url = new URL(req.url);
     const secretParam = url.searchParams.get('secret') || '';
-    let body = await req.json();
+    const rawBody = await req.text();
+    let body;
+    try {
+      body = JSON.parse(rawBody);
+    } catch (_) {
+      // uChat בונה את הגוף כטקסט גולמי: גרשיים, לוכסן או ירידת שורה בהודעה שוברים את ה-JSON — מחלצים את השדות ידנית
+      const pick = (k) => (rawBody.match(new RegExp(`"${k}"\\s*:\\s*"([^"]*)"`)) || [])[1] || '';
+      const msgMatch = rawBody.match(/"message"\s*:\s*"([\s\S]*)"\s*,\s*"first_name"/);
+      body = { phone: pick('phone'), message: msgMatch ? msgMatch[1] : '', first_name: pick('first_name'), user_ns: pick('user_ns') };
+    }
 
     if (body.action === 'check_campaign_reply_routing') {
       const client = createClientFromRequest(req);
@@ -356,6 +407,9 @@ Deno.serve(async (req) => {
     const base44 = createClientFromRequest(req);
     const phone = chatId.replace('@c.us', '');
     const localPhone = normalizeLocalPhone(phone);
+    ctx.phone = phone;
+    ctx.text = text;
+    ctx.name = senderData?.senderName || '';
 
     const [botEnabledSettings, cachedConversationSettings, blockList, duplicateMessages, testModeSettings, contactsByIntl, contactsByLocal, contactsByPlus] = await Promise.all([
       base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' }),
@@ -1778,6 +1832,7 @@ ${wmMsg}` });
     return Response.json({ ok: true, conversationId, timeout_fallback: true });
   } catch (error) {
     console.error('greenApiWebhook error:', error.message);
+    if (ctx.phone) await reportUnanswered(req, ctx, error.message);
     return Response.json({ error: error.message }, { status: 500 });
   }
 });
