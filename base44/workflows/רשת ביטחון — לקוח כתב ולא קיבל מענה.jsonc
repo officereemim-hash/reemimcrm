@@ -1,0 +1,41 @@
+{
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "scheduled",
+      "events": [],
+      "schedule_mode": "interval",
+      "cron_expression": null,
+      "one_time_date": null,
+      "timezone": "UTC",
+      "interval_value": 15,
+      "interval_unit": "minutes",
+      "interval_anchor": "2026-10-15T20:00:00",
+      "ends_type": "never",
+      "ends_on_date": null,
+      "ends_after_count": null
+    }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "alert_unanswered_whatsapp",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "run_function": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "alertUnansweredWhatsApp",
+            "args": {}
+          },
+          "then": "end"
+        }
+      }
+    ]
+  },
+  "description": "\u05db\u05dc 15 \u05d3\u05e7\u05d5\u05ea (08:00\u201321:00): \u05de\u05e9\u05d5\u05d5\u05d4 \u05d1\u05d9\u05df \u05d4\u05d4\u05d5\u05d3\u05e2\u05d5\u05ea \u05d4\u05e0\u05db\u05e0\u05e1\u05d5\u05ea \u05d1-uChat \u05dc\u05de\u05d4 \u05e9\u05e0\u05e7\u05dc\u05d8 \u05d1\u05de\u05e2\u05e8\u05db\u05ea. \u05d4\u05d5\u05d3\u05e2\u05d4 \u05e9\u05dc\u05d0 \u05e0\u05e7\u05dc\u05d8\u05d4 \u05d5\u05dc\u05d0 \u05e0\u05e2\u05e0\u05ea\u05d4: \u05d0\u05d9\u05e9\u05d5\u05e8 \u05d4\u05d2\u05e2\u05d4 \u05de\u05e1\u05d5\u05de\u05df \u05d1\u05e4\u05d2\u05d9\u05e9\u05d4, \"\u05d4\u05e1\u05e8\" \u05de\u05e1\u05d5\u05de\u05df, \u05d5\u05db\u05dc \u05d4\u05e9\u05d0\u05e8 \u05d1\u05de\u05d9\u05d9\u05dc \u05dc\u05d1\u05e9\u05de\u05ea \"\u05d4\u05d1\u05d5\u05d8 \u05dc\u05d0 \u05e2\u05e0\u05d4\". \u05dc\u05d0 \u05e9\u05d5\u05dc\u05d7 \u05d4\u05d5\u05d3\u05e2\u05d5\u05ea \u05dc\u05dc\u05e7\u05d5\u05d7\u05d5\u05ea.",
+  "name": "\u05e8\u05e9\u05ea \u05d1\u05d9\u05d8\u05d7\u05d5\u05df: \u05dc\u05e7\u05d5\u05d7 \u05db\u05ea\u05d1 \u05d5\u05dc\u05d0 \u05e7\u05d9\u05d1\u05dc \u05de\u05e2\u05e0\u05d4"
+}
