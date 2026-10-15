@@ -1,4 +1,4 @@
-import { israelClock, normalizePhone } from './greetingQueue.ts';
+import { normalizePhone } from './greetingQueue.ts';
 
 const closedStatuses = ['completed', 'cancelled', 'closed_lost', 'followup_closed'];
 export function hasProtectedRoute(contact, requests, registrations, pending, now) {
@@ -26,7 +26,8 @@ export async function getCampaignReply(base44, contact, phone, text) {
   const queue = await entities.CampaignQueue.filter({ contact_id: contact.id, recipient: phone, channel: 'whatsapp', status: { $in: ['sent', 'delivered', 'opened', 'clicked'] } }, '-sent_at', 1);
   const item = queue[0];
   if (!item) return null;
-  const clock = await israelClock(base44);
+  // השעה מחושבת כאן ולא דרך getIsraelTime: ה-webhook רץ בלי משתמש מחובר, ו-getIsraelTime דורשת התחברות (קרס ב-500 מאז 17.9)
+  const clock = { iso: new Date().toISOString() };
   const now = Date.parse(clock.iso);
   const [requests, registrations, pending, communications, outgoing, campaigns] = await Promise.all([
     entities.ServiceRequest.filter({ contact_id: contact.id, status: { $nin: closedStatuses } }, '-created_date', 1),
